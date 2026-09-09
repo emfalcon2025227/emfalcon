@@ -1,0 +1,22 @@
+--- src/components/public/PublicReceiptVerification.tsx
++++ src/components/public/PublicReceiptVerification.tsx
+@@ -2,6 +2,7 @@
+ import { ShieldCheck, XCircle, AlertCircle, RefreshCcw, Building2 } from "lucide-react";
+ import { useLanguage } from "../../context/LanguageContext";
++import QRCode from "react-qr-code";
+ 
+ interface VerificationData {
+   valid: boolean;
+@@ -103,6 +104,13 @@
+             </div>
+           </div>
++
++          <div className="flex flex-col items-center justify-center pt-6 border-t border-slate-100">
++            <div className="bg-white p-2 rounded-xl shadow-sm border border-slate-100 mb-3">
++              <QRCode value={window.location.href} size={96} level="L" />
++            </div>
++            <span className="text-[10px] text-slate-400 font-medium">{language === "ar" ? "امسح الرمز للتحقق" : "Scan to verify"}</span>
++          </div>
+         </div>
+ 
+         <div className="bg-slate-50 p-4 border-t border-slate-100 text-center">

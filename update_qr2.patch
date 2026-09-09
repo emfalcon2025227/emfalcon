@@ -1,0 +1,24 @@
+--- src/components/printing/UnifiedDocumentPreviewModal.tsx
++++ src/components/printing/UnifiedDocumentPreviewModal.tsx
+@@ -25,6 +25,7 @@
+ import { useLanguage } from "../../context/LanguageContext";
+ import { CompanyLetterheadFrame } from "./CompanyLetterheadFrame";
+ import { tafqeetAED, tafqeetEnglishAED } from "../../utils/tafqeet";
++import QRCode from "react-qr-code";
+ 
+ interface PreviewModalProps {
+   doc: UnifiedFinancialDocument;
+@@ -608,6 +609,13 @@
+               {/* Document Security Footer */}
+               <div className="mt-6 pt-3 border-t border-slate-200 flex items-center justify-between text-[10px] text-slate-400">
+                 <div className="flex items-center gap-1.5 font-mono">
++                  <div className="bg-white p-1 rounded-md border border-slate-200 mr-2">
++                    <QRCode 
++                      value={`${window.location.origin}/verify/receipt/${doc.authoritativeId}`} 
++                      size={48} 
++                      level="L" 
++                    />
++                  </div>
+                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                   <span>
+                     {isAr

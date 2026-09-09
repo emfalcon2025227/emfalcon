@@ -1,0 +1,226 @@
+{
+  "entities": {
+    "Owner": {
+      "title": "Owner",
+      "description": "Property Owner Record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "nameEn": { "type": "string" },
+        "nameAr": { "type": "string" },
+        "emiratesId": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "status": { "type": "string" }
+      }
+    },
+    "Property": {
+      "title": "Property",
+      "description": "Real Estate Property Record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "nameEn": { "type": "string" },
+        "nameAr": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "emirate": { "type": "string" }
+      }
+    },
+    "Unit": {
+      "title": "Unit",
+      "description": "Real Estate Unit Record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "unitNumber": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "type": { "type": "string" },
+        "annualRent": { "type": "number" },
+        "status": { "type": "string" }
+      }
+    },
+    "Tenant": {
+      "title": "Tenant",
+      "description": "Tenant Profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "nameEn": { "type": "string" },
+        "nameAr": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "riskScore": { "type": "number" },
+        "riskLevel": { "type": "string" }
+      }
+    },
+    "Lease": {
+      "title": "Lease",
+      "description": "Lease Contract Record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "leaseNumber": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "unitId": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "annualRent": { "type": "number" }
+      }
+    },
+    "Cheque": {
+      "title": "Cheque",
+      "description": "Cheque Record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "chequeNumber": { "type": "string" },
+        "bankName": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string" },
+        "tenantId": { "type": "string" }
+      }
+    },
+    "CollectionRecord": {
+      "title": "CollectionRecord",
+      "description": "Payment Receipt Record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "receiptNumber": { "type": "string" },
+        "chequeId": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "amountEntered": { "type": "number" }
+      }
+    },
+    "RentalCase": {
+      "title": "RentalCase",
+      "description": "Rental Dispute Case Record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "caseNumber": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "claimAmount": { "type": "number" },
+        "status": { "type": "string" }
+      }
+    },
+    "ElectronicArchiveItem": {
+      "title": "ElectronicArchiveItem",
+      "description": "Electronic Document Archive Item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fileName": { "type": "string" },
+        "category": { "type": "string" }
+      }
+    },
+    "NotificationRecord": {
+      "title": "NotificationRecord",
+      "description": "Notification Record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "channel": { "type": "string" },
+        "recipient": { "type": "string" },
+        "status": { "type": "string" }
+      }
+    },
+    "AuditLogEntry": {
+      "title": "AuditLogEntry",
+      "description": "Audit Log Trail Entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "action": { "type": "string" },
+        "entityType": { "type": "string" },
+        "entityId": { "type": "string" }
+      }
+    },
+    "FormLayout": {
+      "title": "FormLayout",
+      "description": "Custom positions and layout configurations for form elements",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "formId": { "type": "string" },
+        "layouts": { "type": "object" },
+        "updatedAt": { "type": "string" },
+        "updatedBy": { "type": "string" }
+      }
+    },
+    "UserPermissionOverride": {
+      "title": "UserPermissionOverride",
+      "description": "Granular user permission overrides (GRANT or DENY)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "permissionId": { "type": "string" },
+        "effect": { "type": "string" },
+        "reason": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "expiresAt": { "type": "string" },
+        "status": { "type": "string" },
+        "auditId": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/userPermissionOverrides/{overrideId}": {
+      "schema": { "$ref": "#/entities/UserPermissionOverride" },
+      "description": "User permission overrides collection"
+    },
+    "/owners/{ownerId}": {
+      "schema": { "$ref": "#/entities/Owner" },
+      "description": "Owners collection"
+    },
+    "/properties/{propertyId}": {
+      "schema": { "$ref": "#/entities/Property" },
+      "description": "Properties collection"
+    },
+    "/units/{unitId}": {
+      "schema": { "$ref": "#/entities/Unit" },
+      "description": "Units collection"
+    },
+    "/tenants/{tenantId}": {
+      "schema": { "$ref": "#/entities/Tenant" },
+      "description": "Tenants collection"
+    },
+    "/leases/{leaseId}": {
+      "schema": { "$ref": "#/entities/Lease" },
+      "description": "Leases collection"
+    },
+    "/cheques/{chequeId}": {
+      "schema": { "$ref": "#/entities/Cheque" },
+      "description": "Cheques collection"
+    },
+    "/collections/{collectionId}": {
+      "schema": { "$ref": "#/entities/CollectionRecord" },
+      "description": "Collections collection"
+    },
+    "/cases/{caseId}": {
+      "schema": { "$ref": "#/entities/RentalCase" },
+      "description": "Dispute cases collection"
+    },
+    "/archive/{archiveId}": {
+      "schema": { "$ref": "#/entities/ElectronicArchiveItem" },
+      "description": "Electronic archive collection"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/NotificationRecord" },
+      "description": "Notifications log collection"
+    },
+    "/auditLogs/{auditLogId}": {
+      "schema": { "$ref": "#/entities/AuditLogEntry" },
+      "description": "Audit logs collection"
+    },
+    "/form_layouts/{formId}": {
+      "schema": { "$ref": "#/entities/FormLayout" },
+      "description": "Form layouts collection"
+    }
+  }
+}

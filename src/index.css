@@ -1,0 +1,246 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Cairo', 'Tajawal', 'Alexandria', 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+/* Global Arabic Typography & Connected Glyph Shaping Guarantees */
+:root {
+  font-family: 'Cairo', 'Tajawal', 'Alexandria', 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-feature-settings: "liga" 1, "calt" 1, "ccmp" 1, "locl" 1;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+html[lang="ar"],
+html[dir="rtl"],
+[dir="rtl"],
+body {
+  font-family: 'Cairo', 'Tajawal', 'Alexandria', 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* 
+ * CRITICAL ARABIC RULE: 
+ * Any CSS letter-spacing (tracking) breaks Arabic cursive joining into isolated/disconnected letters.
+ * We enforce normal letter-spacing across all Arabic contexts and report views.
+ */
+[dir="rtl"],
+[dir="rtl"] *,
+:lang(ar),
+:lang(ar) *,
+.arabic-text,
+#printable-report-card,
+#printable-report-card *,
+#report-print-area,
+#report-print-area *,
+.report-sheet,
+.report-sheet *,
+.printable-document,
+.printable-document * {
+  letter-spacing: 0 !important;
+  word-spacing: normal !important;
+  font-feature-settings: "liga" 1, "calt" 1, "ccmp" 1, "locl" 1 !important;
+}
+
+/* Printable report typography defaults */
+#printable-report-card,
+#report-print-area,
+.report-sheet,
+.printable-document {
+  font-family: 'Cairo', 'Tajawal', 'Alexandria', system-ui, -apple-system, sans-serif !important;
+  text-rendering: optimizeLegibility !important;
+}
+
+@media print {
+  @page {
+    size: auto;
+    margin: 0mm;
+  }
+
+  html, body, #root {
+    background: white !important;
+    color: black !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    font-family: 'Cairo', 'Tajawal', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  /* Structural wrappers forced to 0 height so they don't generate blank pages */
+  body > div, #root > div {
+    margin: 0 !important;
+    padding: 0 !important;
+    height: 0 !important;
+    min-height: 0 !important;
+  }
+
+  #printable-report-card, 
+  #printable-report-card *,
+  #report-print-area, 
+  #report-print-area *,
+  .report-sheet,
+  .report-sheet *,
+  #receipt-print-area,
+  #receipt-print-area *,
+  .printable-document,
+  .printable-document * {
+    visibility: visible;
+    font-family: 'Cairo', 'Tajawal', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    letter-spacing: 0 !important;
+    font-feature-settings: "liga" 1, "calt" 1, "ccmp" 1, "locl" 1 !important;
+    text-rendering: optimizeLegibility !important;
+  }
+
+  #printable-report-card,
+  #report-print-area,
+  .report-sheet,
+  #receipt-print-area,
+  .printable-document {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    max-width: 100%;
+    margin: 0 !important;
+    padding: 10mm !important;
+    box-shadow: none !important;
+    border: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    
+    /* Strict Pagination Rules */
+    page-break-inside: auto !important;
+    page-break-after: auto !important;
+    page-break-before: auto !important;
+    break-inside: auto !important;
+    break-after: auto !important;
+    break-before: auto !important;
+  }
+
+  /* Prevent random breaks inside elements */
+  h1, h2, h3, h4, h5, h6, p, img, tr, th, td, .prevent-break {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Hide unnecessary UI elements during printing completely */
+  .no-print, 
+  .no-print *,
+  aside, 
+  nav, 
+  header,
+  button, 
+  .print\:hidden {
+    display: none !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Force light background printing */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
+@keyframes flicker-red {
+  0%, 100% { 
+    opacity: 1; 
+    box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.4);
+  }
+  50% { 
+    opacity: 0.85; 
+    box-shadow: 0 0 20px 4px rgba(244, 63, 94, 0.35);
+  }
+}
+
+.urgent-flicker {
+  animation: flicker-red 1.2s ease-in-out infinite;
+}
+
+@keyframes flicker-red-dark {
+  0%, 100% { 
+    border-color: rgba(244, 63, 94, 0.5); 
+    box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.2);
+    transform: scale(1);
+  }
+  50% { 
+    border-color: rgba(244, 63, 94, 1); 
+    box-shadow: 0 0 25px 6px rgba(244, 63, 94, 0.45);
+    background-color: rgba(60, 10, 25, 0.95);
+    transform: scale(1.015);
+  }
+}
+
+.urgent-flicker-dark {
+  animation: flicker-red-dark 1s ease-in-out infinite;
+}
+
+@keyframes beacon-ping {
+  0% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.4); opacity: 0.3; }
+  100% { transform: scale(1); opacity: 0.8; }
+}
+
+.beacon-pulse {
+  animation: beacon-ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@utility scrollbar-hide {
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background-color: rgba(148, 163, 184, 0.35);
+    border-radius: 9999px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(100, 116, 139, 0.6);
+  }
+}
+
+/* ERP Table & Dense Grid Enhancements */
+.erp-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.erp-sticky-header th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(8px);
+}
+
+

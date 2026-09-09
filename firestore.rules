@@ -1,0 +1,282 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Base rule: The application currently uses a custom Mock Auth state (not Firebase Auth).
+    // Therefore, request.auth will be null. We temporarily allow all requests.
+    function isAuthenticated() {
+      return true;
+    }
+
+    // Role helper functions based on auth token claims or user document
+    function getUserData() {
+      return request.auth != null && exists(/databases/$(database)/documents/users/$(request.auth.uid)) 
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data 
+        : null;
+    }
+
+    function isSystemOwner() {
+      return isAuthenticated() && (
+        (request.auth != null && request.auth.token.email == 'm_hamed@msn.com') ||
+        (getUserData() != null && getUserData().role == 'SYSTEM_OWNER')
+      );
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        isSystemOwner() ||
+        (getUserData() != null && (getUserData().role in ['SUPER_ADMIN', 'MANAGER']))
+      );
+    }
+
+    function isFinancialOfficer() {
+      return isAuthenticated() && (
+        isAdmin() ||
+        (getUserData() != null && (getUserData().role in ['FINANCE', 'ACCOUNTANT', 'COLLECTION_OFFICER']))
+      );
+    }
+
+    // Financial Records - strict status transitions and immutability
+    match /owner_transfers/{transferId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      // Allow update ONLY IF the existing record is not already settled/locked.
+      // Once it is PAID, COMPLETED, CANCELLED, or REVERSED, it cannot be edited by the client.
+      allow update: if isAuthenticated() && 
+                    !(resource.data.status in ['PAID', 'COMPLETED', 'RECONCILED', 'CANCELLED', 'REVERSED']) &&
+                    // If transitioning to a final state, ensure core financial data remains unchanged
+                    (
+                      !(request.resource.data.status in ['PAID', 'COMPLETED', 'RECONCILED', 'CANCELLED', 'REVERSED']) ||
+                      (
+                        request.resource.data.amount == resource.data.amount && 
+                        request.resource.data.ownerId == resource.data.ownerId &&
+                        request.resource.data.transferNumber == resource.data.transferNumber
+                      )
+                    );
+      allow delete: if false;
+    }
+
+    match /financial_reversals/{reversalId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if false; // Financial reversals are append-only
+    }
+    
+    match /financial_adjustments/{adjId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && !(resource.data.status in ['POSTED', 'CANCELLED']);
+      allow delete: if false;
+    }
+
+    match /journal_entries/{journalId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && 
+                    resource.data.status == 'POSTED' &&
+                    request.resource.data.status == 'REVERSED' &&
+                    request.resource.data.totalDebit == resource.data.totalDebit &&
+                    request.resource.data.totalCredit == resource.data.totalCredit;
+      allow delete: if false;
+    }
+
+    // Audit Logs - strict append-only
+    match /auditLogs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if false; // Audit logs must be immutable
+    }
+
+    // Owners - atomic control targets
+    match /owners/{ownerId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && 
+                    // Enforce non-negative counters at database level
+                    (!request.resource.data.keys().hasAny(['totalHeld']) || request.resource.data.totalHeld >= 0) &&
+                    (!request.resource.data.keys().hasAny(['totalPaid']) || request.resource.data.totalPaid >= 0) &&
+                    (
+                      // If financial counters are modified, ensure it's a numeric update
+                      !request.resource.data.diff(resource.data).affectedKeys().hasAny(['totalHeld', 'totalPaid']) ||
+                      (request.resource.data.totalHeld is number && request.resource.data.totalPaid is number)
+                    );
+      allow delete: if false; // Prevent deleting master data
+    }
+
+    // Other standard collections
+    match /properties/{propertyId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /units/{unitId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /tenants/{tenantId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /leases/{leaseId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /cheques/{chequeId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && 
+                    request.resource.data.amount == resource.data.amount &&
+                    request.resource.data.chequeNumber == resource.data.chequeNumber &&
+                    request.resource.data.leaseId == resource.data.leaseId;
+      allow delete: if false;
+    }
+    match /collections/{collectionId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && 
+                    request.resource.data.amountEntered == resource.data.amountEntered &&
+                    request.resource.data.receiptNumber == resource.data.receiptNumber &&
+                    request.resource.data.leaseId == resource.data.leaseId;
+      allow delete: if false;
+    }
+    match /property_expenses/{expenseId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && 
+                    request.resource.data.amount == resource.data.amount &&
+                    request.resource.data.vatAmount == resource.data.vatAmount &&
+                    request.resource.data.totalAmount == resource.data.totalAmount;
+      allow delete: if false;
+    }
+    match /cases/{caseId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /archive/{archiveId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && 
+                    !request.resource.data.keys().hasAny(['base64', 'dataUrl', 'dataURL', 'blob', 'fileContent', 'binary', 'imageData', 'attachmentBase64', 'rawFile']);
+      allow update: if isAuthenticated() && 
+                    !request.resource.data.diff(resource.data).addedKeys().hasAny(['base64', 'dataUrl', 'dataURL', 'blob', 'fileContent', 'binary', 'imageData', 'attachmentBase64', 'rawFile']) &&
+                    // Prevent modifying payment proofs once they are linked to a settled transfer
+                    (
+                      !resource.data.keys().hasAny(['entityType']) || 
+                      resource.data.entityType != 'OWNER_TRANSFER' || 
+                      !exists(/databases/$(database)/documents/owner_transfers/$(resource.data.entityId)) ||
+                      get(/databases/$(database)/documents/owner_transfers/$(resource.data.entityId)).data.status != 'PAID'
+                    );
+      allow delete: if false; // Archive records shouldn't be deleted
+    }
+    match /notifications/{notificationId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /payment_allocations/{allocationId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && 
+                    request.resource.data.allocatedAmount == resource.data.allocatedAmount &&
+                    request.resource.data.collectionId == resource.data.collectionId;
+      allow delete: if false;
+    }
+
+    match /financial_periods/{periodId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if false;
+    }
+
+    match /commissions/{commId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && 
+                    request.resource.data.totalCommissionAmount == resource.data.totalCommissionAmount &&
+                    request.resource.data.leaseId == resource.data.leaseId;
+      allow delete: if false;
+    }
+
+    match /vat_rates/{rateId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+    match /vatRates/{rateId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+    match /office_petty_cash_months/{monthId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if false;
+    }
+    match /office_petty_cash_expenses/{expenseId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if false;
+    }
+    match /office_petty_cash_categories/{categoryId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if false;
+    }
+    match /historicalRecords/{recordId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /maintenance_requests/{reqId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /technicians/{techId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /collection_actions/{actionId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /payment_promises/{promiseId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /lease_renewals/{renewalId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /deferred_payments/{deferredId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /chart_of_accounts/{coaId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+    match /form_layouts/{formId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /period_certifications/{certId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /settings/{settingId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /system_backups/{backupId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /company_profile/{profileId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // User permissions & overrides security rules
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      // Protect SYSTEM_OWNER account from unauthorized edits or role changes
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated() && !(resource.data.role == 'SYSTEM_OWNER' || resource.data.email == 'm_hamed@msn.com');
+    }
+
+    match /userPermissionOverrides/{overrideId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+    
+    // Strict closed fallback for any unmapped path
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

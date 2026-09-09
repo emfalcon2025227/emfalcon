@@ -1,0 +1,14 @@
+{
+  "name": "emirates-falcon-scanner-bridge",
+  "version": "1.0.0",
+  "description": "Emirates Falcon ERP - TWAIN/WIA Local Scanner Bridge",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "archiver": "^8.0.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.2"
+  }
+}

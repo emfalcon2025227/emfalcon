@@ -1,0 +1,6 @@
+{
+  "cloudServerUrl": "https://ais-dev-kurx4d4uvxuhdqsvv4veh2-405724254259.europe-west3.run.app",
+  "localPort": 18622,
+  "pollingIntervalMs": 2000,
+  "heartbeatIntervalMs": 5000
+}

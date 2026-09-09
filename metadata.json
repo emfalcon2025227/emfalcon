@@ -1,0 +1,11 @@
+{
+  "name": "صقر الإمارات للعقارات — إدارة العقارات والوساطة العقارية",
+  "description": "نظام شامل وثنائي اللغة (عربي/إنجليزي) لإدارة الشيكات المرتجعة والتحصيلات والقضايا الإيجارية والجلسات والملاك والمستأجرين والعقود والأرشفة الإلكترونية وتقييم المخاطر لصقر الإمارات للعقارات (Emirates Falcon Real Estate).",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

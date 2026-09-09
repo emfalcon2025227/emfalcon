@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>صقر الإمارات للعقارات — إدارة العقارات والوساطة العقارية</title>
+    <meta name="description" content="نظام شامل وثنائي اللغة (عربي/إنجليزي) لإدارة الشيكات المرتجعة والتحصيلات والقضايا الإيجارية والجلسات والملاك والمستأجرين والعقود والأرشفة الإلكترونية وتقييم المخاطر لصقر الإمارات للعقارات (Emirates Falcon Real Estate)." />
+    <meta property="og:title" content="صقر الإمارات للعقارات — إدارة العقارات والوساطة العقارية" />
+    <meta property="og:description" content="نظام شامل وثنائي اللغة (عربي/إنجليزي) لإدارة الشيكات المرتجعة والتحصيلات والقضايا الإيجارية والجلسات والملاك والمستأجرين والعقود والأرشفة الإلكترونية وتقييم المخاطر لصقر الإمارات للعقارات (Emirates Falcon Real Estate)." />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Tajawal:wght@300;400;500;700;800;900&family=Alexandria:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      if (window.location.hash && window.location.hash.includes('access_token=')) {
+        try {
+          const hash = window.location.hash.substring(1);
+          const params = new URLSearchParams(hash);
+          const token = params.get('access_token');
+          if (token && window.opener) {
+            window.opener.postMessage({ type: 'GOOGLE_OAUTH_SUCCESS', accessToken: token }, '*');
+            window.close();
+          }
+        } catch (e) {}
+      }
+    </script>
+  </head>
+  <body class="bg-slate-100 text-slate-900 antialiased font-sans">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

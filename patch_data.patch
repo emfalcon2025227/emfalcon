@@ -1,0 +1,30 @@
+--- src/context/DataContext.tsx
++++ src/context/DataContext.tsx
+@@ -7254,9 +7254,23 @@
+     const rentDed = deductions.rentDeduction || 0;
+     const maintDed = deductions.maintenanceDeduction || 0;
+     const earlyTermDed = deductions.earlyTerminationDeduction || 0;
+     const otherDed = deductions.otherDeductions || 0;
+ 
++    let remainingHeld = totalHeld;
++    const appliedRentDed = Math.min(remainingHeld, rentDed);
++    remainingHeld -= appliedRentDed;
++    const appliedMaintDed = Math.min(remainingHeld, maintDed);
++    remainingHeld -= appliedMaintDed;
++    const appliedEarlyTermDed = Math.min(remainingHeld, earlyTermDed);
++    remainingHeld -= appliedEarlyTermDed;
++    const appliedOtherDed = Math.min(remainingHeld, otherDed);
++    remainingHeld -= appliedOtherDed;
++    const cappedDeductions = {
++      rentDeduction: appliedRentDed,
++      maintenanceDeduction: appliedMaintDed,
++      earlyTerminationDeduction: appliedEarlyTermDed,
++      otherDeductions: appliedOtherDed,
++    };
++
+     const totalDeductions = Math.round((rentDed + maintDed + earlyTermDed + otherDed) * 100) / 100;
+-
+-    const netRefundAmount = Math.max(0, Math.round((totalHeld - totalDeductions) * 100) / 100);
++    const totalAppliedDeductions = Math.round((appliedRentDed + appliedMaintDed + appliedEarlyTermDed + appliedOtherDed) * 100) / 100;
++    const netRefundAmount = Math.max(0, Math.round((totalHeld - totalAppliedDeductions) * 100) / 100);
+     const remainingDueAmount = Math.max(0, Math.round((totalDeductions - totalHeld) * 100) / 100);
