@@ -508,10 +508,10 @@ export function generateOperationalReport(
 
         rows.push({
           id: comm.id,
-          date: comm.timestamp,
-          reference: comm.communicationNumber,
-          title: comm.subject,
-          entityName: getTenantName(comm.tenantId) || comm.recipient,
+          date: comm.timestamp || new Date().toISOString(),
+          reference: comm.communicationNumber || comm.id || "-",
+          title: comm.subject || "-",
+          entityName: (getTenantName(comm.tenantId) || comm.recipient) || "-",
           category: comm.channel,
           status: comm.status,
           assignedTo: comm.userName || "System",

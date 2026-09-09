@@ -6,6 +6,7 @@
       "name": "falcon-erp-app",
       "dependencies": {
         "@google/genai": "^2.21.0",
+        "@js-sdsl/ordered-map": "^4.4.2",
         "@tailwindcss/vite": "^4.0.0",
         "archiver": "^7.0.1",
         "autoprefixer": "^10.4.20",

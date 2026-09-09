@@ -6799,7 +6799,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // But the commission record might not store the paymentMethod directly, it was collected via collectAdministrativeFee.
       // Let's assume if the verification flow handles it, we should post it if the verificationStatus becomes VERIFIED, but we only know the paymentMethod if we look at the receipt or if it's passed.
       // We'll pass it or check existing.
-      if (existing.status === "COLLECTED" && updatedComm.verificationStatus === "VERIFIED") {
+      if (collectRes.success && updatedComm.verificationStatus === "VERIFIED") {
          // Look up the collection journal to see if it was CASH? No, we don't have the journal.
          // Actually, if we're verifying a daily deposit, it's for CASH. Let's just create it if paymentMethod === "CASH" was passed or if we can infer it.
          // Wait, the prompt implies "existing bank deposit workflow must move Cash in Hand -> Operating Bank".

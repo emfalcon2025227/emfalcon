@@ -1679,6 +1679,8 @@ export interface JournalEntryRecord {
   sourceType:
     | "RENT_COLLECTION"
     | "ADMIN_FEE"
+    | "ADMINISTRATIVE_FEE"
+    | "BATCH"
     | "PROPERTY_EXPENSE"
     | "OFFICE_EXPENSE"
     | "OWNER_TRANSFER"

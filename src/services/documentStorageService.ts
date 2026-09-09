@@ -248,7 +248,7 @@ export class DocumentStorageService {
       const q = query(archiveCol, where("fileHash", "==", fileHash), where("entityId", "==", options.entityId));
       const querySnap = await getDocs(q);
       
-      const matchedDoc = querySnap.docs.find(d => d.data().category === options.category);
+      const matchedDoc = querySnap.docs.find((d: any) => d.data().category === options.category);
       if (matchedDoc) {
         const existingDoc = matchedDoc.data() as ElectronicArchiveItem;
         
