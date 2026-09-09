@@ -1,0 +1,26 @@
+.gcloudignore
+.git
+.gitignore
+.dockerignore
+
+# Dependencies and build outputs
+node_modules/
+dist/
+build/
+coverage/
+.DS_Store
+
+# Logs & temp files
+*.log
+*.tmp
+*.zip
+*.tar.gz
+*.gz
+*.bak
+*.patch
+.env
+.env.local
+.env.*.local
+.secrets.json
+*.key
+*.pem

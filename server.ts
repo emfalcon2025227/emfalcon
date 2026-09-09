@@ -130,14 +130,9 @@ app.post("/api/scanner-relay/result", (req, res) => {
   return res.status(404).json({ ok: false, error: "Scan job not found or expired" });
 });
 
-// 4. Download Route for the Standalone Windows Scanner Package
-app.get("/api/scanner/download-package", (req, res) => {
-  const zipPath = path.join(process.cwd(), "public", "scanner-bridge-package.zip");
-  if (fs.existsSync(zipPath)) {
-    res.download(zipPath, "Emirates-Falcon-Scanner-Bridge.zip");
-  } else {
-    res.status(404).send("Scanner Bridge package not found on server.");
-  }
+// 4. Scanner Health Check Route
+app.get("/api/scanner/health", (req, res) => {
+  res.json({ ok: true, timestamp: new Date().toISOString() });
 });
 
 // 5. Unified Scanner Endpoint (/api/scanner/*)
