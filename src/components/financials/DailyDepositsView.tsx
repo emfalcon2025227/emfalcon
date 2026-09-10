@@ -222,14 +222,28 @@ export const DailyDepositsView: React.FC = () => {
       const owner = comm.ownerId ? owners.find((o) => o.id === comm.ownerId) : (prop ? owners.find((o) => o.id === prop.ownerId) : null);
       const archiveProof = archive.find((a) => a.entityId === comm.id || a.recordId === comm.id || (comm.proofDocumentId && a.id === comm.proofDocumentId));
       
-      const isCollected = comm.status === "COLLECTED" || comm.status === "FULLY_COLLECTED";
+      const isFullyCollected = comm.status === "COLLECTED" || comm.status === "FULLY_COLLECTED" || (typeof comm.outstandingBalance === "number" && comm.outstandingBalance <= 0);
       const isCancelled = comm.status === "CANCELLED" || comm.status === "REVERSED" || comm.status === "WAIVED";
-      const isOverdue = !isCollected && !isCancelled && Boolean(comm.dueDate && comm.dueDate < todayStr);
       
-      const itemStatus = isCollected ? "PAID" : isCancelled ? "CANCELLED" : "APPROVED";
-      const displayAmount = isCollected 
+      const outstandingAmount = typeof comm.outstandingBalance === "number"
+        ? Math.max(0, comm.outstandingBalance)
+        : Math.max(0, (comm.totalCommissionAmount || 0) - (comm.collectedAmount || 0));
+
+      const isOverdue = !isFullyCollected && !isCancelled && Boolean(comm.dueDate && comm.dueDate < todayStr);
+      
+      let itemStatus: "PAID" | "APPROVED" | "CANCELLED" | "PENDING_APPROVAL" | "DRAFT" = "APPROVED";
+      if (isCancelled) {
+        itemStatus = "CANCELLED";
+      } else if (isFullyCollected) {
+        itemStatus = "PAID";
+      } else {
+        itemStatus = "APPROVED";
+      }
+
+      // Authoritative display amount: If fully settled, display collected amount; if outstanding, display authoritative outstanding amount!
+      const displayAmount = isFullyCollected
         ? (comm.collectedAmount || comm.totalCommissionAmount || 0)
-        : (comm.outstandingBalance ?? (comm.totalCommissionAmount - (comm.collectedAmount || 0)));
+        : outstandingAmount;
 
       items.push({
         id: `comm-${comm.id}`,
@@ -382,11 +396,14 @@ export const DailyDepositsView: React.FC = () => {
     let pendingCount = 0;
 
     unifiedDepositItems.forEach((item) => {
-      if (item.fundCategory === "OFFICE") officeTotal += item.amount;
-      if (item.fundCategory === "OWNER") ownerTotal += item.amount;
-      if (item.fundCategory === "SECURITY_DEPOSIT") depositTotal += item.amount;
-      if (item.isOverdue) overdueCount++;
-      if (item.status === "APPROVED" || item.status === "PENDING" || item.status === "DRAFT") pendingCount++;
+      const isPending = item.status !== "PAID" && item.status !== "CANCELLED" && item.amount > 0;
+      if (isPending) {
+        if (item.fundCategory === "OFFICE") officeTotal += item.amount;
+        if (item.fundCategory === "OWNER") ownerTotal += item.amount;
+        if (item.fundCategory === "SECURITY_DEPOSIT") depositTotal += item.amount;
+        if (item.isOverdue) overdueCount++;
+        pendingCount++;
+      }
     });
 
     return { officeTotal, ownerTotal, depositTotal, overdueCount, pendingCount };
@@ -722,12 +739,16 @@ export const DailyDepositsView: React.FC = () => {
         setProofError(res.error || (isAr ? "فشلت عملية التسوية المعتمدة." : "Failed to settle transfer"));
       }
     } else if (targetItem.type === "ADMINISTRATIVE_FEE") {
+      const commRecord = targetItem.originalRecord;
+      const paymentMethod = commRecord?.paymentMethod || "CASH";
       const res = await settleAdministrativeFee({
         commissionId: targetItem.sourceId,
         proofBase64,
         proofFileName,
         proofFileType: proofFile?.type,
         proofFileSize: proofFile?.size,
+        paymentMethod,
+        dailyDepositId: commRecord?.dailyDepositId || targetItem.batchId || targetItem.id,
         notes: proofNotes ? (isAr ? `إيداع وتسوية رسوم: ${proofNotes}` : `Fee deposit settlement: ${proofNotes}`) : undefined,
         verificationStatus,
         verificationMethod,

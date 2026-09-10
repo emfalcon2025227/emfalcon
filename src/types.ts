@@ -1435,6 +1435,7 @@ export interface CommissionObligation {
   
   collectionDate?: string;
   paymentMethod?: string;
+  dailyDepositId?: string;
   referenceNumber?: string;
   transactionReference?: string;
   proofDocumentId?: string;

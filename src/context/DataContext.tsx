@@ -380,6 +380,7 @@ export interface DataContextType {
     options?: {
       sourceWorkflow?: "DAILY_DEPOSITS" | "DIRECT_SETTLEMENT" | "SETTLEMENT_GATE";
       proofDocumentId?: string;
+      dailyDepositId?: string;
     }
   ) => Promise<{ success: boolean; error?: string }>;
   settleAdministrativeFee: (params: {
@@ -397,6 +398,8 @@ export interface DataContextType {
     overrideType?: VerificationOverrideType;
     aiVerificationDetails?: any;
     paymentMethod?: PaymentMethod;
+    dailyDepositId?: string;
+    linkedDailyDeposit?: DailyDepositRecord;
   }) => Promise<{ success: boolean; error?: string }>;
   reverseCommissionObligation: (id: string, reason: string) => { success: boolean; error?: string };
   deleteCommissionObligation: (id: string, options?: DeleteRecordOptions) => void;
@@ -6465,6 +6468,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     options?: {
       sourceWorkflow?: "DAILY_DEPOSITS" | "DIRECT_SETTLEMENT" | "SETTLEMENT_GATE";
       proofDocumentId?: string;
+      dailyDepositId?: string;
     }
   ): Promise<{ success: boolean; error?: string }> => {
     // Financial Period Validation
@@ -6576,6 +6580,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           paymentMethod,
           transactionReference: referenceNumber || commData.transactionReference,
           proofDocumentId: options?.proofDocumentId || commData.proofDocumentId,
+          dailyDepositId: options?.dailyDepositId || commData.dailyDepositId,
           notes: notes ? (commData.notes ? `${commData.notes} | ${notes}` : notes) : commData.notes,
           updatedAt: new Date().toISOString(),
           updatedById: userId,
@@ -6688,6 +6693,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     overrideType?: VerificationOverrideType;
     aiVerificationDetails?: any;
     paymentMethod?: PaymentMethod;
+    dailyDepositId?: string;
+    linkedDailyDeposit?: DailyDepositRecord;
   }): Promise<{ success: boolean; error?: string }> => {
     const {
       commissionId,
@@ -6703,7 +6710,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       overrideReason,
       overrideType,
       aiVerificationDetails,
-      paymentMethod = "BANK_TRANSFER",
+      paymentMethod: providedPaymentMethod,
+      dailyDepositId,
+      linkedDailyDeposit,
     } = params;
 
     // RBAC Authorization check
@@ -6720,15 +6729,54 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!existing) return { success: false, error: language === "ar" ? "سجل الرسوم غير موجود." : "Commission obligation record not found." };
 
     // Idempotency check: If already settled and fully collected, return success
-    if (existing.status === "FULLY_COLLECTED" || existing.status === "COLLECTED") {
+    if (existing.status === "FULLY_COLLECTED" || existing.status === "COLLECTED" || (typeof existing.outstandingBalance === "number" && existing.outstandingBalance <= 0)) {
       return { success: true };
     }
 
-    if (existing.status === "CANCELLED" || existing.status === "REVERSED") {
+    if (existing.status === "CANCELLED" || existing.status === "REVERSED" || existing.status === "WAIVED") {
       return {
         success: false,
         error: language === "ar" ? "لا يمكن تسوية رسوم ملغاة أو معكوسة ماليًا." : "Cannot settle a cancelled or reversed commission obligation."
       };
+    }
+
+    // Determine the authoritative payment method
+    const effectivePaymentMethod: PaymentMethod | undefined =
+      providedPaymentMethod ||
+      (existing.paymentMethod as PaymentMethod) ||
+      (existing.partyType === "OWNER" ? "BANK_TRANSFER" : undefined);
+
+    if (!effectivePaymentMethod) {
+      return {
+        success: false,
+        error: language === "ar" ? "طريقة التحصيل / الدفع غير محددة لهذه الرسوم الإدارية." : "Payment method is required for administrative fee settlement.",
+      };
+    }
+
+    // CASH Settlement Controls: Must link to a valid Daily Deposit
+    if (effectivePaymentMethod === "CASH") {
+      const targetDepositId = dailyDepositId || (existing as any).dailyDepositId || linkedDailyDeposit?.id;
+      const matchedDeposit = linkedDailyDeposit || (targetDepositId ? dailyDeposits.find((d) => d.id === targetDepositId) : null);
+
+      if (!targetDepositId && !matchedDeposit) {
+        return {
+          success: false,
+          error:
+            language === "ar"
+              ? "لا يمكن تسوية الرسوم الإدارية النقدية مباشرة بدون ربطها بسجل أو حافظة إيداع يومي معتمدة (Daily Deposit)."
+              : "CASH Administrative Fee cannot be settled directly without a linked and verified Daily Deposit.",
+        };
+      }
+
+      if (matchedDeposit && matchedDeposit.status === "EXCEPTION") {
+        return {
+          success: false,
+          error:
+            language === "ar"
+              ? "سجل الإيداع اليومي المرتبط به استثناء مالي ولم يتم اعتماده."
+              : "The linked Daily Deposit record has an unresolved financial exception.",
+        };
+      }
     }
 
     // Resolve proof document from archive
@@ -6747,7 +6795,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const gateResult = evaluateSettlementGate({
         verificationStatus,
         hasProof: hasValidProofDocument,
-        hasValidProofDocument,
         isProofResolved: existing.proofDocumentId ? Boolean(resolvedArchiveDoc) : undefined,
         proofRequired: true,
         overrideReason,
@@ -6823,16 +6870,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const amountToCollect = existing.outstandingBalance || (existing.totalCommissionAmount - (existing.collectedAmount || 0));
+      const sourceWorkflow = effectivePaymentMethod === "CASH" ? "DAILY_DEPOSITS" : "DIRECT_SETTLEMENT";
+
       const collectRes = await collectAdministrativeFee(
         commissionId,
         amountToCollect,
-        paymentMethod,
+        effectivePaymentMethod,
         transactionReferenceNumber || existing.transactionReference,
         notes || (verificationStatus ? `Settled via ${verificationStatus}` : undefined),
         idempotencyKey,
         {
-          sourceWorkflow: "DAILY_DEPOSITS",
+          sourceWorkflow,
           proofDocumentId: archiveDocId,
+          dailyDepositId: effectivePaymentMethod === "CASH" ? (dailyDepositId || (existing as any).dailyDepositId || linkedDailyDeposit?.id) : undefined,
         }
       );
 
@@ -6840,7 +6890,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return collectRes;
       }
 
-      // Update commission record with proof and verification metadata
+      // Update commission record with proof, daily deposit id, and verification metadata
       const updatedComm: Partial<CommissionObligation> = {
         proofDocumentId: archiveDocId,
         verificationStatus: verificationStatus || "MANUALLY_VERIFIED",
@@ -6850,6 +6900,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         verifiedByName: userName,
         overrideReason: overrideReason || undefined,
         overrideType: overrideType || undefined,
+        paymentMethod: effectivePaymentMethod,
+        ...(effectivePaymentMethod === "CASH" && (dailyDepositId || linkedDailyDeposit?.id) ? { dailyDepositId: dailyDepositId || linkedDailyDeposit?.id } : {}),
       };
 
       setCommissions((prev) =>
@@ -6863,7 +6915,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // If the administrative fee was paid in CASH, post a bank deposit journal moving funds from Cash in Hand (1020) to Operating Bank (1010)
-      if (paymentMethod === "CASH") {
+      if (effectivePaymentMethod === "CASH") {
         try {
           const depositJournal = buildBankDepositJournal(
             {
@@ -6911,7 +6963,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         "COMMISSION",
         existing.id,
         `Administrative Fee ${existing.id}`,
-        `تسوية مالية وإيداع رسوم إدارية بمبلغ ${amountToCollect.toLocaleString()} AED (${verificationStatus || "VERIFIED"})`,
+        `تسوية مالية وإيداع رسوم إدارية بمبلغ ${amountToCollect.toLocaleString()} AED (${verificationStatus || "VERIFIED"}) [${effectivePaymentMethod}]`,
         undefined,
         JSON.stringify(auditPayload),
         overrideReason
