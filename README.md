@@ -1,20 +1,65 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# SDI Asset Manager - Property Management System
 
-# Run and deploy your AI Studio app
+> **صقر الإمارات للعقارات** - نظام إدارة العقارات والوساطة العقارية
 
-This contains everything you need to run your app locally.
+## 🚀 البدء السريع
 
-View your app in AI Studio: https://ai.studio/apps/8c567d77-3b0d-4111-85f4-1551be3cdb6b
+### المتطلبات
+- Node.js 18+
+- npm أو yarn
 
-## Run Locally
+### التثبيت والتشغيل
 
-**Prerequisites:**  Node.js
+```bash
+# تثبيت المكتبات
+npm install
 
+# تشغيل التطبيق في وضع التطوير
+npm run dev
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+# بناء التطبيق للإنتاج
+npm run build
+
+# عرض المعاينة
+npm run preview
+```
+
+### متغيرات البيئة
+
+1. انسخ `.env.example` إلى `.env.local`:
+```bash
+cp .env.example .env.local
+```
+
+2. أضف مفتاح Gemini API الخاص بك:
+```
+GEMINI_API_KEY=your_api_key_here
+```
+
+## 🏗️ البنية المعمارية
+
+- **Frontend**: React 19 + TypeScript + Vite
+- **Styling**: Tailwind CSS 4
+- **Backend**: Express.js + Node.js
+- **Database**: Firebase + Firestore
+- **AI Integration**: Google Gemini API
+
+## 📦 الميزات الرئيسية
+
+- ✅ واجهة ثنائية اللغة (عربي/إنجليزي)
+- ✅ نظام إدارة العقارات الشامل
+- ✅ إدارة الشيكات والتحصيلات
+- ✅ نظام إدارة القضايا
+- ✅ تصدير PDF والتقارير
+- ✅ تكامل AI مع Google Gemini
+
+## 🔗 الموارد
+
+- [عرض التطبيق على AI Studio](https://ai.studio/apps/8c567d77-3b0d-4111-85f4-1551be3cdb6b)
+- [Vite Documentation](https://vitejs.dev)
+- [React Documentation](https://react.dev)
+- [Tailwind CSS](https://tailwindcss.com)
+
+## 📄 الترخيص
+
+جميع الحقوق محفوظة © 2026
