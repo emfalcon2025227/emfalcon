@@ -985,8 +985,12 @@ const INITIAL_PETTY_CASH_CATEGORIES: OfficePettyCashCategory[] = [
 ];
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [dailyDeposits, setDailyDeposits] = useState<DailyDepositRecord[]>([]);
-  const [depositBatches, setDepositBatches] = useState<DepositBatchRecord[]>([]);
+  const [dailyDeposits, setDailyDeposits] = useState<DailyDepositRecord[]>(() => {
+    return safeLoadFromStorage("ef_daily_deposits_v12", []);
+  });
+  const [depositBatches, setDepositBatches] = useState<DepositBatchRecord[]>(() => {
+    return safeLoadFromStorage("ef_deposit_batches_v12", []);
+  });
   const createDepositBatch = (batch: DepositBatchRecord) => {
     setDepositBatches(prev => [batch, ...prev]);
     safeSetDoc(doc(db, "deposit_batches", batch.id), batch);
@@ -1013,19 +1017,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const [owners, setOwners] = useState<Owner[]>(() => {
-    return safeLoadFromStorage("ef_owners_v12", INITIAL_OWNERS);
+    return safeLoadFromStorage("ef_owners_v12", []);
   });
 
   const [properties, setProperties] = useState<Property[]>(() => {
-    return safeLoadFromStorage("ef_properties_v12", INITIAL_PROPERTIES);
+    return safeLoadFromStorage("ef_properties_v12", []);
   });
 
   const [units, setUnits] = useState<Unit[]>(() => {
-    return safeLoadFromStorage("ef_units_v12", INITIAL_UNITS);
+    return safeLoadFromStorage("ef_units_v12", []);
   });
 
   const [tenants, setTenants] = useState<Tenant[]>(() => {
-    const raw: Tenant[] = safeLoadFromStorage("ef_tenants_v12", INITIAL_TENANTS);
+    const raw: Tenant[] = safeLoadFromStorage("ef_tenants_v12", []);
     return raw.map((t) => ({
       ...t,
       riskFactors: t.riskFactors || [],
@@ -1036,11 +1040,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [leases, setLeases] = useState<Lease[]>(() => {
-    return safeLoadFromStorage("ef_leases_v12", INITIAL_LEASES);
+    return safeLoadFromStorage("ef_leases_v12", []);
   });
 
   const [cheques, setCheques] = useState<Cheque[]>(() => {
-    const raw: Cheque[] = safeLoadFromStorage("ef_cheques_v12", INITIAL_CHEQUES);
+    const raw: Cheque[] = safeLoadFromStorage("ef_cheques_v12", []);
     return raw.map((c) => {
       const amount = typeof c.amount === "number" ? c.amount : Number(c.amount) || 0;
       const totalApplied = typeof c.totalApplied === "number" ? c.totalApplied : Number(c.totalApplied) || 0;
@@ -1332,6 +1336,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => { safeSaveToStorage("ef_financial_periods_v1", financialPeriods); }, [financialPeriods]);
   useEffect(() => { safeSaveToStorage("ef_period_certifications_v1", periodCertifications); }, [periodCertifications]);
 
+  useEffect(() => { safeSaveToStorage("ef_daily_deposits_v12", dailyDeposits); }, [dailyDeposits]);
+  useEffect(() => { safeSaveToStorage("ef_deposit_batches_v12", depositBatches); }, [depositBatches]);
   useEffect(() => { safeSaveToStorage("ef_archive_v12", archive); }, [archive]);
   useEffect(() => { safeSaveToStorage("ef_notifications_v12", notifications); }, [notifications]);
   useEffect(() => { safeSaveToStorage("ef_operational_communications_v12", operationalCommunications); }, [operationalCommunications]);
@@ -1785,6 +1791,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }, createErrorHandler("period_certifications", [], setPeriodCertifications));
 
+    const unsubDailyDeposits = onSnapshot(collection(db, "daily_deposits"), (snap) => {
+      if (!snap.empty) {
+        const items: DailyDepositRecord[] = [];
+        snap.forEach(d => items.push(d.data() as DailyDepositRecord));
+        setDailyDeposits(items);
+      } else {
+        setDailyDeposits([]);
+      }
+    }, createErrorHandler("daily_deposits", [], setDailyDeposits));
+
+    const unsubDepositBatches = onSnapshot(collection(db, "deposit_batches"), (snap) => {
+      if (!snap.empty) {
+        const items: DepositBatchRecord[] = [];
+        snap.forEach(d => items.push(d.data() as DepositBatchRecord));
+        setDepositBatches(items);
+      } else {
+        setDepositBatches([]);
+      }
+    }, createErrorHandler("deposit_batches", [], setDepositBatches));
+
     const unsubCompanyProfile = onSnapshot(doc(db, "settings", "companyProfile"), (docSnap) => {
       if (docSnap.exists()) {
         const remoteData = docSnap.data() as CompanyProfile;
@@ -1797,6 +1823,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return () => {
       unsubCompanyProfile();
+      unsubDailyDeposits();
+      unsubDepositBatches();
       unsubFinancialPeriods();
       unsubPeriodCertifications();
       unsubVatRates();
@@ -4174,12 +4202,44 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // 3. If Cheque method, create the authoritative Cheque entity
+    // 3. Resolve and strictly validate authoritative entity identities
+    const leaseObj = params.leaseId ? leases.find((l) => l.id === params.leaseId) : undefined;
+    if (params.leaseId && !leaseObj) {
+      return {
+        success: false,
+        error: language === "ar"
+          ? `فشل تسجيل الدفعة: عقد الإيجار رقم ${params.leaseId} غير موجود بالنظام.`
+          : `Payment failed: Lease contract ${params.leaseId} was not found in the system.`,
+      };
+    }
+
+    const resolvedOwnerId = leaseObj?.ownerId || (params as any).ownerId;
+    const resolvedTenantId = leaseObj?.tenantId || (params as any).tenantId;
+    const resolvedPropertyId = leaseObj?.propertyId || (params as any).propertyId;
+    const resolvedUnitId = leaseObj?.unitId || (params as any).unitId;
+
+    if (!resolvedOwnerId || !resolvedTenantId) {
+      return {
+        success: false,
+        error: language === "ar"
+          ? "فشل تسجيل الدفعة: تعذر التحقق من هوية المالك أو المستأجر المرتبط بالعملية. يرجى التأكد من اكتمال بيانات العقد."
+          : "Payment failed: Could not resolve authoritative Owner or Tenant identity. Please verify contract relationships.",
+      };
+    }
+
+    // 4. If Cheque method, create the authoritative Cheque entity
     let createdChequeId = "";
     let newlyCreatedCheque: Cheque | null = null;
     if (params.paymentMethod === "CHEQUE" && params.chequeDetails) {
-      const leaseObj = leases.find((l) => l.id === params.leaseId);
-      const prop = leaseObj ? properties.find((p) => p.id === leaseObj.propertyId) : null;
+      if (!resolvedPropertyId || !resolvedUnitId) {
+        return {
+          success: false,
+          error: language === "ar"
+            ? "فشل إنشاء الشيك: يجب ربط الشيك بعقار ووحدة سكنية محددة."
+            : "Cheque creation failed: Cheque must be linked to a valid property and unit.",
+        };
+      }
+      const prop = properties.find((p) => p.id === resolvedPropertyId);
       const newChq: Cheque = {
         id: "chq-" + Date.now() + "-" + crypto.randomUUID().split("-")[0],
         chequeNumber: params.chequeDetails.chequeNumber,
@@ -4187,11 +4247,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         amount: params.amount,
         chequeDate: params.chequeDetails.chequeDate,
         dueDate: params.chequeDetails.chequeDate,
-        ownerId: leaseObj?.ownerId || "owner-01",
-        ownerName: prop ? prop.ownerId : "Owner",
-        tenantId: leaseObj?.tenantId || "tenant-01",
-        propertyId: leaseObj?.propertyId || "prop-01",
-        unitId: leaseObj?.unitId || "unit-01",
+        ownerId: resolvedOwnerId,
+        ownerName: prop?.nameAr || prop?.nameEn || "Owner",
+        tenantId: resolvedTenantId,
+        propertyId: resolvedPropertyId,
+        unitId: resolvedUnitId,
         leaseId: params.leaseId,
         status: params.chequeDetails.depositDate ? "DEPOSITED" : "PENDING",
         originalStatus: "NORMAL",
@@ -4213,17 +4273,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       logAudit("CREATE", "CHEQUE", newChq.id, newChq.chequeNumber, `Created Cheque #${newChq.chequeNumber} for Lease Contract ${params.leaseId}`);
     }
 
-    const leaseObj = leases.find((l) => l.id === params.leaseId);
     const totalAllocated = params.allocations.reduce((sum, a) => sum + a.amount, 0);
     const reference = params.referenceNumber?.trim() || params.chequeDetails?.chequeNumber?.trim();
 
-    // 4. Create the main CollectionRecord
+    // 5. Create the main CollectionRecord
     const receipt: CollectionRecord = {
       id: "col-" + Date.now(),
       receiptNumber: generateSequentialNumber(collections, "receiptNumber", "RCP-"),
-      chequeId: createdChequeId || params.chequeId || "DIRECT_COLLECTIONS",
-      tenantId: leaseObj?.tenantId || "tenant-01",
-      ownerId: leaseObj?.ownerId || "owner-01",
+      chequeId: createdChequeId || params.chequeId || undefined,
+      tenantId: resolvedTenantId,
+      ownerId: resolvedOwnerId,
       paymentDate: params.paymentDate,
       amountEntered: params.amount,
       amountApplied: totalAllocated,
@@ -4231,8 +4290,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       transactionReference: reference || undefined,
       approvalCode: isCardPayment(params.paymentMethod) ? params.approvalCode : undefined,
       payerName: params.payerName || "Tenant Representative",
-      collectedBy: currentUser?.nameEn || "Finance Officer",
-      collectedByUserId: currentUser?.id || "usr-03",
+      collectedBy: currentUser?.nameEn || currentUser?.nameAr || "Finance Officer",
+      collectedByUserId: currentUser?.id || "system",
       notes: params.notes,
       createdAt: new Date().toISOString(),
     };
@@ -5834,6 +5893,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ? String(inst.chequeNumber).trim()
         : `CHQ-${targetLease.leaseNumber || targetLease.id.substring(0, 4)}-${installmentNumber}`;
 
+      const resolvedOwnerId = targetLease.ownerId || prop?.ownerId;
+      if (!resolvedOwnerId) {
+        return { success: false, error: "لا يمكن إنشاء سجل الشيك المرتجع لعدم وجود مالك مرتبط بعقد الإيجار." };
+      }
+
       const newCheque: Cheque = {
         id: "chq-" + Date.now(),
         chequeNumber: chqNum,
@@ -5841,7 +5905,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         amount: inst.amount,
         chequeDate: inst.dueDate,
         dueDate: inst.dueDate,
-        ownerId: prop?.ownerId || owners[0]?.id || "ow-01",
+        ownerId: resolvedOwnerId,
         tenantId: targetLease.tenantId,
         propertyId: targetLease.propertyId,
         unitId: targetLease.unitId,
@@ -6647,29 +6711,33 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         `تحصيل رسوم إدارية بمبلغ ${amount.toLocaleString()} AED (${paymentMethod})`
       );
 
-      try {
-        const journalData = buildAdminFeeJournal(
-          {
-            commissionId: id,
-            commissionNumber: commObj.businessKey || "COMM-" + id,
-            grossAmount: amount,
-            vatAmount: commObj.vatAmount,
-            partyType: commObj.partyType,
-            transactionDate: receiptObj.paymentDate,
-            paymentMethod,
-            isDeductedFromOwner: commObj.partyType === "OWNER",
-            ownerId: commObj.ownerId,
-            propertyId: commObj.propertyId,
-            leaseId: commObj.leaseId,
-            tenantId: commObj.tenantId,
-            createdBy: userName,
-            notes: notes || `تحصيل رسوم إدارية (${commObj.commissionType})`,
-          },
-          chartOfAccounts
-        );
-        postJournalEntry(journalData);
-      } catch (jErr) {
-        console.warn("Journal posting warning for admin fee collection:", jErr);
+      const journalData = buildAdminFeeJournal(
+        {
+          commissionId: id,
+          commissionNumber: commObj.businessKey || "COMM-" + id,
+          grossAmount: amount,
+          vatAmount: commObj.vatAmount,
+          partyType: commObj.partyType,
+          transactionDate: receiptObj.paymentDate,
+          paymentMethod,
+          isDeductedFromOwner: commObj.partyType === "OWNER",
+          ownerId: commObj.ownerId,
+          propertyId: commObj.propertyId,
+          leaseId: commObj.leaseId,
+          tenantId: commObj.tenantId,
+          createdBy: userName,
+          notes: notes || `تحصيل رسوم إدارية (${commObj.commissionType})`,
+        },
+        chartOfAccounts
+      );
+      const jRes = postJournalEntry(journalData);
+      if (!jRes.success) {
+        return {
+          success: false,
+          error: language === "ar"
+            ? `فشل ترحيل القيد المحاسبي للرسوم الإدارية: ${jRes.error || "خطأ محاسبي"}`
+            : `Failed to post administrative fee journal entry: ${jRes.error || "Accounting error"}`,
+        };
       }
 
       return { success: true };
@@ -6916,22 +6984,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // If the administrative fee was paid in CASH, post a bank deposit journal moving funds from Cash in Hand (1020) to Operating Bank (1010)
       if (effectivePaymentMethod === "CASH") {
-        try {
-          const depositJournal = buildBankDepositJournal(
-            {
-              sourceType: "ADMINISTRATIVE_FEE",
-              sourceId: commissionId,
-              totalAmount: amountToCollect,
-              transactionDate: new Date().toISOString().split("T")[0],
-              referenceNumber: transactionReferenceNumber || `DEP-FEE-${existing.id.slice(-6)}`,
-              notes: notes || `إيداع بنكي للرسوم الإدارية النقدية #${existing.businessKey || existing.id}`,
-              createdBy: userName,
-            },
-            chartOfAccounts
-          );
-          postJournalEntry(depositJournal);
-        } catch (dErr) {
-          console.warn("Bank deposit journal posting warning:", dErr);
+        const depositJournal = buildBankDepositJournal(
+          {
+            sourceType: "ADMINISTRATIVE_FEE",
+            sourceId: commissionId,
+            totalAmount: amountToCollect,
+            transactionDate: new Date().toISOString().split("T")[0],
+            referenceNumber: transactionReferenceNumber || `DEP-FEE-${existing.id.slice(-6)}`,
+            notes: notes || `إيداع بنكي للرسوم الإدارية النقدية #${existing.businessKey || existing.id}`,
+            createdBy: userName,
+          },
+          chartOfAccounts
+        );
+        const depRes = postJournalEntry(depositJournal);
+        if (!depRes.success) {
+          return {
+            success: false,
+            error: language === "ar"
+              ? `فشل ترحيل قيد الإيداع البنكي للرسوم النقدية: ${depRes.error || "خطأ محاسبي"}`
+              : `Failed to post bank deposit journal for cash fee: ${depRes.error || "Accounting error"}`,
+          };
         }
       }
 
@@ -7132,33 +7204,35 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Post Double-Entry Journal Entry: Debit Asset, Credit 2020
       let postedJournal: JournalEntryRecord | undefined = undefined;
-      try {
-        const journalData = buildSecurityDepositCollectionJournal(
-          chartOfAccounts,
-          {
-            leaseId: lease.id,
-            leaseNumber: lease.leaseNumber,
-            tenantId: lease.tenantId,
-            ownerId: lease.ownerId,
-            propertyId: lease.propertyId,
-            unitId: lease.unitId,
-            amount,
-            paymentMethod,
-            receiptNumber,
-            chequeNumber,
-            bankName,
-            transactionDate: todayDate,
-            createdBy: userName,
-            notes: notes || `تحصيل أمانات تأمين صيانة مستأجر لعقد إيجار #${lease.leaseNumber} (حساب 2020)`,
-          }
-        );
-        const jRes = postJournalEntry(journalData);
-        if (jRes.success && jRes.entry) {
-          postedJournal = jRes.entry;
+      const journalData = buildSecurityDepositCollectionJournal(
+        chartOfAccounts,
+        {
+          leaseId: lease.id,
+          leaseNumber: lease.leaseNumber,
+          tenantId: lease.tenantId,
+          ownerId: lease.ownerId,
+          propertyId: lease.propertyId,
+          unitId: lease.unitId,
+          amount,
+          paymentMethod,
+          receiptNumber,
+          chequeNumber,
+          bankName,
+          transactionDate: todayDate,
+          createdBy: userName,
+          notes: notes || `تحصيل أمانات تأمين صيانة مستأجر لعقد إيجار #${lease.leaseNumber} (حساب 2020)`,
         }
-      } catch (jErr) {
-        console.warn("Journal posting warning for security deposit collection:", jErr);
+      );
+      const jRes = postJournalEntry(journalData);
+      if (!jRes.success || !jRes.entry) {
+        return {
+          success: false,
+          error: language === "ar"
+            ? `فشل ترحيل القيد المحاسبي لأمانات التأمين: ${jRes.error || "خطأ محاسبي"}`
+            : `Failed to post security deposit journal entry: ${jRes.error || "Accounting error"}`,
+        };
       }
+      postedJournal = jRes.entry;
 
       logAudit(
         "FINANCIAL_PAYMENT",
@@ -7315,22 +7389,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (existingLease.securityDepositPaymentMethod === "CASH" && updatedLeaseData.securityDepositVerificationStatus === "VERIFIED") {
-        try {
-          const journalData = buildBankDepositJournal(
-            {
-              sourceType: "SECURITY_DEPOSIT",
-              sourceId: existingLease.id,
-              totalAmount: existingLease.securityDeposit || 0,
-              transactionDate: new Date().toISOString().split("T")[0],
-              referenceNumber: transactionReferenceNumber || existingLease.securityDepositReceiptNumber,
-              notes: notes || `إيداع بنكي لتأمين نقدي محصل لعقد #${existingLease.leaseNumber}`,
-              createdBy: userName,
-            },
-            chartOfAccounts
-          );
-          postJournalEntry(journalData);
-        } catch (jErr) {
-          console.warn("Journal posting warning for security deposit bank deposit:", jErr);
+        const journalData = buildBankDepositJournal(
+          {
+            sourceType: "SECURITY_DEPOSIT",
+            sourceId: existingLease.id,
+            totalAmount: existingLease.securityDeposit || 0,
+            transactionDate: new Date().toISOString().split("T")[0],
+            referenceNumber: transactionReferenceNumber || existingLease.securityDepositReceiptNumber,
+            notes: notes || `إيداع بنكي لتأمين نقدي محصل لعقد #${existingLease.leaseNumber}`,
+            createdBy: userName,
+          },
+          chartOfAccounts
+        );
+        const depRes = postJournalEntry(journalData);
+        if (!depRes.success) {
+          return {
+            success: false,
+            error: language === "ar"
+              ? `فشل ترحيل قيد الإيداع البنكي لتأمين الصيانة النقدي: ${depRes.error || "خطأ محاسبي"}`
+              : `Failed to post bank deposit journal for cash deposit: ${depRes.error || "Accounting error"}`,
+          };
         }
       }
 
@@ -7522,33 +7600,35 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Post Double-Entry Journal Entry
       let postedJournal: JournalEntryRecord | undefined = undefined;
-      try {
-        const journalData = buildSecurityDepositSettlementJournal(
-          chartOfAccounts,
-          {
-            leaseId: lease.id,
-            leaseNumber: lease.leaseNumber,
-            tenantId: lease.tenantId,
-            ownerId: lease.ownerId,
-            propertyId: lease.propertyId,
-            unitId: lease.unitId,
-            totalHeldAmount: totalHeld,
-            deductions: cappedDeductions,
-            netRefundAmount,
-            refundPaymentMethod,
-            reference: refundReference,
-            transactionDate: todayDate,
-            createdBy: userName,
-            notes: notes || `تسوية وبراءة ذمة تأمين مستأجر لعقد #${lease.leaseNumber}`,
-          }
-        );
-        const jRes = postJournalEntry(journalData);
-        if (jRes.success && jRes.entry) {
-          postedJournal = jRes.entry;
+      const journalData = buildSecurityDepositSettlementJournal(
+        chartOfAccounts,
+        {
+          leaseId: lease.id,
+          leaseNumber: lease.leaseNumber,
+          tenantId: lease.tenantId,
+          ownerId: lease.ownerId,
+          propertyId: lease.propertyId,
+          unitId: lease.unitId,
+          totalHeldAmount: totalHeld,
+          deductions: cappedDeductions,
+          netRefundAmount,
+          refundPaymentMethod,
+          reference: refundReference,
+          transactionDate: todayDate,
+          createdBy: userName,
+          notes: notes || `تسوية وبراءة ذمة تأمين مستأجر لعقد #${lease.leaseNumber}`,
         }
-      } catch (jErr) {
-        console.warn("Journal posting warning for security deposit settlement:", jErr);
+      );
+      const jRes = postJournalEntry(journalData);
+      if (!jRes.success || !jRes.entry) {
+        return {
+          success: false,
+          error: language === "ar"
+            ? `فشل ترحيل القيد المحاسبي لتسوية أمانات التأمين: ${jRes.error || "خطأ محاسبي"}`
+            : `Failed to post security deposit settlement journal entry: ${jRes.error || "Accounting error"}`,
+        };
       }
+      postedJournal = jRes.entry;
 
       logAudit(
         "FINANCIAL_PAYMENT",
@@ -8592,10 +8672,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newDeposit: DailyDepositRecord = {
         ...deposit,
         id: `DEP-${Date.now()}-${crypto.randomUUID().split("-")[0]}`,
-        createdBy: currentUser.nameEn,
+        createdBy: currentUser.nameEn || currentUser.nameAr || "System User",
         createdAt: new Date().toISOString(),
       };
-      setDailyDeposits((prev) => [...prev, newDeposit]);
+      setDailyDeposits((prev) => [newDeposit, ...prev.filter(d => d.id !== newDeposit.id)]);
+      await safeSetDoc(doc(db, "daily_deposits", newDeposit.id), newDeposit, { merge: true });
+      logAudit("FINANCIAL_RECORD_ADD", "DAILY_DEPOSIT", newDeposit.id, `إيداع بنكي #${newDeposit.id}`, `تم تسجيل إيداع بنكي بقيمة ${deposit.amount} درهم`);
       return { success: true, id: newDeposit.id };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -8606,6 +8688,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       if (!currentUser) throw new Error("Unauthorized");
       setDailyDeposits((prev) => prev.map((d) => d.id === id ? { ...d, ...updates } : d));
+      await safeSetDoc(doc(db, "daily_deposits", id), updates, { merge: true });
+      logAudit("FINANCIAL_RECORD_EDIT", "DAILY_DEPOSIT", id, `إيداع بنكي #${id}`, "تم تحديث حالة الإيداع البنكي");
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -9124,23 +9208,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         `تم إثبات الإيداع والتسوية المالية بنجاح بمبلغ ${existing.amount.toLocaleString()} AED - مرجع: ${updatedTransfer.transactionReferenceNumber || "لا يوجد"}`
       );
 
-      try {
-        const journalData = buildOwnerTransferJournal(
-          {
-            transferId: existing.id,
-            transferNumber: existing.transferNumber,
-            amount: existing.amount,
-            transactionDate: existing.transferDate || new Date().toISOString().split("T")[0],
-            ownerId: existing.ownerId,
-            bankAccountReference: updatedTransfer.transactionReferenceNumber,
-            createdBy: userName,
-            notes: notes || existing.notes,
-          },
-          chartOfAccounts
-        );
-        postJournalEntry(journalData);
-      } catch (jErr) {
-        console.warn("Journal posting warning for owner transfer settlement:", jErr);
+      const journalData = buildOwnerTransferJournal(
+        {
+          transferId: existing.id,
+          transferNumber: existing.transferNumber,
+          amount: existing.amount,
+          transactionDate: existing.transferDate || new Date().toISOString().split("T")[0],
+          ownerId: existing.ownerId,
+          bankAccountReference: updatedTransfer.transactionReferenceNumber,
+          createdBy: userName,
+          notes: notes || existing.notes,
+        },
+        chartOfAccounts
+      );
+      const jRes = postJournalEntry(journalData);
+      if (!jRes.success) {
+        return {
+          success: false,
+          error: language === "ar"
+            ? `فشل ترحيل القيد المحاسبي لتحويل المالك: ${jRes.error || "خطأ محاسبي"}`
+            : `Failed to post owner transfer journal entry: ${jRes.error || "Accounting error"}`,
+        };
       }
 
       return { success: true };
@@ -9375,22 +9463,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         `تم عكس تحويل المالك بمبلغ ${existing.amount.toLocaleString()} AED وإنشاء قيد عكس مالي. السبب: ${reason}`
       );
 
-      try {
-        const journalData = buildOwnerTransferReversalJournal(
-          {
-            transferId: existing.id,
-            transferNumber: existing.transferNumber,
-            amount: existing.amount,
-            transactionDate: new Date().toISOString().split("T")[0],
-            ownerId: existing.ownerId,
-            createdBy: currentUser?.nameAr || "مدير النظام",
-            notes: reason,
-          },
-          chartOfAccounts
-        );
-        postJournalEntry(journalData);
-      } catch (jErr) {
-        console.warn("Journal posting warning for transfer reversal:", jErr);
+      const journalData = buildOwnerTransferReversalJournal(
+        {
+          transferId: existing.id,
+          transferNumber: existing.transferNumber,
+          amount: existing.amount,
+          transactionDate: new Date().toISOString().split("T")[0],
+          ownerId: existing.ownerId,
+          createdBy: currentUser?.nameAr || "مدير النظام",
+          notes: reason,
+        },
+        chartOfAccounts
+      );
+      const revRes = postJournalEntry(journalData);
+      if (!revRes.success) {
+        return {
+          success: false,
+          error: language === "ar"
+            ? `فشل ترحيل قيد عكس تحويل المالك: ${revRes.error || "خطأ محاسبي"}`
+            : `Failed to post owner transfer reversal journal: ${revRes.error || "Accounting error"}`,
+        };
       }
 
       return { success: true };
@@ -9459,27 +9551,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `تم تسجيل مصروف جديد بمبلغ ${totalAmount.toLocaleString()} AED (${data.category}) - يتحمله: ${data.costBearer}`
     );
 
-    try {
-      const journalData = buildPropertyExpenseJournal(
-        {
-          expenseId: id,
-          expenseNumber,
-          totalAmount,
-          costBearer: data.costBearer,
-          category: data.category,
-          transactionDate: data.expenseDate || createdAt,
-          paymentMethod: data.paymentMethod,
-          ownerId: data.ownerId,
-          propertyId: data.propertyId,
-          unitId: data.unitId,
-          notes: data.notes || data.description,
-          createdBy: createdByName,
-        },
-        chartOfAccounts
-      );
-      postJournalEntry(journalData);
-    } catch (jErr) {
-      console.warn("Journal posting warning for expense:", jErr);
+    const journalData = buildPropertyExpenseJournal(
+      {
+        expenseId: id,
+        expenseNumber,
+        totalAmount,
+        costBearer: data.costBearer,
+        category: data.category,
+        transactionDate: data.expenseDate || createdAt,
+        paymentMethod: data.paymentMethod,
+        ownerId: data.ownerId,
+        propertyId: data.propertyId,
+        unitId: data.unitId,
+        notes: data.notes || data.description,
+        createdBy: createdByName,
+      },
+      chartOfAccounts
+    );
+    const jRes = postJournalEntry(journalData);
+    if (!jRes.success) {
+      return {
+        success: false,
+        error: language === "ar"
+          ? `فشل ترحيل القيد المحاسبي للمصروف: ${jRes.error || "خطأ محاسبي"}`
+          : `Failed to post property expense journal entry: ${jRes.error || "Accounting error"}`,
+      };
     }
 
     return { success: true, expense: newExpense };
@@ -11811,6 +11907,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           continue;
         }
 
+        const ownerId = r.ownerId || (r.leaseId ? leases.find(l => l.id === r.leaseId)?.ownerId : undefined);
+        const tenantId = r.tenantId || (r.leaseId ? leases.find(l => l.id === r.leaseId)?.tenantId : undefined);
+        const propertyId = r.propertyId || (r.leaseId ? leases.find(l => l.id === r.leaseId)?.propertyId : undefined);
+        const unitId = r.unitId || (r.leaseId ? leases.find(l => l.id === r.leaseId)?.unitId : undefined);
+        const leaseId = r.leaseId;
+
+        if (!ownerId || !tenantId || !propertyId || !unitId) {
+          errors.push(`Row ${i + 1}: Cheque #${r.chequeNumber} rejected - missing required entity relationships (ownerId, tenantId, propertyId, or unitId).`);
+          continue;
+        }
+
         const isBounced = r.status === "BOUNCED" || r.originalStatus === "BOUNCED";
         const newChq: Cheque = {
           id: "chq-" + Date.now() + "-" + i,
@@ -11819,11 +11926,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           amount: parseFloat(r.amount) || 0,
           chequeDate: r.chequeDate || new Date().toISOString().split("T")[0],
           dueDate: r.dueDate || new Date().toISOString().split("T")[0],
-          ownerId: r.ownerId || owners[0]?.id || "ow-01",
-          tenantId: r.tenantId || tenants[0]?.id || "tnt-01",
-          propertyId: r.propertyId || properties[0]?.id || "prop-01",
-          unitId: r.unitId || units[0]?.id || "unt-01",
-          leaseId: r.leaseId || leases[0]?.id || "lse-01",
+          ownerId,
+          tenantId,
+          propertyId,
+          unitId,
+          leaseId,
           status: isBounced ? "BOUNCED" : (r.status || "PENDING"),
           originalStatus: isBounced ? "BOUNCED" : "NORMAL",
           returnReason: r.returnReason,

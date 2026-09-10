@@ -498,6 +498,17 @@ export const AddChequeModal: React.FC<AddChequeModalProps> = ({
   const handleGenerateBatchCheques = () => {
     const prop = properties.find((p) => p.id === propertyId);
     const tObj = tenants.find((t) => t.id === tenantId);
+    const resolvedOwnerId = prop?.ownerId;
+
+    if (!propertyId || !unitId || !tenantId || !resolvedOwnerId) {
+      alert(
+        language === "ar"
+          ? "الرجاء اختيار العقار والوحدة والمستأجر لربط الشيكات بكيانات حقيقية صحيحة."
+          : "Please select a valid property, unit, and tenant before generating batch cheques."
+      );
+      return;
+    }
+
     const baseNum = parseInt(chequeNumber.replace(/\D/g, "")) || 500100;
     const startDt = new Date(dueDate || new Date());
     const singleAmount = Math.round(amount / (batchCount || 1));
@@ -513,7 +524,7 @@ export const AddChequeModal: React.FC<AddChequeModalProps> = ({
         amount: singleAmount,
         chequeDate: new Date().toISOString().split("T")[0],
         dueDate: dueStr,
-        ownerId: prop?.ownerId || owners[0]?.id || "ow-01",
+        ownerId: resolvedOwnerId,
         tenantId,
         propertyId,
         unitId,
@@ -544,6 +555,16 @@ export const AddChequeModal: React.FC<AddChequeModalProps> = ({
   const handleApproveBatchCheques = async (approvedCheques: StagedBatchCheque[]) => {
     const prop = properties.find((p) => p.id === propertyId);
     const tObj = tenants.find((t) => t.id === tenantId);
+    const resolvedOwnerId = prop?.ownerId;
+
+    if (!propertyId || !unitId || !tenantId || !resolvedOwnerId) {
+      alert(
+        language === "ar"
+          ? "الرجاء اختيار العقار والوحدة والمستأجر لاعتماد دفعة الشيكات."
+          : "Please select a valid property, unit, and tenant before approving batch cheques."
+      );
+      return;
+    }
 
     for (const chq of approvedCheques) {
       addCheque({
@@ -552,10 +573,10 @@ export const AddChequeModal: React.FC<AddChequeModalProps> = ({
         amount: chq.amount,
         chequeDate: chq.chequeDate || chq.dueDate,
         dueDate: chq.dueDate,
-        ownerId: prop?.ownerId || owners[0]?.id || "ow-01",
-        tenantId: tenantId || (tenants[0]?.id || "ten-01"),
-        propertyId: propertyId || (properties[0]?.id || "prop-01"),
-        unitId: unitId || (units[0]?.id || "unit-01"),
+        ownerId: resolvedOwnerId,
+        tenantId,
+        propertyId,
+        unitId,
         leaseId: leaseId || "",
         drawerName: chq.drawerName || drawerName || (tObj ? (language === "ar" ? tObj.nameAr : tObj.nameEn) : undefined),
         bankAccountNumber: chq.accountNumber || bankAccountNumber || undefined,
@@ -734,7 +755,7 @@ export const AddChequeModal: React.FC<AddChequeModalProps> = ({
           amount,
           chequeDate,
           dueDate,
-          ownerId: prop?.ownerId || owners[0]?.id || editingCheque.ownerId,
+          ownerId: prop?.ownerId || editingCheque.ownerId,
           tenantId: tenantId || editingCheque.tenantId,
           propertyId: propertyId || editingCheque.propertyId,
           unitId: unitId || editingCheque.unitId,
@@ -768,16 +789,27 @@ export const AddChequeModal: React.FC<AddChequeModalProps> = ({
         return;
       }
 
+      const resolvedOwnerId = prop?.ownerId;
+      if (!propertyId || !unitId || !tenantId || !resolvedOwnerId) {
+        alert(
+          language === "ar"
+            ? "الرجاء اختيار العقار والوحدة والمستأجر والمالك لربط الشيك بسجلات حقيقية."
+            : "Please select a valid property, unit, tenant, and owner before saving."
+        );
+        setIsSubmittingCheque(false);
+        return;
+      }
+
       const newChq = addCheque({
         chequeNumber,
         bankName,
         amount,
         chequeDate,
         dueDate,
-        ownerId: prop?.ownerId || owners[0]?.id || "ow-01",
-        tenantId: tenantId || (tenants[0]?.id || "ten-01"),
-        propertyId: propertyId || (properties[0]?.id || "prop-01"),
-        unitId: unitId || (units[0]?.id || "unit-01"),
+        ownerId: resolvedOwnerId,
+        tenantId,
+        propertyId,
+        unitId,
         leaseId: leaseId || "",
         drawerName: drawerName || undefined,
         bankAccountNumber: bankAccountNumber || undefined,

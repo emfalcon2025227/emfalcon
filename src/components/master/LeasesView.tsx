@@ -251,6 +251,13 @@ export const LeasesView: React.FC<LeasesViewProps> = ({ onNavigateToRenewLease }
 
   const executeSaveLease = () => {
     const prop = properties.find((p) => p.id === propertyId);
+    const resolvedOwnerId = prop?.ownerId || (editingLease ? editingLease.ownerId : "");
+    if (!resolvedOwnerId) {
+      alert(language === "ar" ? "العقار المحدد غير مرتبط بمالك. يرجى اختيار عقار صحيح." : "Selected property has no assigned owner. Please select a valid property.");
+      setIsConfirmSaveOpen(false);
+      return;
+    }
+
     const parsedRent = typeof annualRent === "number" ? annualRent : parseFloat(annualRent as string) || 0;
     const parsedDeposit = typeof securityDeposit === "number" ? securityDeposit : parseFloat(securityDeposit as string) || 0;
 
@@ -271,7 +278,7 @@ export const LeasesView: React.FC<LeasesViewProps> = ({ onNavigateToRenewLease }
       updateLease(editingLease.id, {
         leaseNumber: generatedNumber,
         tenantId,
-        ownerId: prop?.ownerId || editingLease.ownerId || "ow-01",
+        ownerId: resolvedOwnerId,
         propertyId,
         unitId,
         startDate,
@@ -288,7 +295,7 @@ export const LeasesView: React.FC<LeasesViewProps> = ({ onNavigateToRenewLease }
       addLease({
         leaseNumber: generatedNumber,
         tenantId,
-        ownerId: prop?.ownerId || "ow-01",
+        ownerId: resolvedOwnerId,
         propertyId,
         unitId,
         startDate,

@@ -1024,6 +1024,14 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
     }
 
     const prop = properties.find((p) => p.id === propertyId);
+    const resolvedOwnerId = prop?.ownerId || (editingLease ? editingLease.ownerId : "");
+    if (!resolvedOwnerId) {
+      alert(language === "ar" ? "العقار المحدد غير مرتبط بمالك. يرجى اختيار عقار صحيح." : "Selected property has no assigned owner. Please select a valid property.");
+      setIsSubmitting(false);
+      setActiveTab(1);
+      return;
+    }
+
     const parsedRent = typeof annualRent === "number" ? annualRent : parseFloat(annualRent as string) || 0;
     
     const scheduleValidation = validateLeaseChequeSchedule(installments, parsedRent, language as any);
@@ -1074,7 +1082,7 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
       updateLease(editingLease.id, {
         leaseNumber,
         tenantId,
-        ownerId: prop?.ownerId || editingLease.ownerId || "ow-01",
+        ownerId: resolvedOwnerId,
         propertyId,
         unitId,
         startDate,
@@ -1094,7 +1102,7 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
       const created = addLease({
         leaseNumber,
         tenantId,
-        ownerId: prop?.ownerId || "ow-01",
+        ownerId: resolvedOwnerId,
         propertyId,
         unitId,
         startDate,
@@ -1150,7 +1158,7 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
           amount: inst.amount,
           chequeDate: inst.dueDate,
           dueDate: inst.dueDate,
-          ownerId: prop?.ownerId || "ow-01",
+          ownerId: resolvedOwnerId,
           tenantId,
           propertyId,
           unitId,
@@ -1183,7 +1191,7 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
           const ownerRes = addCommissionObligation({
             leaseId: savedLeaseId,
             businessKeySequence: "PRIMARY_OWNER",
-            ownerId: prop?.ownerId || "ow-01",
+            ownerId: resolvedOwnerId,
             propertyId: propertyId,
             unitId: unitId,
             partyType: "OWNER",

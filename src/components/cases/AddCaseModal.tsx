@@ -4,6 +4,7 @@ import { Modal } from "../common/Modal";
 import { SearchableSelect, SearchableOption } from "../common/SearchableSelect";
 import { useLanguage } from "../../context/LanguageContext";
 import { useData } from "../../context/DataContext";
+import { useAuth } from "../../context/AuthContext";
 import { getPropertyTypeLabel } from "../../data/propertyOptions";
 
 interface AddCaseModalProps {
@@ -14,6 +15,7 @@ interface AddCaseModalProps {
 export const AddCaseModal: React.FC<AddCaseModalProps> = ({ isOpen, onClose }) => {
   const { t, language } = useLanguage();
   const { tenants, properties, units, leases, owners, addCase, legalSettings, getNextCaseNumber } = useData();
+  const { currentUser } = useAuth();
 
   const [leaseId, setLeaseId] = useState("");
   const [tenantId, setTenantId] = useState("");
@@ -92,10 +94,15 @@ export const AddCaseModal: React.FC<AddCaseModalProps> = ({ isOpen, onClose }) =
     }
 
     const prop = properties.find((p) => p.id === propertyId);
+    const resolvedOwnerId = prop?.ownerId;
+    if (!resolvedOwnerId) {
+      alert(language === "ar" ? "العقار المحدد غير مرتبط بمالك مسجل." : "Selected property has no assigned owner.");
+      return;
+    }
 
     addCase({
       tenantId,
-      ownerId: prop?.ownerId || "ow-01",
+      ownerId: resolvedOwnerId,
       propertyId,
       unitId,
       leaseId: leaseId || "",
@@ -109,8 +116,8 @@ export const AddCaseModal: React.FC<AddCaseModalProps> = ({ isOpen, onClose }) =
       outstandingAmount: Number(claimAmount) || 0,
       status: "NEW",
       priority: "NORMAL",
-      responsibleUserId: "usr-01",
-      responsibleUserName,
+      responsibleUserId: currentUser?.id || "admin",
+      responsibleUserName: responsibleUserName || currentUser?.nameAr || currentUser?.nameEn || "مدير النظام",
       filingDate: new Date().toISOString().split("T")[0],
       documents: [],
       caseDocuments: [],

@@ -1316,6 +1316,7 @@ export interface AuditLogEntry {
     | "EMIRATES_ID"
     | "FINANCIAL_PERIOD"
     | "PERIOD_CERTIFICATION"
+    | "DAILY_DEPOSIT"
     | "DEPOSIT_BATCH";
   entityId: string;
   entityName: string;
