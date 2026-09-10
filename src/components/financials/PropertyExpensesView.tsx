@@ -339,10 +339,7 @@ export const PropertyExpensesView: React.FC<PropertyExpensesViewProps> = ({ init
 
   const handleOpenAddModal = () => {
     setModalOwnerId("");
-    setModalPropertyId(properties[0]?.id || "");
-    if (properties[0]) {
-      handlePropertySelect(properties[0].id);
-    }
+    setModalPropertyId("");
     setModalUnitId("");
     setModalLeaseId("");
     setModalTenantId("");

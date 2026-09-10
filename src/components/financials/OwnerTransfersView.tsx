@@ -140,10 +140,7 @@ export const OwnerTransfersView: React.FC = () => {
   });
 
   const handleOpenAddModal = () => {
-    setModalOwnerId(owners[0]?.id || "");
-    if (owners[0]) {
-      handleOwnerSelect(owners[0].id);
-    }
+    setModalOwnerId("");
     setModalPropertyId("");
     setModalTransferDate(new Date().toISOString().split("T")[0]);
     setModalPaymentMethod("BANK_TRANSFER");

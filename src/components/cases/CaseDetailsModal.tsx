@@ -422,11 +422,11 @@ export const CaseDetailsPage: React.FC<CaseDetailsPageProps> = ({
     setIsSettlementOpen(false);
   };
 
-  const handlePayInstallment = (e: React.FormEvent) => {
+  const handlePayInstallment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!payingInstallmentId) return;
 
-    paySettlementInstallment(currentCase.id, payingInstallmentId, {
+    const res = await paySettlementInstallment(currentCase.id, payingInstallmentId, {
       amount: paymentAmount,
       method: paymentMethod,
       date: paymentDate,
@@ -437,6 +437,11 @@ export const CaseDetailsPage: React.FC<CaseDetailsPageProps> = ({
         bankName: instBankName
       } : undefined
     });
+
+    if (res && !res.success) {
+      alert(res.error || (language === "ar" ? "فشل تسجيل سداد قسط التسوية." : "Failed to record settlement payment."));
+      return;
+    }
 
     setPayingInstallmentId(null);
     setPaymentRef("");
@@ -1339,19 +1344,15 @@ export const CaseDetailsPage: React.FC<CaseDetailsPageProps> = ({
                   
                   {(() => {
                     if (!currentCase.settlement) return null;
-                    let sched = currentCase.settlement.schedule || (currentCase.settlement as any).installmentSchedule || [];
-                    if (sched.length === 0 && currentCase.settlement.installmentsCount > 0) {
-                       sched = Array.from({ length: currentCase.settlement.installmentsCount }).map((_, i) => {
-                         const d = new Date(currentCase.settlement?.signedDate || new Date());
-                         d.setMonth(d.getMonth() + i + 1);
-                         return {
-                           id: `inst-fallback-${i}`,
-                           installmentNumber: i + 1,
-                           dueDate: d.toISOString().split("T")[0],
-                           amount: Math.round((currentCase.settlement?.totalAgreedAmount || 0) / (currentCase.settlement?.installmentsCount || 1)),
-                           status: "PENDING",
-                         };
-                       });
+                    const sched = currentCase.settlement.schedule || (currentCase.settlement as any).installmentSchedule || [];
+                    if (sched.length === 0) {
+                      return (
+                        <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-center text-amber-800 text-xs">
+                          {language === "ar"
+                            ? "لا يوجد جدول أقساط معتمد لهذه التسوية القضائية. يرجى تعديل بنود التسوية لإدخال وحفظ جدول الأقساط الحقيقي."
+                            : "No approved installment schedule found for this settlement. Please edit settlement terms to register the real schedule."}
+                        </div>
+                      );
                     }
                     return sched.map((inst: any, idx: number) => (
                       <div key={inst.id || idx} className="bg-white rounded-2xl border border-emerald-200 overflow-hidden shadow-xs">
@@ -1436,9 +1437,12 @@ export const CaseDetailsPage: React.FC<CaseDetailsPageProps> = ({
                                       </button>
                                     )}
                                     <button
-                                      onClick={() => {
+                                      onClick={async () => {
                                         if (window.confirm(language === "ar" ? "هل تم تحصيل وصرف هذا الشيك فعلياً؟" : "Confirm that this cheque has been cleared?")) {
-                                          clearSettlementCheque(currentCase.id, inst.id);
+                                          const res = await clearSettlementCheque(currentCase.id, inst.id);
+                                          if (res && !res.success) {
+                                            alert(res.error || (language === "ar" ? "فشل تأكيد تحصيل الشيك." : "Failed to clear cheque."));
+                                          }
                                         }
                                       }}
                                       className="text-[10px] text-emerald-600 font-bold hover:underline"

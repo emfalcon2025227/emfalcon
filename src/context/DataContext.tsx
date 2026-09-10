@@ -693,8 +693,8 @@ export interface DataContextType {
     date: string; 
     reference?: string;
     chequeDetails?: { chequeNumber: string; chequeDate: string; bankName: string };
-  }) => void;
-  clearSettlementCheque: (caseId: string, installmentId: string) => void;
+  }) => Promise<{ success: boolean; error?: string; receipt?: CollectionRecord }>;
+  clearSettlementCheque: (caseId: string, installmentId: string) => Promise<{ success: boolean; error?: string; receipt?: CollectionRecord }>;
   updateSettlementCheque: (caseId: string, installmentId: string, chequeData: { chequeNumber: string; chequeDate: string; bankName: string }) => void;
 
   // Historical Records & Archiving
@@ -4268,8 +4268,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       createdChequeId = newChq.id;
       newlyCreatedCheque = newChq;
-      safeSetDoc(doc(db, "cheques", newChq.id), newChq);
-
       logAudit("CREATE", "CHEQUE", newChq.id, newChq.chequeNumber, `Created Cheque #${newChq.chequeNumber} for Lease Contract ${params.leaseId}`);
     }
 
@@ -4302,10 +4300,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       (receipt as any).fileName = params.attachment.fileName;
     }
 
-    setCollections((prev) => [receipt, ...prev]);
-    safeSetDoc(doc(db, "collections", receipt.id), receipt);
-
-    // 5. Create PaymentAllocations and update targets
+    // 6. Create PaymentAllocations and collect target entity updates
     const createdAllocations: PaymentAllocation[] = [];
     const commissionsToUpdate = new Map<string, CommissionObligation>();
     const chequesToUpdate = new Map<string, Cheque>();
@@ -4330,7 +4325,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createdById: currentUser?.id || "system",
       };
       createdAllocations.push(alloc);
-      safeSetDoc(doc(db, "payment_allocations", alloc.id), alloc);
 
       if (item.targetType === "COMMISSION") {
         const c = commissionsToUpdate.get(item.targetId) || commissions.find((com) => com.id === item.targetId);
@@ -4347,7 +4341,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             updatedAt: new Date().toISOString(),
           };
           commissionsToUpdate.set(c.id, updatedCom);
-          safeSetDoc(doc(db, "commissions", c.id), updatedCom, { merge: true });
         }
       } else if (item.targetType === "CHEQUE") {
         const c = chequesToUpdate.get(item.targetId) || cheques.find((chq) => chq.id === item.targetId);
@@ -4365,7 +4358,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             status: isFullyCollected ? ("COLLECTED" as const) : c.status,
           };
           chequesToUpdate.set(c.id, updatedChq);
-          safeSetDoc(doc(db, "cheques", c.id), updatedChq, { merge: true });
 
           // Also update corresponding lease installment status if fully collected
           if (isFullyCollected && c.leaseId) {
@@ -4381,7 +4373,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               });
               const updatedLease = { ...l, installments: updatedInstallments };
               leasesToUpdate.set(l.id, updatedLease);
-              safeSetDoc(doc(db, "leases", l.id), updatedLease, { merge: true });
             }
           }
         }
@@ -4425,7 +4416,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           const updatedLease = { ...l, installments: instList };
           leasesToUpdate.set(l.id, updatedLease);
-          safeSetDoc(doc(db, "leases", l.id), updatedLease, { merge: true });
         }
 
         // Sync cheque status if a cheque was linked to this installment
@@ -4445,7 +4435,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               status,
             };
             chequesToUpdate.set(c.id, updated);
-            safeSetDoc(doc(db, "cheques", c.id), updated, { merge: true });
           }
         }
       }
@@ -4465,11 +4454,142 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           status: chqStatus,
         };
         chequesToUpdate.set(c.id, updated);
-        safeSetDoc(doc(db, "cheques", c.id), updated, { merge: true });
       }
     }
 
-    // Pure React state updates
+    // 7. Calculate and construct REQUIRED Journal Entries
+    const rentAllocations = params.allocations.filter(
+      (a) => a.targetType === "LEASE_INSTALLMENT" || a.targetType === "CHEQUE" || a.targetType === "RENT" || a.targetType === "UNALLOCATED_PREPAYMENT"
+    );
+    const rentAmount = rentAllocations.length > 0 
+      ? rentAllocations.reduce((sum, a) => sum + a.amount, 0)
+      : (params.allocations.every(a => a.targetType !== "COMMISSION") ? params.amount : 0);
+
+    const commissionAllocations = params.allocations.filter((a) => a.targetType === "COMMISSION");
+    const commAmount = commissionAllocations.reduce((sum, a) => sum + a.amount, 0);
+
+    let rentJournalRecord: JournalEntryRecord | null = null;
+    let commJournalRecord: JournalEntryRecord | null = null;
+
+    if (rentAmount > 0) {
+      const rentJournalData = buildRentCollectionJournal(
+        {
+          collectionId: receipt.id,
+          receiptNumber: receipt.receiptNumber,
+          amount: rentAmount,
+          transactionDate: params.paymentDate,
+          paymentMethod: params.paymentMethod,
+          ownerId: resolvedOwnerId,
+          propertyId: resolvedPropertyId,
+          unitId: resolvedUnitId,
+          leaseId: params.leaseId,
+          tenantId: resolvedTenantId,
+          createdBy: currentUser?.nameEn || currentUser?.nameAr || "Finance Officer",
+          notes: params.notes || `تحصيل إيجار بموجب سند #${receipt.receiptNumber}`,
+        },
+        chartOfAccounts
+      );
+      const rentVal = validateJournalEntry(rentJournalData);
+      if (!rentVal.isValid) {
+        return {
+          success: false,
+          error: language === "ar" ? `فشل التحقق من قيد تحصيل الإيجار: ${rentVal.error}` : `Rent journal validation failed: ${rentVal.error}`,
+        };
+      }
+      const rentJeId = "je-" + Date.now() + "-rent-" + crypto.randomUUID().split("-")[0];
+      const year = new Date().getFullYear();
+      const rentEntryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+      rentJournalRecord = {
+        ...rentJournalData,
+        id: rentJeId,
+        entryNumber: rentEntryNumber,
+        status: "POSTED",
+        totalDebit: rentVal.totalDebit,
+        totalCredit: rentVal.totalCredit,
+        createdAt: new Date().toISOString(),
+      };
+    }
+
+    if (commAmount > 0) {
+      const firstComm = commissions.find(c => c.id === commissionAllocations[0]?.targetId);
+      const commJournalData = buildAdminFeeJournal(
+        {
+          commissionId: commissionAllocations[0]?.targetId || receipt.id,
+          commissionNumber: firstComm?.businessKey || ("COMM-" + receipt.receiptNumber),
+          grossAmount: commAmount,
+          vatAmount: firstComm?.vatAmount,
+          partyType: firstComm?.partyType || "TENANT",
+          transactionDate: params.paymentDate,
+          paymentMethod: params.paymentMethod,
+          isDeductedFromOwner: firstComm?.partyType === "OWNER",
+          ownerId: resolvedOwnerId,
+          propertyId: resolvedPropertyId,
+          leaseId: params.leaseId,
+          tenantId: resolvedTenantId,
+          createdBy: currentUser?.nameEn || currentUser?.nameAr || "Finance Officer",
+          notes: params.notes || `تحصيل رسوم إدارية بموجب سند #${receipt.receiptNumber}`,
+        },
+        chartOfAccounts
+      );
+      const commVal = validateJournalEntry(commJournalData);
+      if (!commVal.isValid) {
+        return {
+          success: false,
+          error: language === "ar" ? `فشل التحقق من قيد الرسوم الإدارية: ${commVal.error}` : `Admin fee journal validation failed: ${commVal.error}`,
+        };
+      }
+      const commJeId = "je-" + Date.now() + "-comm-" + crypto.randomUUID().split("-")[0];
+      const year = new Date().getFullYear();
+      const commEntryNumber = `JE-${year}-${String(journalEntries.length + (rentJournalRecord ? 2 : 1)).padStart(5, "0")}`;
+      commJournalRecord = {
+        ...commJournalData,
+        id: commJeId,
+        entryNumber: commEntryNumber,
+        status: "POSTED",
+        totalDebit: commVal.totalDebit,
+        totalCredit: commVal.totalCredit,
+        createdAt: new Date().toISOString(),
+      };
+    }
+
+    // 8. Atomic persistence with writeBatch
+    const batch = writeBatch(db);
+    batch.set(doc(db, "collections", receipt.id), sanitizeForFirestore(receipt));
+    for (const alloc of createdAllocations) {
+      batch.set(doc(db, "payment_allocations", alloc.id), sanitizeForFirestore(alloc));
+    }
+    for (const c of chequesToUpdate.values()) {
+      batch.set(doc(db, "cheques", c.id), sanitizeForFirestore(c), { merge: true });
+    }
+    for (const l of leasesToUpdate.values()) {
+      batch.set(doc(db, "leases", l.id), sanitizeForFirestore(l), { merge: true });
+    }
+    for (const com of commissionsToUpdate.values()) {
+      batch.set(doc(db, "commissions", com.id), sanitizeForFirestore(com), { merge: true });
+    }
+    if (rentJournalRecord) {
+      batch.set(doc(db, "journal_entries", rentJournalRecord.id), sanitizeForFirestore(rentJournalRecord));
+    }
+    if (commJournalRecord) {
+      batch.set(doc(db, "journal_entries", commJournalRecord.id), sanitizeForFirestore(commJournalRecord));
+    }
+
+    try {
+      await batch.commit();
+    } catch (batchErr: any) {
+      console.error("Batch commit failed in processUnifiedPayment:", batchErr);
+      return {
+        success: false,
+        error: language === "ar"
+          ? `فشل تسجيل المعاملة المالية في قاعدة البيانات: ${batchErr?.message || "تعذر إتمام العملية"}`
+          : `Failed to commit financial transaction: ${batchErr?.message || "Transaction aborted"}`,
+      };
+    }
+
+    // 9. Update pure React states ONLY after successful commit
+    setCollections((prev) => [receipt, ...prev]);
+    setPaymentAllocations((prev) => [...createdAllocations, ...prev]);
+
     if (commissionsToUpdate.size > 0) {
       setCommissions((prev) => prev.map((c) => commissionsToUpdate.get(c.id) || c));
     }
@@ -4478,7 +4598,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCheques((prev) => {
         const existingIds = new Set(prev.map((c) => c.id));
         const updatedList = prev.map((c) => chequesToUpdate.get(c.id) || c);
-        // Add new cheques not in prev
         const newCheques = Array.from(chequesToUpdate.values()).filter((c) => !existingIds.has(c.id));
         return [...newCheques, ...updatedList];
       });
@@ -4488,9 +4607,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLeases((prev) => prev.map((l) => leasesToUpdate.get(l.id) || l));
     }
 
-    setPaymentAllocations((prev) => [...createdAllocations, ...prev]);
+    const newJournalsToSet: JournalEntryRecord[] = [];
+    if (rentJournalRecord) newJournalsToSet.push(rentJournalRecord);
+    if (commJournalRecord) newJournalsToSet.push(commJournalRecord);
+    if (newJournalsToSet.length > 0) {
+      setJournalEntries((prev) => [...prev, ...newJournalsToSet]);
+    }
 
-    // 6. Register/link derived receipt document in Electronic Archive (reusing existing Electronic Archive)
+    // 10. Register/link derived receipt document in Electronic Archive
     const existingArchiveDoc = archive.find((a) => a.recordId === receipt.id || a.entityId === receipt.id);
     if (!existingArchiveDoc) {
       addArchiveItem({
@@ -4523,7 +4647,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         `Allocated ${totalAllocated.toLocaleString()} AED across ${params.allocations.length} targets.`
     );
 
-    return { success: true, receipt };
     return { success: true, receipt };
   };
 
@@ -6134,12 +6257,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const recordCollection = async (params: { chequeId: string; amountEntered: number; bouncedFeeAmount?: number; paymentMethod: PaymentMethod; payerName: string; notes?: string; transactionReference?: string; approvalCode?: string; fromCase?: boolean; userId?: string; userName?: string; }): Promise<{ success: boolean; appliedAmount: number; isOverpayment: boolean; error?: string; receipt?: CollectionRecord }> => {
     try {
+      const paymentDate = new Date().toISOString().split("T")[0];
+      const periodCheck = validateTransactionPeriod(paymentDate, financialPeriods);
+      if (!periodCheck.allowed) {
+        return {
+          success: false,
+          appliedAmount: 0,
+          isOverpayment: false,
+          error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn,
+        };
+      }
+
       const result = await runTransaction(db, async (transaction) => {
         const chequeRef = doc(db, "cheques", params.chequeId);
         const chequeSnap = await transaction.get(chequeRef);
         if (!chequeSnap.exists()) throw new Error("Cheque not found");
         
         const cheque = chequeSnap.data() as Cheque;
+        if (!cheque.ownerId || !cheque.tenantId) {
+          throw new Error(language === "ar" ? "بيانات المالك أو المستأجر غير مكتملة في سجل الشيك." : "Missing owner or tenant identity in cheque record.");
+        }
+
         const caseCheck = checkCaseControlledCheque(params.chequeId);
         if (caseCheck.isControlled && !params.fromCase) {
           throw new Error(language === "ar" ? `هذا الشيك محجوز على ذمة قضية قانونية مفتوحة رقم ${caseCheck.caseNumber}، ولا يمكن تحصيله إلا من داخل القضية.` : `This cheque is reserved under open legal case #${caseCheck.caseNumber}.`);
@@ -6193,8 +6331,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           auditTrail: [colAuditEntry, ...(cheque.auditTrail || [])],
         };
 
-        transaction.set(chequeRef, sanitizeForFirestore(updatedChqWithAudit), { merge: true });
-
         const receipt: CollectionRecord = {
           id: receiptId,
           receiptNumber: receiptNumber,
@@ -6202,7 +6338,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           caseId: cheque.convertedToCaseId,
           tenantId: cheque.tenantId,
           ownerId: cheque.ownerId,
-          paymentDate: new Date().toISOString().split("T")[0],
+          paymentDate,
           amountEntered: params.amountEntered,
           amountApplied: appliedAmount,
           bouncedFeeAmount: finalBouncedFee > 0 ? finalBouncedFee : undefined,
@@ -6216,8 +6352,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdAt: new Date().toISOString(),
         };
 
-        transaction.set(doc(db, "collections", receiptId), sanitizeForFirestore(receipt));
-
         const allocId = "pal-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
         const alloc: PaymentAllocation = {
           id: allocId,
@@ -6228,18 +6362,56 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           allocationDate: receipt.paymentDate,
           status: "ACTIVE",
           createdById: params.userId || currentUser?.id || "system",
-
           createdAt: new Date().toISOString(),
         };
 
-        transaction.set(doc(db, "payment_allocations", allocId), sanitizeForFirestore(alloc));
+        // Construct balanced rent collection journal entry
+        const journalData = buildRentCollectionJournal(
+          {
+            collectionId: receiptId,
+            receiptNumber,
+            amount: appliedAmount,
+            transactionDate: paymentDate,
+            paymentMethod: params.paymentMethod,
+            ownerId: cheque.ownerId,
+            propertyId: cheque.propertyId,
+            unitId: cheque.unitId,
+            leaseId: cheque.leaseId,
+            tenantId: cheque.tenantId,
+            createdBy: currentUser?.nameEn || currentUser?.nameAr || "Finance Officer",
+            notes: params.notes || `تحصيل شيك #${cheque.chequeNumber} بموجب سند #${receiptNumber}`,
+          },
+          chartOfAccounts
+        );
+        const jVal = validateJournalEntry(journalData);
+        if (!jVal.isValid) {
+          throw new Error(`Journal validation failed: ${jVal.error}`);
+        }
+        const jeId = "je-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
+        const year = new Date().getFullYear();
+        const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+        const journalRecord: JournalEntryRecord = {
+          ...journalData,
+          id: jeId,
+          entryNumber,
+          status: "POSTED",
+          totalDebit: jVal.totalDebit,
+          totalCredit: jVal.totalCredit,
+          createdAt: new Date().toISOString(),
+        };
 
-        return { updatedChqWithAudit, receipt, alloc, isFullyCollected, appliedAmount, isOverpayment };
+        transaction.set(chequeRef, sanitizeForFirestore(updatedChqWithAudit), { merge: true });
+        transaction.set(doc(db, "collections", receiptId), sanitizeForFirestore(receipt));
+        transaction.set(doc(db, "payment_allocations", allocId), sanitizeForFirestore(alloc));
+        transaction.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
+
+        return { updatedChqWithAudit, receipt, alloc, journalRecord, isFullyCollected, appliedAmount, isOverpayment };
       });
 
       setCheques((prev) => prev.map((c) => (c.id === params.chequeId ? result.updatedChqWithAudit : c)));
       setCollections((prev) => [result.receipt, ...prev]);
       setPaymentAllocations((prev) => [...prev, result.alloc]);
+      setJournalEntries((prev) => [...prev, result.journalRecord]);
 
       if (result.isFullyCollected) {
         syncChequeWithLease(result.updatedChqWithAudit, "COLLECTED");
@@ -6595,6 +6767,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let updatedCommission: CommissionObligation | null = null;
       let newReceipt: CollectionRecord | null = null;
       let newAllocation: PaymentAllocation | null = null;
+      let createdJournalRecord: JournalEntryRecord | null = null;
 
       await runTransaction(db, async (transaction) => {
         const commRef = doc(db, "commissions", id);
@@ -6685,9 +6858,46 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           idempotencyKey,
         };
 
+        const journalData = buildAdminFeeJournal(
+          {
+            commissionId: id,
+            commissionNumber: commData.businessKey || "COMM-" + id,
+            grossAmount: amount,
+            vatAmount: commData.vatAmount,
+            partyType: commData.partyType,
+            transactionDate: newReceipt.paymentDate,
+            paymentMethod,
+            isDeductedFromOwner: commData.partyType === "OWNER",
+            ownerId: commData.ownerId,
+            propertyId: commData.propertyId,
+            leaseId: commData.leaseId,
+            tenantId: commData.tenantId,
+            createdBy: userName,
+            notes: notes || `تحصيل رسوم إدارية (${commData.commissionType})`,
+          },
+          chartOfAccounts
+        );
+        const jVal = validateJournalEntry(journalData);
+        if (!jVal.isValid) {
+          throw new Error(`Admin fee journal validation failed: ${jVal.error}`);
+        }
+        const jeId = "je-adm-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
+        const year = new Date().getFullYear();
+        const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+        createdJournalRecord = {
+          ...journalData,
+          id: jeId,
+          entryNumber,
+          status: "POSTED",
+          totalDebit: jVal.totalDebit,
+          totalCredit: jVal.totalCredit,
+          createdAt: new Date().toISOString(),
+        };
+
         transaction.set(commRef, sanitizeForFirestore(updatedCommission), { merge: true });
         transaction.set(receiptRef, sanitizeForFirestore(newReceipt));
         transaction.set(doc(db, "payment_allocations", allocationId), sanitizeForFirestore(newAllocation));
+        transaction.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(createdJournalRecord));
       });
 
       // If return was early due to idempotency, no state update needed
@@ -6702,6 +6912,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCommissions((prev) => prev.map((c) => (c.id === id ? commObj : c)));
       setCollections((prev) => [receiptObj, ...prev]);
       setPaymentAllocations((prev) => [allocObj, ...prev]);
+      if (createdJournalRecord) {
+        setJournalEntries((prev) => [...prev, createdJournalRecord!]);
+      }
 
       logAudit(
         "FINANCIAL_PAYMENT",
@@ -6710,35 +6923,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         `Receipt #${receiptObj.receiptNumber}`,
         `تحصيل رسوم إدارية بمبلغ ${amount.toLocaleString()} AED (${paymentMethod})`
       );
-
-      const journalData = buildAdminFeeJournal(
-        {
-          commissionId: id,
-          commissionNumber: commObj.businessKey || "COMM-" + id,
-          grossAmount: amount,
-          vatAmount: commObj.vatAmount,
-          partyType: commObj.partyType,
-          transactionDate: receiptObj.paymentDate,
-          paymentMethod,
-          isDeductedFromOwner: commObj.partyType === "OWNER",
-          ownerId: commObj.ownerId,
-          propertyId: commObj.propertyId,
-          leaseId: commObj.leaseId,
-          tenantId: commObj.tenantId,
-          createdBy: userName,
-          notes: notes || `تحصيل رسوم إدارية (${commObj.commissionType})`,
-        },
-        chartOfAccounts
-      );
-      const jRes = postJournalEntry(journalData);
-      if (!jRes.success) {
-        return {
-          success: false,
-          error: language === "ar"
-            ? `فشل ترحيل القيد المحاسبي للرسوم الإدارية: ${jRes.error || "خطأ محاسبي"}`
-            : `Failed to post administrative fee journal entry: ${jRes.error || "Accounting error"}`,
-        };
-      }
 
       return { success: true };
     } catch (e: any) {
@@ -11087,7 +11271,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logAudit("UPDATE", "HEARING", sessionId, "Hearing Session", "Updated court hearing record and decision notes");
   };
 
-  const paySettlementInstallment = (
+  const paySettlementInstallment = async (
     caseId: string,
     installmentId: string,
     paymentData: {
@@ -11097,137 +11281,447 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       reference?: string;
       chequeDetails?: { chequeNumber: string; chequeDate: string; bankName: string };
     }
-  ) => {
-    setCases((prev) =>
-      prev.map((c) => {
-        if (c.id === caseId && c.settlement) {
-          let paymentAmount = 0;
-          const updatedSchedule: any[] = [];
-          
-          let scheduleToProcess = c.settlement?.schedule || (c.settlement as any).installmentSchedule || [];
-          if (scheduleToProcess.length === 0 && (c.settlement?.installmentsCount || 0) > 0) {
-              scheduleToProcess = Array.from({ length: (c.settlement?.installmentsCount || 0) }).map((_, i) => {
-                const d = new Date(c.settlement?.signedDate || new Date());
-                d.setMonth(d.getMonth() + i + 1);
-                return {
-                  id: `inst-fallback-${i}` as string,
-                  installmentNumber: i + 1,
-                  dueDate: d.toISOString().split("T")[0],
-                  amount: Math.round((c.settlement?.totalAgreedAmount || (c.settlement as any).agreedAmount || 0) / (c.settlement?.installmentsCount || 0)),
-                  status: "PENDING",
-                };
-              });
-          }
+  ): Promise<{ success: boolean; error?: string; receipt?: CollectionRecord }> => {
+    // 1. Resolve Case
+    const c = cases.find((item) => item.id === caseId);
+    if (!c || !c.settlement) {
+      return {
+        success: false,
+        error: language === "ar" ? "ملف القضية أو اتفاقية التسوية غير موجودة." : "Legal case or settlement agreement not found.",
+      };
+    }
 
-          scheduleToProcess.forEach((inst: any) => {
-            if (inst.id === installmentId) {
-              const status = paymentData.method === "CHEQUE" ? "PROCESSING" : "PAID";
-              const payAmount = paymentData.amount ?? inst.amount;
+    // 2. Resolve Real Schedule (STRICT: NO SYNTHETIC SCHEDULE)
+    const scheduleToProcess = c.settlement.schedule || (c.settlement as any).installmentSchedule;
+    if (!scheduleToProcess || !Array.isArray(scheduleToProcess) || scheduleToProcess.length === 0) {
+      return {
+        success: false,
+        error: language === "ar" 
+          ? "لا يوجد جدول أقساط حقيقي معتمد للتسوية. تم إيقاف العملية للحفاظ على سلامة البيانات المالية."
+          : "No real approved settlement installment schedule found. Operation aborted to preserve financial integrity.",
+      };
+    }
 
-              if (status === "PAID") {
-                paymentAmount = payAmount;
-              }
+    // Reject synthetic fallback IDs
+    if (installmentId.startsWith("inst-fallback")) {
+      return {
+        success: false,
+        error: language === "ar"
+          ? "معرف القسط غير صالح (بيانات وهمية). يرجى اعتماد جدول أقساط رسمي."
+          : "Invalid synthetic installment ID. Please register an official installment schedule.",
+      };
+    }
 
-              const updatedInst: any = {
-                ...inst,
-                amount: payAmount,
-                status,
-                paidDate: paymentData.date,
-                paymentMethod: paymentData.method,
-              };
+    const targetInstallment = scheduleToProcess.find((inst: any) => inst.id === installmentId);
+    if (!targetInstallment) {
+      return {
+        success: false,
+        error: language === "ar" ? "قسط التسوية المطلوب غير موجود بالجدول." : "Settlement installment not found in schedule.",
+      };
+    }
 
-              if (paymentData.reference) {
-                updatedInst.transactionReference = paymentData.reference;
-              }
+    // Check if already paid
+    if (targetInstallment.status === "PAID") {
+      return {
+        success: false,
+        error: language === "ar" ? "تم سداد هذا القسط مسبقاً." : "This installment is already paid.",
+      };
+    }
 
-              if (paymentData.method === "CHEQUE" && paymentData.chequeDetails) {
-                updatedInst.chequeDetails = {
-                  ...paymentData.chequeDetails,
-                  isCleared: false
-                };
-              }
+    // 3. Resolve Real Identities
+    const resolvedOwnerId = c.ownerId || (c.leaseId ? leases.find(l => l.id === c.leaseId)?.ownerId : undefined);
+    const resolvedTenantId = c.tenantId || (c.leaseId ? leases.find(l => l.id === c.leaseId)?.tenantId : undefined);
 
-              updatedSchedule.push(updatedInst);
+    if (!resolvedOwnerId || !resolvedTenantId) {
+      return {
+        success: false,
+        error: language === "ar"
+          ? "بيانات المالك أو المستأجر غير مكتملة في ملف القضية. تم إيقاف العملية لمنع إنشاء قيود مالية مجهولة الهوية."
+          : "Missing owner or tenant identity in legal case record. Operation stopped to prevent anonymous financial entries.",
+      };
+    }
 
-              if (payAmount < inst.amount) {
-                const newInst: any = {
-                  ...inst,
-                  id: `${inst.id}-part-${Date.now()}`,
-                  amount: inst.amount - payAmount,
-                  status: "PENDING",
-                };
-                delete newInst.paidDate;
-                delete newInst.paymentMethod;
-                delete newInst.transactionReference;
-                delete newInst.chequeDetails;
-                updatedSchedule.push(newInst);
-              }
-            } else {
-              updatedSchedule.push(inst);
-            }
-          });
+    // 4. Financial Period Validation
+    const payDate = paymentData.date || new Date().toISOString().split("T")[0];
+    const periodCheck = validateTransactionPeriod(payDate, financialPeriods);
+    if (!periodCheck.allowed) {
+      return {
+        success: false,
+        error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn,
+      };
+    }
 
-          const newPaidAmount = (c.paidAmount ?? c.totalPaid ?? 0) + paymentAmount;
-          const newOutstanding = Math.max(0, (c.claimAmount || 0) - newPaidAmount);
+    const payAmount = paymentData.amount ?? targetInstallment.amount;
+    if (payAmount <= 0) {
+      return {
+        success: false,
+        error: language === "ar" ? "مبلغ السداد يجب أن يكون أكبر من الصفر." : "Payment amount must be greater than zero.",
+      };
+    }
 
-          const updated = {
-            ...c,
-            paidAmount: newPaidAmount,
-            totalPaid: newPaidAmount,
-            outstandingAmount: newOutstanding,
-            outstanding: newOutstanding,
-            settlement: { ...c.settlement, schedule: updatedSchedule },
-            updatedAt: new Date().toISOString()
+    // 5. If Payment is by CHEQUE: Cheque received but not yet cleared
+    if (paymentData.method === "CHEQUE") {
+      const updatedSchedule = scheduleToProcess.map((inst: any) => {
+        if (inst.id === installmentId) {
+          return {
+            ...inst,
+            status: "PROCESSING" as const,
+            paymentMethod: "CHEQUE" as const,
+            paidDate: payDate,
+            transactionReference: paymentData.reference,
+            chequeDetails: paymentData.chequeDetails
+              ? { ...paymentData.chequeDetails, isCleared: false }
+              : inst.chequeDetails,
           };
-          safeSetDoc(doc(db, "cases", caseId), updated, { merge: true });
-          return updated;
         }
-        return c;
-      })
+        return inst;
+      });
+
+      const updatedCase: RentalCase = {
+        ...c,
+        settlement: { ...c.settlement, schedule: updatedSchedule },
+        updatedAt: new Date().toISOString(),
+      };
+
+      await safeSetDoc(doc(db, "cases", c.id), sanitizeForFirestore(updatedCase), { merge: true });
+      setCases((prev) => prev.map((item) => (item.id === caseId ? updatedCase : item)));
+
+      logAudit("FINANCIAL_PAYMENT", "CASE", caseId, "Settlement Cheque Received", `Cheque received for installment #${targetInstallment.installmentNumber}`);
+      return { success: true };
+    }
+
+    // 6. Direct Payment (CASH, BANK_TRANSFER, CREDIT_CARD): Full Authoritative Financial Flow
+    const effectivePaymentMethod: PaymentMethod = paymentData.method as PaymentMethod;
+
+    // Build Receipt
+    const receiptId = "col-set-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
+    const receiptNumber = generateSequentialNumber(collections, "receiptNumber", "RCP-SET-", 4, false);
+    const tenantObj = tenants.find((t) => t.id === resolvedTenantId);
+    const payerName = tenantObj ? (language === "ar" ? tenantObj.nameAr : tenantObj.nameEn) : "Tenant Representative";
+
+    const receipt: CollectionRecord = {
+      id: receiptId,
+      receiptNumber,
+      caseId: c.id,
+      leaseId: c.leaseId,
+      tenantId: resolvedTenantId,
+      ownerId: resolvedOwnerId,
+      paymentDate: payDate,
+      amountEntered: payAmount,
+      amountApplied: payAmount,
+      paymentMethod: effectivePaymentMethod,
+      transactionReference: paymentData.reference,
+      payerName,
+      collectedBy: currentUser?.nameEn || currentUser?.nameAr || "Finance Officer",
+      collectedByUserId: currentUser?.id || "system",
+      notes: `سداد قسط تسوية قضائية رقم ${targetInstallment.installmentNumber} للقضية ${c.caseNumber || c.id}`,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Build Allocation
+    const allocationId = "pal-set-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
+    const allocation: PaymentAllocation = {
+      id: allocationId,
+      collectionId: receiptId,
+      targetType: "SETTLEMENT",
+      targetId: `${c.id}:${targetInstallment.id}`,
+      targetDescription: `Settlement Installment #${targetInstallment.installmentNumber} - Case ${c.caseNumber || c.id}`,
+      allocatedAmount: payAmount,
+      allocationDate: payDate,
+      status: "ACTIVE",
+      createdAt: new Date().toISOString(),
+      createdById: currentUser?.id || "system",
+    };
+
+    // Build Required Journal (Rent/Claim Collection Journal)
+    const journalData = buildRentCollectionJournal(
+      {
+        collectionId: receiptId,
+        receiptNumber,
+        amount: payAmount,
+        transactionDate: payDate,
+        paymentMethod: effectivePaymentMethod,
+        ownerId: resolvedOwnerId,
+        propertyId: c.propertyId,
+        unitId: c.unitId,
+        leaseId: c.leaseId,
+        tenantId: resolvedTenantId,
+        createdBy: currentUser?.nameEn || currentUser?.nameAr || "Finance Officer",
+        notes: `تحصيل قسط تسوية قضائية #${targetInstallment.installmentNumber} بموجب سند #${receiptNumber}`,
+      },
+      chartOfAccounts
     );
-    logAudit("FINANCIAL_PAYMENT", "CASE", caseId, "Settlement Installment", `Payment recorded via ${paymentData.method}`);
+
+    const journalVal = validateJournalEntry(journalData);
+    if (!journalVal.isValid) {
+      return {
+        success: false,
+        error: language === "ar" ? `فشل التحقق من قيد التسوية المحاسبي: ${journalVal.error}` : `Settlement journal validation failed: ${journalVal.error}`,
+      };
+    }
+
+    const jeId = "je-set-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
+    const year = new Date().getFullYear();
+    const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+    const journalRecord: JournalEntryRecord = {
+      ...journalData,
+      id: jeId,
+      entryNumber,
+      status: "POSTED",
+      totalDebit: journalVal.totalDebit,
+      totalCredit: journalVal.totalCredit,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Update Schedule as projection
+    const updatedSchedule: any[] = [];
+    scheduleToProcess.forEach((inst: any) => {
+      if (inst.id === installmentId) {
+        const updatedInst = {
+          ...inst,
+          amount: payAmount,
+          status: "PAID" as const,
+          paidDate: payDate,
+          paymentMethod: effectivePaymentMethod,
+          transactionReference: paymentData.reference,
+          receiptId,
+          receiptNumber,
+        };
+        updatedSchedule.push(updatedInst);
+
+        if (payAmount < inst.amount) {
+          const newInst = {
+            ...inst,
+            id: `inst-${Date.now()}-${crypto.randomUUID().split("-")[0]}`,
+            installmentNumber: (c.settlement?.schedule?.length || 0) + 1,
+            amount: inst.amount - payAmount,
+            status: "PENDING" as const,
+          };
+          delete (newInst as any).paidDate;
+          delete (newInst as any).paymentMethod;
+          delete (newInst as any).transactionReference;
+          delete (newInst as any).receiptId;
+          delete (newInst as any).receiptNumber;
+          updatedSchedule.push(newInst);
+        }
+      } else {
+        updatedSchedule.push(inst);
+      }
+    });
+
+    const newPaidAmount = (c.paidAmount ?? c.totalPaid ?? 0) + payAmount;
+    const newOutstanding = Math.max(0, (c.claimAmount || 0) - newPaidAmount);
+
+    const updatedCase: RentalCase = {
+      ...c,
+      paidAmount: newPaidAmount,
+      totalPaid: newPaidAmount,
+      outstandingAmount: newOutstanding,
+      outstanding: newOutstanding,
+      settlement: { ...c.settlement, schedule: updatedSchedule },
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Atomic persistence using writeBatch
+    const batch = writeBatch(db);
+    batch.set(doc(db, "collections", receiptId), sanitizeForFirestore(receipt));
+    batch.set(doc(db, "payment_allocations", allocationId), sanitizeForFirestore(allocation));
+    batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
+    batch.set(doc(db, "cases", c.id), sanitizeForFirestore(updatedCase), { merge: true });
+
+    try {
+      await batch.commit();
+    } catch (batchErr: any) {
+      console.error("Batch commit failed in paySettlementInstallment:", batchErr);
+      return {
+        success: false,
+        error: language === "ar"
+          ? `فشل حفظ سداد قسط التسوية في قاعدة البيانات: ${batchErr?.message || "خطأ غير معروف"}`
+          : `Failed to commit settlement installment payment: ${batchErr?.message || "Unknown error"}`,
+      };
+    }
+
+    // Only update React state after commit succeeds
+    setCollections((prev) => [receipt, ...prev]);
+    setPaymentAllocations((prev) => [allocation, ...prev]);
+    setJournalEntries((prev) => [...prev, journalRecord]);
+    setCases((prev) => prev.map((item) => (item.id === caseId ? updatedCase : item)));
+
+    logAudit("FINANCIAL_PAYMENT", "CASE", caseId, "Settlement Installment", `Payment of ${payAmount} AED recorded via ${effectivePaymentMethod}`);
+    return { success: true, receipt };
   };
 
-  const clearSettlementCheque = (caseId: string, installmentId: string) => {
-    setCases((prev) =>
-      prev.map((c) => {
-        if (c.id === caseId && c.settlement) {
-          let paymentAmount = 0;
-          const updatedSchedule = c.settlement?.schedule.map((inst) => {
-            if (inst.id === installmentId && inst.chequeDetails) {
-              paymentAmount = inst.amount;
-              return {
-                ...inst,
-                status: "PAID" as const,
-                chequeDetails: {
-                  ...inst.chequeDetails,
-                  isCleared: true,
-                  clearedDate: new Date().toISOString().split("T")[0]
-                }
-              };
-            }
-            return inst;
-          });
+  const clearSettlementCheque = async (
+    caseId: string,
+    installmentId: string
+  ): Promise<{ success: boolean; error?: string; receipt?: CollectionRecord }> => {
+    const c = cases.find((item) => item.id === caseId);
+    if (!c || !c.settlement) {
+      return { success: false, error: language === "ar" ? "ملف القضية غير موجود." : "Case record not found." };
+    }
 
-          const newPaidAmount = (c.paidAmount ?? c.totalPaid ?? 0) + paymentAmount;
-          const newOutstanding = Math.max(0, (c.claimAmount || 0) - newPaidAmount);
+    const schedule = c.settlement.schedule;
+    if (!schedule) {
+      return { success: false, error: language === "ar" ? "جدول الأقساط غير موجود." : "Installment schedule not found." };
+    }
 
-          const updated = {
-            ...c,
-            paidAmount: newPaidAmount,
-            totalPaid: newPaidAmount,
-            outstandingAmount: newOutstanding,
-            outstanding: newOutstanding,
-            settlement: { ...c.settlement, schedule: updatedSchedule },
-            updatedAt: new Date().toISOString()
-          };
-          safeSetDoc(doc(db, "cases", caseId), updated, { merge: true });
-          return updated;
-        }
-        return c;
-      })
+    const targetInst = schedule.find((inst) => inst.id === installmentId);
+    if (!targetInst || !targetInst.chequeDetails) {
+      return { success: false, error: language === "ar" ? "بيانات الشيك غير موجودة بالقسط." : "Cheque details not found on installment." };
+    }
+
+    if (targetInst.status === "PAID" || targetInst.chequeDetails.isCleared) {
+      return { success: true };
+    }
+
+    const resolvedOwnerId = c.ownerId || (c.leaseId ? leases.find(l => l.id === c.leaseId)?.ownerId : undefined);
+    const resolvedTenantId = c.tenantId || (c.leaseId ? leases.find(l => l.id === c.leaseId)?.tenantId : undefined);
+
+    if (!resolvedOwnerId || !resolvedTenantId) {
+      return {
+        success: false,
+        error: language === "ar" ? "بيانات المالك أو المستأجر غير مكتملة." : "Missing owner or tenant identity.",
+      };
+    }
+
+    const clearDate = new Date().toISOString().split("T")[0];
+    const periodCheck = validateTransactionPeriod(clearDate, financialPeriods);
+    if (!periodCheck.allowed) {
+      return { success: false, error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn };
+    }
+
+    const clearAmount = targetInst.amount;
+    const receiptId = "col-set-chq-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
+    const receiptNumber = generateSequentialNumber(collections, "receiptNumber", "RCP-SET-", 4, false);
+    const tenantObj = tenants.find((t) => t.id === resolvedTenantId);
+    const payerName = tenantObj ? (language === "ar" ? tenantObj.nameAr : tenantObj.nameEn) : "Tenant Representative";
+
+    const receipt: CollectionRecord = {
+      id: receiptId,
+      receiptNumber,
+      caseId: c.id,
+      leaseId: c.leaseId,
+      tenantId: resolvedTenantId,
+      ownerId: resolvedOwnerId,
+      paymentDate: clearDate,
+      amountEntered: clearAmount,
+      amountApplied: clearAmount,
+      paymentMethod: "CHEQUE",
+      transactionReference: targetInst.chequeDetails.chequeNumber,
+      payerName,
+      collectedBy: currentUser?.nameEn || currentUser?.nameAr || "Finance Officer",
+      collectedByUserId: currentUser?.id || "system",
+      notes: `تحصيل وصرف شيك قسط تسوية قضائية رقم ${targetInst.installmentNumber} (شيك #${targetInst.chequeDetails.chequeNumber})`,
+      createdAt: new Date().toISOString(),
+    };
+
+    const allocationId = "pal-set-chq-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
+    const allocation: PaymentAllocation = {
+      id: allocationId,
+      collectionId: receiptId,
+      targetType: "SETTLEMENT",
+      targetId: `${c.id}:${targetInst.id}`,
+      targetDescription: `Settlement Cheque Cleared - Installment #${targetInst.installmentNumber} (Cheque #${targetInst.chequeDetails.chequeNumber})`,
+      allocatedAmount: clearAmount,
+      allocationDate: clearDate,
+      status: "ACTIVE",
+      createdAt: new Date().toISOString(),
+      createdById: currentUser?.id || "system",
+    };
+
+    const journalData = buildRentCollectionJournal(
+      {
+        collectionId: receiptId,
+        receiptNumber,
+        amount: clearAmount,
+        transactionDate: clearDate,
+        paymentMethod: "CHEQUE",
+        ownerId: resolvedOwnerId,
+        propertyId: c.propertyId,
+        unitId: c.unitId,
+        leaseId: c.leaseId,
+        tenantId: resolvedTenantId,
+        createdBy: currentUser?.nameEn || currentUser?.nameAr || "Finance Officer",
+        notes: `تحصيل وصرف شيك تسوية قضائية #${targetInst.chequeDetails.chequeNumber} بموجب سند #${receiptNumber}`,
+      },
+      chartOfAccounts
     );
-    logAudit("FINANCIAL_PAYMENT", "CASE", caseId, "Settlement Cheque", "Cheque cleared and installment marked as paid");
+
+    const val = validateJournalEntry(journalData);
+    if (!val.isValid) {
+      return {
+        success: false,
+        error: language === "ar" ? `فشل التحقق من قيد صرف شيك التسوية: ${val.error}` : `Cheque settlement journal validation failed: ${val.error}`,
+      };
+    }
+
+    const jeId = "je-set-chq-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
+    const year = new Date().getFullYear();
+    const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+    const journalRecord: JournalEntryRecord = {
+      ...journalData,
+      id: jeId,
+      entryNumber,
+      status: "POSTED",
+      totalDebit: val.totalDebit,
+      totalCredit: val.totalCredit,
+      createdAt: new Date().toISOString(),
+    };
+
+    const updatedSchedule = schedule.map((inst) => {
+      if (inst.id === installmentId && inst.chequeDetails) {
+        return {
+          ...inst,
+          status: "PAID" as const,
+          paidDate: clearDate,
+          receiptId,
+          receiptNumber,
+          chequeDetails: {
+            ...inst.chequeDetails,
+            isCleared: true,
+            clearedDate: clearDate,
+          },
+        };
+      }
+      return inst;
+    });
+
+    const newPaidAmount = (c.paidAmount ?? c.totalPaid ?? 0) + clearAmount;
+    const newOutstanding = Math.max(0, (c.claimAmount || 0) - newPaidAmount);
+
+    const updatedCase: RentalCase = {
+      ...c,
+      paidAmount: newPaidAmount,
+      totalPaid: newPaidAmount,
+      outstandingAmount: newOutstanding,
+      outstanding: newOutstanding,
+      settlement: { ...c.settlement, schedule: updatedSchedule },
+      updatedAt: new Date().toISOString(),
+    };
+
+    const batch = writeBatch(db);
+    batch.set(doc(db, "collections", receiptId), sanitizeForFirestore(receipt));
+    batch.set(doc(db, "payment_allocations", allocationId), sanitizeForFirestore(allocation));
+    batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
+    batch.set(doc(db, "cases", c.id), sanitizeForFirestore(updatedCase), { merge: true });
+
+    try {
+      await batch.commit();
+    } catch (err: any) {
+      console.error("Batch commit failed in clearSettlementCheque:", err);
+      return {
+        success: false,
+        error: language === "ar" ? `فشل تحديث الشيك المصروف: ${err?.message || "خطأ"}` : `Failed to clear cheque: ${err?.message || "Error"}`,
+      };
+    }
+
+    setCollections((prev) => [receipt, ...prev]);
+    setPaymentAllocations((prev) => [allocation, ...prev]);
+    setJournalEntries((prev) => [...prev, journalRecord]);
+    setCases((prev) => prev.map((item) => (item.id === caseId ? updatedCase : item)));
+
+    logAudit("FINANCIAL_PAYMENT", "CASE", caseId, "Settlement Cheque Cleared", `Cheque #${targetInst.chequeDetails.chequeNumber} cleared for ${clearAmount} AED`);
+    return { success: true, receipt };
   };
 
   const updateSettlementCheque = (caseId: string, installmentId: string, chequeData: { chequeNumber: string; chequeDate: string; bankName: string }) => {

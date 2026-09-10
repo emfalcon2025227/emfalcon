@@ -1,6 +1,7 @@
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { google } from 'googleapis';
+// Google Drive REST/Client interface without heavyweight googleapis bundle
+declare const google: any;
 
 // @ts-ignore
 import fs from 'fs';

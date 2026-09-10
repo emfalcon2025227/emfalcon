@@ -1693,6 +1693,7 @@ export interface JournalEntryRecord {
     | "SECURITY_DEPOSIT"
     | "SECURITY_DEPOSIT_SETTLEMENT"
     | "SECURITY_DEPOSIT_REFUND"
+    | "DAILY_DEPOSIT"
     | "MANUAL_JOURNAL";
   sourceId: string;
   description: string;

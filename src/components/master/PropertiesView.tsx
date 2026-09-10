@@ -43,7 +43,7 @@ export const PropertiesView: React.FC<PropertiesViewProps> = ({ onNavigateToUnit
   const [code, setCode] = useState("");
   const [nameAr, setNameAr] = useState("");
   const [nameEn, setNameEn] = useState("");
-  const [ownerId, setOwnerId] = useState(owners[0]?.id || "");
+  const [ownerId, setOwnerId] = useState("");
 
   // Bilingual Naming States
   const [isNameEnGenerated, setIsNameEnGenerated] = useState(false);
@@ -145,7 +145,7 @@ export const PropertiesView: React.FC<PropertiesViewProps> = ({ onNavigateToUnit
     setCode(getNextPropertyCode());
     setNameAr("");
     setNameEn("");
-    setOwnerId(owners[0]?.id || "");
+    setOwnerId("");
     setEmirate("Sharjah");
     setCommunity("خورفكان");
     setPlotNumber("");
