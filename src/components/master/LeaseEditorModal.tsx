@@ -1209,13 +1209,17 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
           });
 
           if (ownerRes.success && ownerRes.commission && ownerFeeImmediateCollection) {
-            collectAdministrativeFee(
-              ownerRes.commission.id,
-              ownerFeeAmount,
-              ownerFeePaymentMethod,
-              ownerFeeReference,
-              language === "ar" ? `تحصيل فوري للرسوم الإدارية من المالك عند إصدار العقد #${leaseNumber}` : `Immediate admin fee collection from Owner on lease #${leaseNumber}`
-            );
+            if (ownerFeePaymentMethod !== "CASH" && ownerFeeReference) {
+              collectAdministrativeFee(
+                ownerRes.commission.id,
+                ownerFeeAmount,
+                ownerFeePaymentMethod,
+                ownerFeeReference,
+                language === "ar" ? `تحصيل فوري للرسوم الإدارية من المالك عند إصدار العقد #${leaseNumber}` : `Immediate admin fee collection from Owner on lease #${leaseNumber}`,
+                undefined,
+                { sourceWorkflow: "DIRECT_SETTLEMENT" }
+              );
+            }
           }
         }
       }
@@ -1255,13 +1259,17 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
           });
 
           if (tenantRes.success && tenantRes.commission && tenantFeeImmediateCollection) {
-            collectAdministrativeFee(
-              tenantRes.commission.id,
-              tenantFeeAmount,
-              tenantFeePaymentMethod,
-              tenantFeeReference,
-              language === "ar" ? `تحصيل فوري للرسوم الإدارية من المستأجر عند إصدار العقد #${leaseNumber}` : `Immediate admin fee collection from Tenant on lease #${leaseNumber}`
-            );
+            if (tenantFeePaymentMethod !== "CASH" && tenantFeeReference) {
+              collectAdministrativeFee(
+                tenantRes.commission.id,
+                tenantFeeAmount,
+                tenantFeePaymentMethod,
+                tenantFeeReference,
+                language === "ar" ? `تحصيل فوري للرسوم الإدارية من المستأجر عند إصدار العقد #${leaseNumber}` : `Immediate admin fee collection from Tenant on lease #${leaseNumber}`,
+                undefined,
+                { sourceWorkflow: "DIRECT_SETTLEMENT" }
+              );
+            }
           }
         }
       }

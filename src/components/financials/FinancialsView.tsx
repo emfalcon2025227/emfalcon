@@ -2708,7 +2708,7 @@ export const FinancialsView: React.FC = () => {
                     <SearchableSelect
                       options={[
                         { id: "BANK_TRANSFER", label: isAr ? "تحويل بنكي" : "Bank Transfer" },
-                        { id: "CASH", label: isAr ? "نقدي" : "Cash" },
+                        { id: "CASH", label: isAr ? "نقدي (عبر الإيداعات اليومية)" : "Cash (Via Daily Deposits)" },
                         { id: "CHEQUE", label: isAr ? "شيك" : "Cheque" },
                       ]}
                       value={collectionMethod}
@@ -2720,7 +2720,7 @@ export const FinancialsView: React.FC = () => {
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      {isAr ? "رقم المرجع" : "Reference #"}
+                      {isAr ? "رقم المرجع / الإشعار *" : "Reference # / Slip *"}
                     </label>
                     <input
                       type="text"
@@ -2728,9 +2728,28 @@ export const FinancialsView: React.FC = () => {
                       onChange={(e) => setCollectionRef(e.target.value)}
                       className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl"
                       placeholder="TRX-XXXX"
+                      required={collectionMethod === "BANK_TRANSFER" || collectionMethod === "CHEQUE"}
                     />
                   </div>
                 </div>
+
+                {collectionMethod === "CASH" && (
+                  <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold">
+                        {isAr
+                          ? "ضابط الرقابة المالية: تحصيل الرسوم الإدارية النقدية يتم إثباته وتوريده عبر شاشة الإيداعات اليومية."
+                          : "Financial Control: Cash admin fee collections must be settled and banked via Daily Deposits."}
+                      </p>
+                      <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
+                        {isAr
+                          ? "يبقى الالتزام مسجلاً ومستحقاً حتى يتم تأكيد إيداعه البنكي مع إرفاق إشعار الإيداع."
+                          : "The obligation remains pending until verified and banked with deposit proof attached."}
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">

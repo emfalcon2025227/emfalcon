@@ -237,8 +237,9 @@ export function buildAdminFeeJournal(
     vat = Math.round((gross - net) * 100) / 100;
   }
 
-  // Debit Side: From Owner Payable (if deducted) or Bank/Cash
-  const debitAccount = params.isDeductedFromOwner !== false
+  // Debit Side: From Owner Payable (if explicitly deducted from owner balance) or Bank/Cash Asset
+  const isOwnerDeduction = params.isDeductedFromOwner === true;
+  const debitAccount = isOwnerDeduction
     ? findAccountByCodeOrType(chartOfAccounts, "2010", "LIABILITY") // Owner Payable
     : getPaymentAssetAccount(chartOfAccounts, params.paymentMethod);
 

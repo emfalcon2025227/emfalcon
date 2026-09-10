@@ -18,5 +18,6 @@ gemini-key.json
 *.bak
 *.traineddata
 *.tmp
+bun.lock
 scan_results.txt
 drive_with_lines.txt

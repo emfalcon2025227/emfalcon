@@ -628,12 +628,28 @@ export const DailyRevenueView: React.FC = () => {
                   onChange={(e) => setCollectMethod(e.target.value as PaymentMethod)}
                   className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition"
                 >
-                  <option value="CASH">{isAr ? "نقدي" : "Cash"}</option>
                   <option value="BANK_TRANSFER">{isAr ? "تحويل بنكي" : "Bank Transfer"}</option>
+                  <option value="CASH">{isAr ? "نقدي (عبر الإيداعات اليومية)" : "Cash (Via Daily Deposits)"}</option>
                   <option value="CHEQUE">{isAr ? "شيك" : "Cheque"}</option>
-                  <option value="CARD">{isAr ? "بطاقة ائتمان" : "Credit Card"}</option>
+                  <option value="CREDIT_CARD">{isAr ? "بطاقة ائتمان" : "Credit Card"}</option>
                 </select>
               </div>
+
+              {collectMethod === "CASH" && (
+                <div className="p-3 bg-amber-50 text-amber-900 text-[11px] rounded-xl border border-amber-200 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block">
+                      {isAr ? "تنبيه الرقابة المالية:" : "Financial Control Notice:"}
+                    </span>
+                    <span>
+                      {isAr
+                        ? "يتم إيداع الرسوم الإدارية النقدية والمطابقة البنكية لها من خلال شاشة الإيداعات اليومية."
+                        : "Cash admin fees must be settled and banked via Daily Deposits."}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold text-slate-500 uppercase">{isAr ? "المرجع / رقم الإيصال" : "Ref / Receipt #"}</label>

@@ -220,8 +220,16 @@ export const DailyDepositsView: React.FC = () => {
     commissions.forEach((comm) => {
       const prop = properties.find((p) => p.id === comm.propertyId);
       const owner = comm.ownerId ? owners.find((o) => o.id === comm.ownerId) : (prop ? owners.find((o) => o.id === prop.ownerId) : null);
-      const archiveProof = archive.find((a) => a.entityId === comm.id || a.recordId === comm.id);
-      const isOverdue = comm.status !== "COLLECTED" && comm.dueDate < todayStr;
+      const archiveProof = archive.find((a) => a.entityId === comm.id || a.recordId === comm.id || (comm.proofDocumentId && a.id === comm.proofDocumentId));
+      
+      const isCollected = comm.status === "COLLECTED" || comm.status === "FULLY_COLLECTED";
+      const isCancelled = comm.status === "CANCELLED" || comm.status === "REVERSED" || comm.status === "WAIVED";
+      const isOverdue = !isCollected && !isCancelled && Boolean(comm.dueDate && comm.dueDate < todayStr);
+      
+      const itemStatus = isCollected ? "PAID" : isCancelled ? "CANCELLED" : "APPROVED";
+      const displayAmount = isCollected 
+        ? (comm.collectedAmount || comm.totalCommissionAmount || 0)
+        : (comm.outstandingBalance ?? (comm.totalCommissionAmount - (comm.collectedAmount || 0)));
 
       items.push({
         id: `comm-${comm.id}`,
@@ -229,10 +237,10 @@ export const DailyDepositsView: React.FC = () => {
         transactionNumber: `FEE-${comm.id.slice(-6)}`,
         type: "ADMINISTRATIVE_FEE",
         fundCategory: "OFFICE",
-        amount: comm.totalCommissionAmount || comm.outstandingBalance || 0,
+        amount: displayAmount,
         date: comm.dueDate || todayStr,
-        status: comm.status === "COLLECTED" ? "PAID" : "APPROVED",
-        relatedParty: isAr ? "رسوم إدارية وعمولة إدارة" : "Administrative Fee & Commission",
+        status: itemStatus,
+        relatedParty: isAr ? (comm.partyType === "TENANT" ? "رسوم إدارية (مستأجر)" : "رسوم إدارية (مالك)") : `Administrative Fee (${comm.partyType})`,
         ownerId: owner?.id,
         ownerName: owner ? (isAr ? owner.nameAr : owner.nameEn) : (isAr ? "صقر الإمارات للعقارات" : "Emirates Falcon Office"),
         propertyId: comm.propertyId,
@@ -243,6 +251,8 @@ export const DailyDepositsView: React.FC = () => {
         originalRecord: comm,
         isOverdue,
         daysPending: 0,
+        verificationStatus: (comm.verificationStatus as FinancialVerificationStatus) || undefined,
+        verifiedAt: comm.verifiedAt,
       });
     });
 

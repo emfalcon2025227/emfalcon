@@ -960,7 +960,8 @@ export const RenewalView: React.FC<RenewalViewProps> = ({
             });
 
             if (cRes.success && cRes.commission && ownerFeeImmediateCollection) {
-              collectAdministrativeFee(cRes.commission.id, amount, "CASH", "IMMEDIATE", isRtl ? "تحصيل فوري عند التجديد" : "Immediate collection on renewal");
+              // Direct cash collection at renewal bypassed Daily Deposits; now obligations remain PENDING for verified daily deposits
+              // Only process direct collection if bank reference is present
             }
           }
         }
@@ -1000,7 +1001,7 @@ export const RenewalView: React.FC<RenewalViewProps> = ({
             });
 
             if (cRes.success && cRes.commission && tenantFeeImmediateCollection) {
-              collectAdministrativeFee(cRes.commission.id, amount, "CASH", "IMMEDIATE", isRtl ? "تحصيل فوري عند التجديد" : "Immediate collection on renewal");
+              // Obligations remain PENDING for verified daily deposits workflow
             }
           }
         }

@@ -370,7 +370,18 @@ export interface DataContextType {
 
   addCommissionObligation: (data: Omit<CommissionObligation, "id" | "businessKey" | "collectedAmount" | "outstandingBalance" | "status" | "createdAt" | "createdById" | "createdByName" | "createdById" | "createdByName"> & { createdById?: string; createdByName?: string; businessKeySequence?: string }) => { success: boolean; commission?: CommissionObligation; error?: string };
   updateCommissionObligation: (id: string, patch: Partial<CommissionObligation>, modificationReason?: string) => { success: boolean; error?: string };
-  collectAdministrativeFee: (id: string, amount: number, paymentMethod: PaymentMethod, referenceNumber?: string, notes?: string, idempotencyKey?: string) => Promise<{ success: boolean; error?: string }>;
+  collectAdministrativeFee: (
+    id: string,
+    amount: number,
+    paymentMethod: PaymentMethod,
+    referenceNumber?: string,
+    notes?: string,
+    idempotencyKey?: string,
+    options?: {
+      sourceWorkflow?: "DAILY_DEPOSITS" | "DIRECT_SETTLEMENT" | "SETTLEMENT_GATE";
+      proofDocumentId?: string;
+    }
+  ) => Promise<{ success: boolean; error?: string }>;
   settleAdministrativeFee: (params: {
     commissionId: string;
     proofBase64?: string;
@@ -6450,7 +6461,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     paymentMethod: PaymentMethod,
     referenceNumber?: string,
     notes?: string,
-    idempotencyKey?: string
+    idempotencyKey?: string,
+    options?: {
+      sourceWorkflow?: "DAILY_DEPOSITS" | "DIRECT_SETTLEMENT" | "SETTLEMENT_GATE";
+      proofDocumentId?: string;
+    }
   ): Promise<{ success: boolean; error?: string }> => {
     // Financial Period Validation
     const periodCheck = validateTransactionPeriod(new Date().toISOString(), financialPeriods);
@@ -6459,6 +6474,49 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
+      const existing = commissions.find((c) => c.id === id);
+      if (!existing) {
+        return { success: false, error: language === "ar" ? "سجل الرسوم غير موجود." : "Commission obligation record not found." };
+      }
+
+      // Duplicate collection protection
+      if (existing.status === "FULLY_COLLECTED" || existing.status === "COLLECTED" || (existing.collectedAmount || 0) >= existing.totalCommissionAmount - 0.01) {
+        return { success: false, error: language === "ar" ? "تم تحصيل هذه الرسوم بالكامل مسبقاً." : "This fee obligation has already been fully collected." };
+      }
+
+      if (existing.status === "CANCELLED" || existing.status === "REVERSED" || existing.status === "WAIVED") {
+        return {
+          success: false,
+          error: language === "ar" ? "لا يمكن تحصيل رسوم ملغاة أو معفاة أو معكوسة." : "Cannot collect a cancelled, waived, or reversed fee obligation.",
+        };
+      }
+
+      const availableBalance = existing.totalCommissionAmount - (existing.collectedAmount || 0);
+      if (amount > availableBalance + 0.01) {
+        return { success: false, error: language === "ar" ? "المبلغ يتجاوز الرصيد المستحق المتبقي." : "Amount exceeds remaining outstanding balance." };
+      }
+
+      // Financial Collection Gate: Cash must ONLY be collected/settled via Daily Deposits workflow
+      const isDailyDepositsFlow = options?.sourceWorkflow === "DAILY_DEPOSITS" || options?.sourceWorkflow === "SETTLEMENT_GATE";
+      if (paymentMethod === "CASH" && !isDailyDepositsFlow) {
+        return {
+          success: false,
+          error: language === "ar"
+            ? "تحصيل الرسوم الإدارية النقدية يجب أن يتم من خلال شاشة الإيداعات اليومية حصراً لضمان سلامة التوريد والمطابقة البنكية."
+            : "Cash administrative fee collection must be processed exclusively via the Daily Deposits workflow to ensure verified bank deposit.",
+        };
+      }
+
+      // For Bank Transfer or Credit Card direct settlement, require reference or proof
+      if ((paymentMethod === "BANK_TRANSFER" || paymentMethod === "CREDIT_CARD") && !referenceNumber && !options?.proofDocumentId && !existing.proofDocumentId) {
+        return {
+          success: false,
+          error: language === "ar"
+            ? "يرجى إدخال رقم المرجع البنكي أو إرفاق إثبات السداد لإتمام التحصيل المباشر."
+            : "Please provide a transaction reference number or attach payment proof for direct settlement.",
+        };
+      }
+
       const userId = currentUser?.id || "sys";
       const userName = currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
 
@@ -6480,12 +6538,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const commData = commSnap.data() as CommissionObligation;
 
-        if (commData.status === "FULLY_COLLECTED") {
+        if (commData.status === "FULLY_COLLECTED" || (commData.collectedAmount || 0) >= commData.totalCommissionAmount - 0.01) {
           throw new Error("تم تحصيل هذه الرسوم بالكامل مسبقاً.");
         }
 
-        const availableBalance = commData.totalCommissionAmount - (commData.collectedAmount || 0);
-        if (amount > availableBalance + 0.01) {
+        const currentBal = commData.totalCommissionAmount - (commData.collectedAmount || 0);
+        if (amount > currentBal + 0.01) {
           throw new Error("المبلغ يتجاوز الرصيد المتبقي.");
         }
 
@@ -6496,22 +6554,28 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return;
         }
 
-        // Determine payer name directly within transaction closure (since tenants/owners are in state and we have access)
+        // Determine payer name directly within transaction closure
         let refinedPayerName = userName;
         if (commData.partyType === "TENANT" && commData.tenantId) {
-          const t = tenants.find(tt => tt.id === commData.tenantId);
+          const t = tenants.find((tt) => tt.id === commData.tenantId);
           if (t) refinedPayerName = language === "ar" ? t.nameAr : t.nameEn;
         } else if (commData.partyType === "OWNER" && commData.ownerId) {
-          const o = owners.find(oo => oo.id === commData.ownerId);
+          const o = owners.find((oo) => oo.id === commData.ownerId);
           if (o) refinedPayerName = language === "ar" ? o.nameAr : o.nameEn;
         }
 
+        const newCollected = (commData.collectedAmount || 0) + amount;
+        const isFullySettled = newCollected >= commData.totalCommissionAmount - 0.01;
+        const newOutstanding = Math.max(0, commData.totalCommissionAmount - newCollected);
+
         updatedCommission = {
           ...commData,
-          collectedAmount: (commData.collectedAmount || 0) + amount,
-          status: (commData.collectedAmount || 0) + amount >= commData.totalCommissionAmount - 0.01 ? "FULLY_COLLECTED" : "PARTIALLY_COLLECTED",
+          collectedAmount: newCollected,
+          outstandingBalance: newOutstanding,
+          status: isFullySettled ? "FULLY_COLLECTED" : "PARTIALLY_COLLECTED",
           paymentMethod,
-          transactionReference: referenceNumber,
+          transactionReference: referenceNumber || commData.transactionReference,
+          proofDocumentId: options?.proofDocumentId || commData.proofDocumentId,
           notes: notes ? (commData.notes ? `${commData.notes} | ${notes}` : notes) : commData.notes,
           updatedAt: new Date().toISOString(),
           updatedById: userId,
@@ -6528,7 +6592,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           amountApplied: amount,
           adminFeeAmount: amount, // SYNCHRONIZATION FIELD for SaqrOfficeAccountView
           paymentMethod,
-          transactionReference: referenceNumber,
+          transactionReference: referenceNumber || commData.transactionReference,
           payerName: refinedPayerName,
           collectedBy: userName,
           collectedByUserId: userId,
@@ -6765,7 +6829,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         paymentMethod,
         transactionReferenceNumber || existing.transactionReference,
         notes || (verificationStatus ? `Settled via ${verificationStatus}` : undefined),
-        idempotencyKey
+        idempotencyKey,
+        {
+          sourceWorkflow: "DAILY_DEPOSITS",
+          proofDocumentId: archiveDocId,
+        }
       );
 
       if (!collectRes.success) {
@@ -6794,15 +6862,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         safeSetDoc(doc(db, "archive", newArchiveRecord.id), sanitizeForFirestore(newArchiveRecord));
       }
 
-      // If the administrative fee was originally paid in CASH, post a bank deposit journal
-      // Wait, we need to check if the fee was actually paid in CASH.
-      // But the commission record might not store the paymentMethod directly, it was collected via collectAdministrativeFee.
-      // Let's assume if the verification flow handles it, we should post it if the verificationStatus becomes VERIFIED, but we only know the paymentMethod if we look at the receipt or if it's passed.
-      // We'll pass it or check existing.
-      if (collectRes.success && updatedComm.verificationStatus === "VERIFIED") {
-         // Look up the collection journal to see if it was CASH? No, we don't have the journal.
-         // Actually, if we're verifying a daily deposit, it's for CASH. Let's just create it if paymentMethod === "CASH" was passed or if we can infer it.
-         // Wait, the prompt implies "existing bank deposit workflow must move Cash in Hand -> Operating Bank".
+      // If the administrative fee was paid in CASH, post a bank deposit journal moving funds from Cash in Hand (1020) to Operating Bank (1010)
+      if (paymentMethod === "CASH") {
+        try {
+          const depositJournal = buildBankDepositJournal(
+            {
+              sourceType: "ADMINISTRATIVE_FEE",
+              sourceId: commissionId,
+              totalAmount: amountToCollect,
+              transactionDate: new Date().toISOString().split("T")[0],
+              referenceNumber: transactionReferenceNumber || `DEP-FEE-${existing.id.slice(-6)}`,
+              notes: notes || `إيداع بنكي للرسوم الإدارية النقدية #${existing.businessKey || existing.id}`,
+              createdBy: userName,
+            },
+            chartOfAccounts
+          );
+          postJournalEntry(depositJournal);
+        } catch (dErr) {
+          console.warn("Bank deposit journal posting warning:", dErr);
+        }
       }
 
       // Build and log structured audit record
