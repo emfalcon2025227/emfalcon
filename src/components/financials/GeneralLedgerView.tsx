@@ -122,7 +122,7 @@ export const GeneralLedgerView: React.FC = () => {
   }, [filteredEntries]);
 
   // Handle Journal Entry Reversal
-  const handlePerformReversal = () => {
+  const handlePerformReversal = async () => {
     if (!viewingEntry) return;
     if (!reversalReason.trim()) {
       setActionError(isAr ? "يرجى كتابة سبب العكس المحاسبي." : "Please enter a reversal reason.");
@@ -133,7 +133,7 @@ export const GeneralLedgerView: React.FC = () => {
     setActionError(null);
     setActionSuccess(null);
 
-    const result = reverseJournalEntry(viewingEntry.id, reversalReason.trim());
+    const result = await reverseJournalEntry(viewingEntry.id, reversalReason.trim());
     setIsReversing(false);
 
     if (result.success && result.reversalEntry) {

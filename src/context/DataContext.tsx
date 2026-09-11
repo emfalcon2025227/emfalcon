@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { allocateNextSequence } from "../utils/sequenceGenerator";
 import { db, handleFirestoreError, OperationType, sanitizeForFirestore } from "../lib/firebase";
 import { collection, onSnapshot, doc, setDoc, deleteDoc, writeBatch, deleteField, runTransaction, getDocs } from "firebase/firestore";
+import { assertCloudWriteAvailable } from "./CloudConnectivityContext";
+
 import { useLanguage } from "./LanguageContext";
 import {
   isOccupyingLeaseStatus,
@@ -175,7 +178,6 @@ import {
   validateFinancialPeriodClosing,
   canCreateFinancialPeriod,
 } from "../services/financialEngine";
-
 /**
  * Generates a sequential code for various system entities.
  * Ensures numbers follow 1, 2, 3... pattern within a year and prefix.
@@ -190,9 +192,7 @@ export const generateSequentialNumber = (
   const currentYear = new Date().getFullYear();
   const yearPrefix = includeYear ? `${currentYear}-` : "";
   const fullPrefix = `${prefix}${yearPrefix}`;
-
   let maxNum = 0;
-
   if (Array.isArray(existingItems) && existingItems.length > 0) {
     for (const item of existingItems) {
       if (!item) continue;
@@ -226,7 +226,6 @@ export const generateSequentialNumber = (
       }
     }
   }
-
   const nextNumber = maxNum + 1;
   return `${fullPrefix}${nextNumber.toString().padStart(padding, "0")}`;
 };
@@ -236,28 +235,12 @@ import {
   EntityIntegrityType,
 } from "../utils/integrityChecker";
 import {
-  INITIAL_OWNERS,
-  INITIAL_PROPERTIES,
-  INITIAL_UNITS,
-  INITIAL_TENANTS,
-  INITIAL_LEASES,
-  INITIAL_CHEQUES,
-  INITIAL_COLLECTIONS,
-  INITIAL_CASES,
-  INITIAL_ARCHIVE,
-  INITIAL_NOTIFICATIONS,
   INITIAL_RISK_CONFIG,
-  INITIAL_AUDIT_LOGS,
-  INITIAL_HISTORICAL_RECORDS,
-  INITIAL_MAINTENANCE_REQUESTS,
-  INITIAL_TECHNICIANS,
   INITIAL_MAINTENANCE_SETTINGS,
   INITIAL_LEGAL_SETTINGS,
 } from "../data/seedData";
 import { useAuth } from "./AuthContext";
-
 export interface DataContextType {
-
   isQuotaExceeded: boolean;
   isDataLoaded: boolean;
   owners: Owner[];
@@ -286,23 +269,19 @@ export interface DataContextType {
   addCompanyLetterheadTemplate: (templateData: Omit<CompanyLetterheadTemplate, "id" | "uploadedAt" | "uploadedByUserId" | "uploadedByUserName">) => { success: boolean; template?: CompanyLetterheadTemplate; error?: string };
   setActiveCompanyLetterhead: (templateId: string) => { success: boolean; error?: string };
   deleteCompanyLetterheadTemplate: (templateId: string) => { success: boolean; error?: string };
-
   // ERP Phase 1 Financial Foundation & Commissions
   commissions: CommissionObligation[];
   commissionObligations: CommissionObligation[];
   paymentAllocations: PaymentAllocation[];
   financialReversals: FinancialReversalRecord[];
   financialAdjustments: FinancialAdjustmentRecord[];
-
   // ERP Phase 2: VAT Rate History & Management
   vatRates: VatRateRecord[];
   addVatRate: (data: Omit<VatRateRecord, "id" | "createdAt" | "createdById" | "createdByName">) => { success: boolean; error?: string };
   updateVatRate: (id: string, patch: Partial<VatRateRecord>, reason?: string) => { success: boolean; error?: string };
   deleteVatRate: (id: string, reason?: string) => { success: boolean; error?: string };
-
   // ERP Phase 2: Chart of Accounts, Owner Transfers, Property Expenses & Statements
   chartOfAccounts: AccountDefinition[];
-
   dailyDeposits: DailyDepositRecord[];
   depositBatches: DepositBatchRecord[];
   createDepositBatch: (batch: DepositBatchRecord) => void;
@@ -311,18 +290,15 @@ export interface DataContextType {
   updateDailyDeposit: (id: string, updates: Partial<DailyDepositRecord>) => Promise<{ success: boolean; error?: string }>;
   ownerTransfers: OwnerTransferRecord[];
   propertyExpenses: PropertyExpenseRecord[];
-
   // ERP Phase 19: Advanced Accounts Receivable & Debt Recovery
   collectionActions: CollectionAction[];
   paymentPromises: PaymentPromise[];
-
   addCollectionAction: (data: Omit<CollectionAction, "id" | "actionNumber" | "createdAt" | "createdById">) => { success: boolean; action?: CollectionAction; error?: string };
   updateCollectionAction: (id: string, patch: Partial<CollectionAction>, modificationReason?: string) => { success: boolean; error?: string };
   addPaymentPromise: (data: Omit<PaymentPromise, "id" | "promiseNumber" | "createdAt" | "createdById" | "amountFulfilled">) => { success: boolean; promise?: PaymentPromise; error?: string };
   updatePaymentPromise: (id: string, patch: Partial<PaymentPromise>, modificationReason?: string) => { success: boolean; error?: string };
   fulfillPaymentPromise: (promiseId: string, amount: number) => { success: boolean; error?: string };
   getTenantReceivablePosition: (tenantId: string) => TenantReceivablePosition;
-
   addOwnerTransfer: (data: Omit<OwnerTransferRecord, "id" | "transferNumber" | "createdAt" | "createdById" | "createdByName"> & { createdById?: string; createdByName?: string }) => Promise<{ success: boolean; transfer?: OwnerTransferRecord; error?: string }>;
   updateOwnerTransfer: (id: string, patch: Partial<OwnerTransferRecord>, modificationReason?: string) => Promise<{ success: boolean; error?: string }>;
   updateOwnerTransferStatus: (transferId: string, newStatus: OwnerTransferStatus, notes?: string, modificationReason?: string) => Promise<{ success: boolean; error?: string }>;
@@ -350,7 +326,6 @@ export interface DataContextType {
   deletePropertyExpense: (expenseId: string) => Promise<{ success: boolean; error?: string }>;
   addAccountDefinition: (data: Omit<AccountDefinition, "id" | "createdAt">) => { success: boolean; account?: AccountDefinition; error?: string };
   updateAccountDefinition: (id: string, patch: Partial<AccountDefinition>, modificationReason?: string) => { success: boolean; error?: string };
-
   addFinancialPeriod: (data: Omit<FinancialPeriod, "id" | "openedAt" | "openedBy" | "status">) => { success: boolean; period?: FinancialPeriod; error?: string };
   closeFinancialPeriod: (id: string, reason?: string) => { success: boolean; error?: string };
   reopenFinancialPeriod: (id: string, reason: string) => { success: boolean; error?: string };
@@ -358,16 +333,14 @@ export interface DataContextType {
   periodCertifications: ForensicClosingCertification[];
   runPeriodReconciliation: (periodId: string) => { success: boolean; report?: PeriodReconciliationReport; error?: string };
   generatePeriodCertification: (periodId: string, notes?: string) => Promise<{ success: boolean; certification?: ForensicClosingCertification; error?: string }>;
-
   journalEntries: JournalEntryRecord[];
-  postJournalEntry: (entryData: Omit<JournalEntryRecord, "id" | "entryNumber" | "createdAt" | "status">) => { success: boolean; entry?: JournalEntryRecord; error?: string };
-  reverseJournalEntry: (id: string, reason: string) => { success: boolean; reversalEntry?: JournalEntryRecord; error?: string };
+  postJournalEntry: (entryData: Omit<JournalEntryRecord, "id" | "entryNumber" | "createdAt" | "status">) => Promise<{ success: boolean; entry?: JournalEntryRecord; error?: string }>;
+  reverseJournalEntry: (id: string, reason: string) => Promise<{ success: boolean; reversalEntry?: JournalEntryRecord; error?: string }>;
   updateJournalEntry: (id: string, patch: Partial<JournalEntryRecord>) => { success: boolean; error?: string };
   deleteJournalEntry: (id: string) => { success: boolean; error?: string };
   getOwnerPayable: (ownerId: string) => OwnerPayableDetails;
   getOwnerStatement: (ownerId: string, filters?: { propertyId?: string; dateFrom?: string; dateTo?: string }) => OwnerStatementReport;
   getTenantStatement: (tenantId: string, filters?: { leaseId?: string; dateFrom?: string; dateTo?: string }) => TenantStatementReport;
-
   addCommissionObligation: (data: Omit<CommissionObligation, "id" | "businessKey" | "collectedAmount" | "outstandingBalance" | "status" | "createdAt" | "createdById" | "createdByName" | "createdById" | "createdByName"> & { createdById?: string; createdByName?: string; businessKeySequence?: string }) => { success: boolean; commission?: CommissionObligation; error?: string };
   updateCommissionObligation: (id: string, patch: Partial<CommissionObligation>, modificationReason?: string) => { success: boolean; error?: string };
   collectAdministrativeFee: (
@@ -534,7 +507,6 @@ export interface DataContextType {
   recordFinancialAdjustment: (params: Omit<FinancialAdjustmentRecord, "id" | "adjustmentNumber" | "createdAt">) => { success: boolean; adjustment?: FinancialAdjustmentRecord; error?: string };
   reconcileSystemFinancialBalances: (shouldLogAudit?: boolean) => ReconciledFinancialBalances;
   checkFinancialEditPermission: (entityType: AuditLogEntry["entityType"], modificationReason?: string) => { allowed: boolean; error?: string };
-
   // Master Data CRUD
   addOwner: (owner: Omit<Owner, "id" | "createdAt">) => Owner;
   updateOwner: (id: string, patch: Partial<Owner>) => void;
@@ -555,7 +527,6 @@ export interface DataContextType {
   validateUnitAvailability: (unitId: string, options?: { targetLeaseId?: string; renewalOriginalLeaseId?: string; isRenewal?: boolean }) => UnitAvailabilityValidationResult;
   getUnitOccupancyStatus: (unitId: string) => UnitOccupancySummary;
   reconcileUnitOccupancy: () => { reconciledCount: number; mismatches: UnitReconciliationMismatch[] };
-
   // PHASE 45: Lease Renewal & Deferred Payments
   leaseRenewals: LeaseRenewalRecord[];
   deferredPayments: DeferredPaymentRecord[];
@@ -574,7 +545,6 @@ export interface DataContextType {
   dispatchDeferredReminderNotification: (deferredId: string, targetType?: "TENANT" | "RESPONSIBLE_EMPLOYEE") => Promise<{ success: boolean; message: string }>;
   dispatchNewLeaseNotification: (leaseId: string) => Promise<{ success: boolean; message: string }>;
   dispatchChequeCollectedNotification: (chequeId: string) => Promise<{ success: boolean; message: string }>;
-
   // Cheque Management
   addCheque: (chequeData: Omit<Cheque, "id" | "createdAt" | "totalApplied" | "outstanding" | "whatsAppStatus" | "reminderCount">) => Cheque;
   updateCheque: (id: string, patch: Partial<Cheque>, modificationReason?: string) => { success: boolean; error?: string };
@@ -620,14 +590,11 @@ export interface DataContextType {
     settlementRef?: string;
     userId?: string;
   }) => { success: boolean; error?: string };
-  
   extractChequeOCR: (imageBase64: string, mimeType?: string) => Promise<any>;
   extractChequeBatchOCR: (payload: { imageBase64?: string; images?: string[]; mimeType?: string }) => Promise<any>;
   extractDocumentOCR: (documentType: string, imageBase64: string, mimeType?: string) => Promise<any>;
-
   markInstallmentAsBounced: (leaseId: string, installmentNumber: number, reason?: string) => { success: boolean; cheque?: Cheque; error?: string };
   updateLeaseInstallmentStatus: (leaseId: string, installmentNumber: number, status: "PENDING" | "CLEARED" | "BOUNCED" | "COLLECTED" | "WAIVED", chequeId?: string) => { success: boolean; error?: string };
-
   // Collections
   recordCollection: (params: {
     chequeId: string;
@@ -641,7 +608,6 @@ export interface DataContextType {
     fromCase?: boolean;
   }) => Promise<{ success: boolean; appliedAmount: number; isOverpayment: boolean; receipt?: CollectionRecord; error?: string }>;
   deleteCollection: (id: string, options?: DeleteRecordOptions) => void;
-
   // Cases & Hearings
   addCase: (caseData: Omit<RentalCase, "id" | "createdAt" | "updatedAt">) => void;
   convertChequesToCase: (params: {
@@ -696,12 +662,10 @@ export interface DataContextType {
   }) => Promise<{ success: boolean; error?: string; receipt?: CollectionRecord }>;
   clearSettlementCheque: (caseId: string, installmentId: string) => Promise<{ success: boolean; error?: string; receipt?: CollectionRecord }>;
   updateSettlementCheque: (caseId: string, installmentId: string, chequeData: { chequeNumber: string; chequeDate: string; bankName: string }) => void;
-
   // Historical Records & Archiving
   deleteHistoricalRecord: (id: string) => void;
   restoreHistoricalRecord: (id: string) => { success: boolean; message?: string };
   checkDeleteIntegrity: (entityType: EntityIntegrityType, entityId: string) => DeleteIntegrityCheckResult;
-
   // Case Documents
   addCaseDocument: (
     caseId: string,
@@ -710,7 +674,6 @@ export interface DataContextType {
   ) => Promise<{ success: boolean; document?: CaseDocumentItem; driveLink?: string; error?: string }>;
   deleteCaseDocument: (caseId: string, docId: string) => void;
   syncCaseDocumentToDrive: (caseId: string, docId: string) => Promise<{ success: boolean; driveLink?: string; error?: string }>;
-
   // Cheque Images & Google Drive Sync
   uploadChequeImage: (
     chequeId: string,
@@ -719,7 +682,6 @@ export interface DataContextType {
   ) => Promise<{ success: boolean; driveLink?: string; error?: string }>;
   syncChequeToDrive: (chequeId: string) => Promise<{ success: boolean; driveLink?: string; error?: string }>;
   deleteChequeImage: (chequeId: string) => void;
-
   // Archive
   addArchiveItem: (item: Omit<ElectronicArchiveItem, "id" | "createdAt" | "downloadToken" | "fileHash"> & { fileHash?: string }) => ElectronicArchiveItem;
   uploadAndArchiveDocument: (
@@ -729,18 +691,15 @@ export interface DataContextType {
   deleteArchiveItem: (id: string) => void;
   generateSecureDownloadToken: (id: string) => string;
   syncArchiveItemToDrive: (id: string) => Promise<{ success: boolean; driveLink?: string; error?: string }>;
-
   // Notifications & Operational Communications
   operationalCommunications: OperationalCommunicationRecord[];
   addOperationalCommunication: (data: Omit<OperationalCommunicationRecord, "id" | "createdAt"> & { id?: string; createdAt?: string }) => Promise<{ success: boolean; id?: string }>;
   dispatchWhatsAppReminder: (chequeId: string) => Promise<{ success: boolean; message: string }>;
   dispatchEmailReminder: (chequeId: string) => Promise<{ success: boolean; message: string }>;
-
   // Risk
   updateRiskConfig: (newWeights: Partial<RiskConfigWeights>) => void;
   updateRiskWeights?: (newWeights: Partial<RiskConfigWeights>) => void;
   recalculateTenantRisk: (tenantId: string) => void;
-
   // Import & Batch Deduplication
   importBatchData: (type: "OWNERS" | "TENANTS" | "PROPERTIES" | "CHEQUES" | "LEASES", records: any[]) => { total: number; successCount: number; errors: string[] };
   importOwnersBatch: (records: Array<{
@@ -769,7 +728,6 @@ export interface DataContextType {
     nationality?: string;
     status?: "ACTIVE" | "INACTIVE" | "BLACKLISTED";
   }>) => Promise<{ total: number; importedCount: number; updatedCount: number; errors: string[] }>;
-
   // Maintenance Management
   addMaintenanceRequest: (
     data: Omit<MaintenanceRequest, "id" | "requestNumber" | "createdAt" | "updatedAt" | "timeline" | "invoices" | "attachments" | "notes"> & {
@@ -805,7 +763,6 @@ export interface DataContextType {
   updateMaintenanceSettings: (settings: Partial<MaintenanceSettings>) => void;
   legalSettings: LegalSettings;
   updateLegalSettings: (settings: Partial<LegalSettings>) => void;
-
   // Notifications
   addNotification: (notification: Omit<NotificationRecord, "id" | "createdAt">) => NotificationRecord;
   logAudit: (
@@ -817,13 +774,11 @@ export interface DataContextType {
     oldValue?: string,
     newValue?: string
   ) => void;
-
   // Admin DB Actions
   clearTable: (tableName: string) => void;
   resetDatabase: () => Promise<void> | void;
   exportDatabaseJSON: () => string;
   importDatabaseJSON: (jsonStr: string) => boolean;
-
   // Office Petty Cash Module
   officePettyCashMonths: OfficePettyCashMonth[];
   officePettyCashExpenses: OfficePettyCashExpense[];
@@ -844,15 +799,12 @@ export interface DataContextType {
   deleteOfficePettyCashExpense: (id: string, modificationReason?: string) => { success: boolean; error?: string };
   addOfficePettyCashCategory: (data: Omit<OfficePettyCashCategory, "id" | "active" | "createdAt">) => { success: boolean; category?: OfficePettyCashCategory; error?: string };
   updateOfficePettyCashCategory: (id: string, patch: Partial<OfficePettyCashCategory>) => { success: boolean; error?: string };
-
   // Saqr Office Account Module
   saqrOfficeConfig: SaqrOfficeConfig;
   saqrOfficeManualTransactions: SaqrOfficeManualTransaction[];
   updateSaqrOfficeConfig: (patch: Partial<SaqrOfficeConfig>) => void;
   addOfficeSaqrTransaction: (tx: SaqrOfficeManualTransaction) => void;
   deleteOfficeSaqrTransaction: (id: string) => void;
-
-
   // Sequence Number Generators
   getNextOwnerCode: () => string;
   getNextTenantCode: () => string;
@@ -869,9 +821,7 @@ export interface DataContextType {
   getNextRenewalNumber: () => string;
   getNextDeferredNumber: () => string;
 }
-
 const DataContext = createContext<DataContextType | undefined>(undefined);
-
 export const DEFAULT_COMPANY_PROFILE: CompanyProfile = {
   nameAr: "صقر الامارات للعقارات",
   nameEn: "Emirates Falcon Real Estate",
@@ -891,7 +841,6 @@ export const DEFAULT_COMPANY_PROFILE: CompanyProfile = {
   logoBase64: "https://lh3.googleusercontent.com/d/1kBQRAzMLvisn4bjDnaehnAEQLiRyVjgp",
   logo: "https://lh3.googleusercontent.com/d/1kBQRAzMLvisn4bjDnaehnAEQLiRyVjgp",
 };
-
 function safeLoadFromStorage<T>(key: string, fallback: T): T {
   try {
     const saved = localStorage.getItem(key);
@@ -902,7 +851,6 @@ function safeLoadFromStorage<T>(key: string, fallback: T): T {
     return fallback;
   }
 }
-
 function stripLargeBase64ForStorage(obj: any, depth = 0): any {
   if (depth > 12 || obj === null || obj === undefined) return obj;
   if (typeof obj === "string") {
@@ -929,7 +877,6 @@ function stripLargeBase64ForStorage(obj: any, depth = 0): any {
   }
   return obj;
 }
-
 function safeSaveToStorage(key: string, data: any): void {
   try {
     const sanitized = stripLargeBase64ForStorage(data);
@@ -966,7 +913,6 @@ function safeSaveToStorage(key: string, data: any): void {
     }
   }
 }
-
 const INITIAL_PETTY_CASH_CATEGORIES: OfficePettyCashCategory[] = [
   { id: "cat-groceries", nameArabic: "البقالة ومستلزمات المكتب", nameEnglish: "Groceries & Office Supplies", active: true, createdAt: new Date().toISOString() },
   { id: "cat-electricity", nameArabic: "الكهرباء", nameEnglish: "Electricity", active: true, createdAt: new Date().toISOString() },
@@ -983,7 +929,6 @@ const INITIAL_PETTY_CASH_CATEGORIES: OfficePettyCashCategory[] = [
   { id: "cat-govt-fees", nameArabic: "الرسوم الحكومية والمعاملات", nameEnglish: "Government Fees", active: true, createdAt: new Date().toISOString() },
   { id: "cat-other", nameArabic: "مصاريف أخرى", nameEnglish: "Other", active: true, createdAt: new Date().toISOString() },
 ];
-
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [dailyDeposits, setDailyDeposits] = useState<DailyDepositRecord[]>(() => {
     return safeLoadFromStorage("ef_daily_deposits_v12", []);
@@ -996,38 +941,30 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     safeSetDoc(doc(db, "deposit_batches", batch.id), batch);
     logAudit("FINANCIAL_RECORD_ADD", "DEPOSIT_BATCH", batch.id, `حافظة إيداع #${batch.id}`, "تم إنشاء حافظة إيداع جديدة");
   };
-
   const updateDepositBatch = (id: string, patch: Partial<DepositBatchRecord>) => {
     setDepositBatches(prev => prev.map(b => b.id === id ? { ...b, ...patch } : b));
     safeSetDoc(doc(db, "deposit_batches", id), patch, { merge: true });
     logAudit("FINANCIAL_RECORD_EDIT", "DEPOSIT_BATCH", id, `حافظة إيداع #${id}`, "تم تحديث حالة حافظة الإيداع");
   };
-
   const { currentUser, hasPermission } = useAuth();
   const { t } = useLanguage();
   const { language } = useLanguage();
-
   const [isQuotaExceeded, setIsQuotaExceeded] = useState(false);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
-
   useEffect(() => {
     // Artificial brief loading state to prevent UI flashes during initial load
     const timer = setTimeout(() => setIsDataLoaded(true), 1500);
     return () => clearTimeout(timer);
   }, []);
-
   const [owners, setOwners] = useState<Owner[]>(() => {
     return safeLoadFromStorage("ef_owners_v12", []);
   });
-
   const [properties, setProperties] = useState<Property[]>(() => {
     return safeLoadFromStorage("ef_properties_v12", []);
   });
-
   const [units, setUnits] = useState<Unit[]>(() => {
     return safeLoadFromStorage("ef_units_v12", []);
   });
-
   const [tenants, setTenants] = useState<Tenant[]>(() => {
     const raw: Tenant[] = safeLoadFromStorage("ef_tenants_v12", []);
     return raw.map((t) => ({
@@ -1038,11 +975,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       activeCasesCount: t.activeCasesCount || 0,
     }));
   });
-
   const [leases, setLeases] = useState<Lease[]>(() => {
     return safeLoadFromStorage("ef_leases_v12", []);
   });
-
   const [cheques, setCheques] = useState<Cheque[]>(() => {
     const raw: Cheque[] = safeLoadFromStorage("ef_cheques_v12", []);
     return raw.map((c) => {
@@ -1059,11 +994,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     });
   });
-
   const [collections, setCollections] = useState<CollectionRecord[]>(() => {
     return safeLoadFromStorage("ef_collections_v12", []);
   });
-
   const [cases, setCases] = useState<RentalCase[]>(() => {
     const raw: RentalCase[] = safeLoadFromStorage("ef_cases_v12", []);
     return raw.map((c) => {
@@ -1080,19 +1013,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     });
   });
-
   const [archive, setArchive] = useState<ElectronicArchiveItem[]>(() => {
     return safeLoadFromStorage("ef_archive_v12", []);
   });
-
   const [notifications, setNotifications] = useState<NotificationRecord[]>(() => {
     return safeLoadFromStorage("ef_notifications_v12", []);
   });
-
   const [riskConfig, setRiskConfig] = useState<RiskConfigWeights>(() => {
     return safeLoadFromStorage("ef_risk_config_v12", INITIAL_RISK_CONFIG);
   });
-
   const [messageTemplates, setMessageTemplates] = useState<MessageTemplate[]>([
     {
       id: "CHEQUE_COLLECTED",
@@ -1140,57 +1069,44 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       variables: ["{tenantName}", "{chequeNumber}", "{chequeAmount}", "{dueDate}"]
     }
   ]);
-
   const updateMessageTemplate = (id: string, patch: Partial<MessageTemplate>) => {
     setMessageTemplates(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t));
     // Save to firestore logic can be added here
   };
-
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(() => {
     return safeLoadFromStorage("ef_audit_logs_v12", []);
   });
-
   const [historicalRecords, setHistoricalRecords] = useState<HistoricalRecord[]>(() => {
     return safeLoadFromStorage("ef_historical_records_v12", []);
   });
-
   const [financialPeriods, setFinancialPeriods] = useState<FinancialPeriod[]>(() => {
     const loaded = safeLoadFromStorage<FinancialPeriod[]>("ef_financial_periods_v1", []);
     return loaded && loaded.length > 0 ? loaded : INITIAL_FINANCIAL_PERIODS;
   });
-
   const [periodCertifications, setPeriodCertifications] = useState<ForensicClosingCertification[]>(() => {
     return safeLoadFromStorage("ef_period_certifications_v1", []);
   });
-
   const [maintenanceRequests, setMaintenanceRequests] = useState<MaintenanceRequest[]>(() => {
     return safeLoadFromStorage("ef_maintenance_requests_v12", []);
   });
-
   const [technicians, setTechnicians] = useState<Technician[]>(() => {
     return safeLoadFromStorage("ef_technicians_v12", []);
   });
-
   const [maintenanceSettings, setMaintenanceSettings] = useState<MaintenanceSettings>(() => {
     return safeLoadFromStorage("ef_maintenance_settings_v12", INITIAL_MAINTENANCE_SETTINGS);
   });
-  
   const [legalSettings, setLegalSettings] = useState<LegalSettings>(() => {
     return safeLoadFromStorage("ef_legal_settings_v12", INITIAL_LEGAL_SETTINGS);
   });
-
   const [commissions, setCommissions] = useState<CommissionObligation[]>(() => {
     return safeLoadFromStorage("ef_commissions_v12", []);
   });
-
   const [paymentAllocations, setPaymentAllocations] = useState<PaymentAllocation[]>(() => {
     return safeLoadFromStorage("ef_payment_allocations_v12", []);
   });
-
   const [financialReversals, setFinancialReversals] = useState<FinancialReversalRecord[]>(() => {
     return safeLoadFromStorage("ef_financial_reversals_v12", []);
   });
-
   const checkCaseControlledCheque = (chequeId: string): { isControlled: boolean; caseId?: string; caseNumber?: string } => {
     const chq = cheques.find(c => c.id === chequeId);
     if (!chq || !chq.convertedToCaseId) {
@@ -1206,55 +1122,42 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     return { isControlled: false };
   };
-
   const [financialAdjustments, setFinancialAdjustments] = useState<FinancialAdjustmentRecord[]>(() => {
     return safeLoadFromStorage("ef_financial_adjustments_v12", []);
   });
-
   const [chartOfAccounts, setChartOfAccounts] = useState<AccountDefinition[]>(() => {
     return safeLoadFromStorage("ef_chart_of_accounts_v12", INITIAL_CHART_OF_ACCOUNTS);
   });
-
   const [journalEntries, setJournalEntries] = useState<JournalEntryRecord[]>(() => {
     return safeLoadFromStorage("ef_journal_entries_v12", []);
   });
-
   const [ownerTransfers, setOwnerTransfers] = useState<OwnerTransferRecord[]>(() => {
     return safeLoadFromStorage("ef_owner_transfers_v12", []);
   });
-
   const [propertyExpenses, setPropertyExpenses] = useState<PropertyExpenseRecord[]>(() => {
     return safeLoadFromStorage("ef_property_expenses_v12", []);
   });
-
   const [collectionActions, setCollectionActions] = useState<CollectionAction[]>(() => {
     return safeLoadFromStorage("ef_collection_actions_v12", []);
   });
-
   const [paymentPromises, setPaymentPromises] = useState<PaymentPromise[]>(() => {
     return safeLoadFromStorage("ef_payment_promises_v12", []);
   });
-
   const [leaseRenewals, setLeaseRenewals] = useState<LeaseRenewalRecord[]>(() => {
     return safeLoadFromStorage("ef_lease_renewals_v12", []);
   });
-
   const [deferredPayments, setDeferredPayments] = useState<DeferredPaymentRecord[]>(() => {
     return safeLoadFromStorage("ef_deferred_payments_v12", []);
   });
-
   const [officePettyCashMonths, setOfficePettyCashMonths] = useState<OfficePettyCashMonth[]>(() => {
     return safeLoadFromStorage("ef_office_petty_cash_months_v12", []);
   });
-
   const [officePettyCashExpenses, setOfficePettyCashExpenses] = useState<OfficePettyCashExpense[]>(() => {
     return safeLoadFromStorage("ef_office_petty_cash_expenses_v12", []);
   });
-
   const [officePettyCashCategories, setOfficePettyCashCategories] = useState<OfficePettyCashCategory[]>(() => {
     return safeLoadFromStorage("ef_office_petty_cash_categories_v12", INITIAL_PETTY_CASH_CATEGORIES);
   });
-
   const [saqrOfficeConfig, setSaqrOfficeConfig] = useState<SaqrOfficeConfig>(() => {
     return safeLoadFromStorage("ef_saqr_office_config_v1", {
       officeNameAr: "مكتب صقر الامارات للعقارات",
@@ -1265,11 +1168,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       currency: "AED",
     });
   });
-
   const [saqrOfficeManualTransactions, setSaqrOfficeManualTransactions] = useState<SaqrOfficeManualTransaction[]>(() => {
     return safeLoadFromStorage("ef_saqr_office_manual_tx_v1", []);
   });
-
   const [vatRates, setVatRates] = useState<VatRateRecord[]>(() => {
     const raw = safeLoadFromStorage("ef_vat_rates_v12", []);
     if (raw.length === 0) {
@@ -1286,12 +1187,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     return raw;
   });
-
-
   const [operationalCommunications, setOperationalCommunications] = useState<OperationalCommunicationRecord[]>(() => {
     return safeLoadFromStorage("ef_operational_communications_v12", []);
   });
-
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(() => {
     const parsed = safeLoadFromStorage<CompanyProfile>("ef_company_profile_v12", DEFAULT_COMPANY_PROFILE);
     if (!parsed.addressAr || parsed.addressAr === "دبي، الإمارات العربية المتحدة") {
@@ -1301,7 +1199,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     return { ...DEFAULT_COMPANY_PROFILE, ...parsed };
   });
-
   // Sync to localStorage safely
   useEffect(() => { safeSaveToStorage("ef_owners_v12", owners); }, [owners]);
   useEffect(() => { safeSaveToStorage("ef_properties_v12", properties); }, [properties]);
@@ -1335,7 +1232,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => { safeSaveToStorage("ef_vat_rates_v12", vatRates); }, [vatRates]);
   useEffect(() => { safeSaveToStorage("ef_financial_periods_v1", financialPeriods); }, [financialPeriods]);
   useEffect(() => { safeSaveToStorage("ef_period_certifications_v1", periodCertifications); }, [periodCertifications]);
-
   useEffect(() => { safeSaveToStorage("ef_daily_deposits_v12", dailyDeposits); }, [dailyDeposits]);
   useEffect(() => { safeSaveToStorage("ef_deposit_batches_v12", depositBatches); }, [depositBatches]);
   useEffect(() => { safeSaveToStorage("ef_archive_v12", archive); }, [archive]);
@@ -1345,18 +1241,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => { safeSaveToStorage("ef_audit_logs_v12", auditLogs); }, [auditLogs]);
   useEffect(() => { safeSaveToStorage("ef_historical_records_v12", historicalRecords); }, [historicalRecords]);
   useEffect(() => { if (companyProfile) safeSaveToStorage("ef_company_profile_v12", companyProfile); }, [companyProfile]);
-
   // Safe Firestore document setter that automatically sanitizes undefined fields
   const safeSetDoc = async (documentRef: any, data: any, options?: { merge?: boolean }) => {
     try {
       let cleanData = sanitizeForFirestore(data);
       const path = documentRef?.path || "";
-
       // Recursively strip or truncate large base64 data URLs to prevent exceeding Firestore 1MB document size limit
       const stripOrTruncateLargeFields = (obj: any, currentDepth = 0): any => {
         if (currentDepth > 15) return obj; // Prevent infinite recursion loops
         if (obj === null || obj === undefined) return obj;
-
         if (typeof obj === "string") {
           // Check for large base64 data URLs (typically starts with "data:")
           if (obj.startsWith("data:") && obj.length > 50000) {
@@ -1371,11 +1264,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
           return obj;
         }
-
         if (Array.isArray(obj)) {
           return obj.map((item) => stripOrTruncateLargeFields(item, currentDepth + 1));
         }
-
         if (typeof obj === "object") {
           // Preserve special Firestore constructor classes like FieldValue
           if (obj.constructor && obj.constructor.name && obj.constructor.name.includes("FieldValue")) {
@@ -1387,12 +1278,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
           return cleaned;
         }
-
         return obj;
       };
-
       cleanData = stripOrTruncateLargeFields(cleanData);
-
       if (options) {
         await setDoc(documentRef, cleanData, options);
       } else {
@@ -1402,7 +1290,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error("Firestore safeSetDoc error:", err);
     }
   };
-
   const safeDeleteDoc = async (documentRef: any) => {
     try {
       await deleteDoc(documentRef);
@@ -1410,7 +1297,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error("Firestore deleteDoc error:", error);
     }
   };
-
   // Real-time Firestore Sync across devices and users
   useEffect(() => {
     const checkQuotaError = (err: any) => {
@@ -1424,7 +1310,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsQuotaExceeded(true);
       }
     };
-
     const createErrorHandler = (colName: string, fallback: any, setter: any) => {
       return (err: any) => {
         handleFirestoreError(err, OperationType.GET, colName);
@@ -1432,19 +1317,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setter((prev: any) => (prev && prev.length > 0 ? prev : (fallback || [])));
       };
     };
-
     const handleChequeError = (err: any) => {
       handleFirestoreError(err, OperationType.GET, "cheques");
       checkQuotaError(err);
       setCheques((prev) => (prev && prev.length > 0 ? prev : []));
     };
-
     const handleCaseError = (err: any) => {
       handleFirestoreError(err, OperationType.GET, "cases");
       checkQuotaError(err);
       setCases((prev) => (prev && prev.length > 0 ? prev : []));
     };
-
     const seedCollectionIfEmpty = async (colName: string, initialData: any[]) => {
       try {
         for (const item of initialData) {
@@ -1455,7 +1337,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error(`Error seeding ${colName}:`, e);
       }
     };
-
     const unsubOwners = onSnapshot(collection(db, "owners"), (snap) => {
       if (snap.empty) {
         setOwners([]);
@@ -1465,7 +1346,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setOwners(items);
       }
     }, createErrorHandler("owners", [], setOwners));
-
     const unsubProps = onSnapshot(collection(db, "properties"), (snap) => {
       if (snap.empty) {
         setProperties([]);
@@ -1475,7 +1355,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setProperties(items);
       }
     }, createErrorHandler("properties", [], setProperties));
-
     const unsubUnits = onSnapshot(collection(db, "units"), (snap) => {
       if (snap.empty) {
         setUnits([]);
@@ -1485,7 +1364,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUnits(items);
       }
     }, createErrorHandler("units", [], setUnits));
-
     const unsubTenants = onSnapshot(collection(db, "tenants"), (snap) => {
       if (snap.empty) {
         setTenants([]);
@@ -1495,7 +1373,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setTenants(items);
       }
     }, createErrorHandler("tenants", [], setTenants));
-
     const unsubLeases = onSnapshot(collection(db, "leases"), (snap) => {
       if (snap.empty) {
         setLeases([]);
@@ -1505,7 +1382,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLeases(items);
       }
     }, createErrorHandler("leases", [], setLeases));
-
     const unsubCheques = onSnapshot(collection(db, "cheques"), (snap) => {
       if (snap.empty) {
         setCheques([]);
@@ -1528,7 +1404,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCheques(items);
       }
     }, handleChequeError);
-
     const unsubCollections = onSnapshot(collection(db, "collections"), (snap) => {
       if (snap.empty) {
         setCollections([]);
@@ -1538,7 +1413,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCollections(items);
       }
     }, createErrorHandler("collections", [], setCollections));
-
     const unsubCases = onSnapshot(collection(db, "cases"), (snap) => {
       if (snap.empty) {
         setCases([]);
@@ -1560,7 +1434,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }));
       }
     }, handleCaseError);
-
     const unsubArchive = onSnapshot(collection(db, "archive"), (snap) => {
       if (snap.empty) {
         setArchive([]);
@@ -1570,7 +1443,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setArchive(items);
       }
     }, createErrorHandler("archive", [], setArchive));
-
     const unsubNotifications = onSnapshot(collection(db, "notifications"), (snap) => {
       if (snap.empty) {
         setNotifications([]);
@@ -1580,7 +1452,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setNotifications(items);
       }
     }, createErrorHandler("notifications", [], setNotifications));
-
     const unsubAudit = onSnapshot(collection(db, "auditLogs"), (snap) => {
       if (snap.empty) {
         setAuditLogs([]);
@@ -1590,7 +1461,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setAuditLogs(items);
       }
     }, createErrorHandler("auditLogs", [], setAuditLogs));
-
     const unsubHist = onSnapshot(collection(db, "historicalRecords"), (snap) => {
       if (snap.empty) {
         setHistoricalRecords([]);
@@ -1600,7 +1470,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setHistoricalRecords(items);
       }
     }, createErrorHandler("historicalRecords", [], setHistoricalRecords));
-
     const unsubMaint = onSnapshot(collection(db, "maintenance_requests"), (snap) => {
       if (snap.empty) {
         setMaintenanceRequests([]);
@@ -1610,7 +1479,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setMaintenanceRequests(items);
       }
     }, createErrorHandler("maintenance_requests", [], setMaintenanceRequests));
-
     const unsubTechs = onSnapshot(collection(db, "technicians"), (snap) => {
       if (snap.empty) {
         setTechnicians([]);
@@ -1620,7 +1488,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setTechnicians(items);
       }
     }, createErrorHandler("technicians", [], setTechnicians));
-
     const unsubCommissions = onSnapshot(collection(db, "commissions"), (snap) => {
       if (!snap.empty) {
         const items: CommissionObligation[] = [];
@@ -1628,7 +1495,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCommissions(items);
       }
     }, createErrorHandler("commissions", [], setCommissions));
-
     const unsubAllocations = onSnapshot(collection(db, "payment_allocations"), (snap) => {
       if (!snap.empty) {
         const items: PaymentAllocation[] = [];
@@ -1636,7 +1502,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setPaymentAllocations(items);
       }
     }, createErrorHandler("payment_allocations", [], setPaymentAllocations));
-
     const unsubReversals = onSnapshot(collection(db, "financial_reversals"), (snap) => {
       if (!snap.empty) {
         const items: FinancialReversalRecord[] = [];
@@ -1644,7 +1509,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setFinancialReversals(items);
       }
     }, createErrorHandler("financial_reversals", [], setFinancialReversals));
-
     const unsubAdjustments = onSnapshot(collection(db, "financial_adjustments"), (snap) => {
       if (!snap.empty) {
         const items: FinancialAdjustmentRecord[] = [];
@@ -1652,7 +1516,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setFinancialAdjustments(items);
       }
     }, createErrorHandler("financial_adjustments", [], setFinancialAdjustments));
-
     const unsubTransfers = onSnapshot(collection(db, "owner_transfers"), (snap) => {
       if (!snap.empty) {
         const items: OwnerTransferRecord[] = [];
@@ -1660,7 +1523,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setOwnerTransfers(items);
       }
     }, createErrorHandler("owner_transfers", [], setOwnerTransfers));
-
     const unsubExpenses = onSnapshot(collection(db, "property_expenses"), (snap) => {
       if (!snap.empty) {
         const items: PropertyExpenseRecord[] = [];
@@ -1668,7 +1530,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setPropertyExpenses(items);
       }
     }, createErrorHandler("property_expenses", [], setPropertyExpenses));
-
     const unsubCollectionActions = onSnapshot(collection(db, "collection_actions"), (snap) => {
       if (!snap.empty) {
         const items: CollectionAction[] = [];
@@ -1676,7 +1537,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCollectionActions(items);
       }
     }, createErrorHandler("collection_actions", [], setCollectionActions));
-
     const unsubPaymentPromises = onSnapshot(collection(db, "payment_promises"), (snap) => {
       if (!snap.empty) {
         const items: PaymentPromise[] = [];
@@ -1684,7 +1544,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setPaymentPromises(items);
       }
     }, createErrorHandler("payment_promises", [], setPaymentPromises));
-
     const unsubRenewals = onSnapshot(collection(db, "lease_renewals"), (snap) => {
       if (!snap.empty) {
         const items: LeaseRenewalRecord[] = [];
@@ -1692,7 +1551,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLeaseRenewals(items);
       }
     }, createErrorHandler("lease_renewals", [], setLeaseRenewals));
-
     const unsubDeferred = onSnapshot(collection(db, "deferred_payments"), (snap) => {
       if (!snap.empty) {
         const items: DeferredPaymentRecord[] = [];
@@ -1700,7 +1558,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setDeferredPayments(items);
       }
     }, createErrorHandler("deferred_payments", [], setDeferredPayments));
-
     const unsubCOA = onSnapshot(collection(db, "chart_of_accounts"), (snap) => {
       if (snap.empty) {
         seedCollectionIfEmpty("chart_of_accounts", INITIAL_CHART_OF_ACCOUNTS);
@@ -1711,7 +1568,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setChartOfAccounts(items);
       }
     }, createErrorHandler("chart_of_accounts", INITIAL_CHART_OF_ACCOUNTS, setChartOfAccounts));
-
     const unsubJournals = onSnapshot(collection(db, "journal_entries"), (snap) => {
       if (!snap.empty) {
         const items: JournalEntryRecord[] = [];
@@ -1719,7 +1575,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setJournalEntries(items);
       }
     }, createErrorHandler("journal_entries", [], setJournalEntries));
-
     const unsubPettyCashMonths = onSnapshot(collection(db, "office_petty_cash_months"), (snap) => {
       if (!snap.empty) {
         const items: OfficePettyCashMonth[] = [];
@@ -1727,7 +1582,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setOfficePettyCashMonths(items);
       }
     }, createErrorHandler("office_petty_cash_months", [], setOfficePettyCashMonths));
-
     const unsubPettyCashExpenses = onSnapshot(collection(db, "office_petty_cash_expenses"), (snap) => {
       if (!snap.empty) {
         const items: OfficePettyCashExpense[] = [];
@@ -1735,7 +1589,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setOfficePettyCashExpenses(items);
       }
     }, createErrorHandler("office_petty_cash_expenses", [], setOfficePettyCashExpenses));
-
     const unsubPettyCashCategories = onSnapshot(collection(db, "office_petty_cash_categories"), (snap) => {
       if (snap.empty) {
         seedCollectionIfEmpty("office_petty_cash_categories", INITIAL_PETTY_CASH_CATEGORIES);
@@ -1746,7 +1599,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setOfficePettyCashCategories(items);
       }
     }, createErrorHandler("office_petty_cash_categories", INITIAL_PETTY_CASH_CATEGORIES, setOfficePettyCashCategories));
-
     const unsubVatRates = onSnapshot(collection(db, "vatRates"), (snap) => {
       if (snap.empty) {
         const initialVat = [{
@@ -1767,7 +1619,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setVatRates(items);
       }
     }, createErrorHandler("vatRates", [], setVatRates));
-
     const unsubFinancialPeriods = onSnapshot(collection(db, "financial_periods"), (snap) => {
       if (snap.empty) {
         seedCollectionIfEmpty("financial_periods", INITIAL_FINANCIAL_PERIODS);
@@ -1782,7 +1633,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setFinancialPeriods(merged);
       }
     }, createErrorHandler("financial_periods", INITIAL_FINANCIAL_PERIODS, setFinancialPeriods));
-
     const unsubPeriodCertifications = onSnapshot(collection(db, "period_certifications"), (snap) => {
       if (!snap.empty) {
         const items: ForensicClosingCertification[] = [];
@@ -1790,7 +1640,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setPeriodCertifications(items);
       }
     }, createErrorHandler("period_certifications", [], setPeriodCertifications));
-
     const unsubDailyDeposits = onSnapshot(collection(db, "daily_deposits"), (snap) => {
       if (!snap.empty) {
         const items: DailyDepositRecord[] = [];
@@ -1800,7 +1649,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setDailyDeposits([]);
       }
     }, createErrorHandler("daily_deposits", [], setDailyDeposits));
-
     const unsubDepositBatches = onSnapshot(collection(db, "deposit_batches"), (snap) => {
       if (!snap.empty) {
         const items: DepositBatchRecord[] = [];
@@ -1810,7 +1658,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setDepositBatches([]);
       }
     }, createErrorHandler("deposit_batches", [], setDepositBatches));
-
     const unsubCompanyProfile = onSnapshot(doc(db, "settings", "companyProfile"), (docSnap) => {
       if (docSnap.exists()) {
         const remoteData = docSnap.data() as CompanyProfile;
@@ -1820,7 +1667,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       handleFirestoreError(err, OperationType.GET, "settings/companyProfile");
       checkQuotaError(err);
     });
-
     return () => {
       unsubCompanyProfile();
       unsubDailyDeposits();
@@ -1859,7 +1705,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       unsubPettyCashCategories();
     };
   }, []);
-
   // Audit Logger
   const logAudit = (
     action: AuditLogEntry["action"],
@@ -1889,7 +1734,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAuditLogs((prev) => [entry, ...prev]);
     safeSetDoc(doc(db, "auditLogs", entry.id), entry);
   };
-
   // Helper for Saving Snapshots into Historical Records (Versioning & Deletion Archive)
   const saveEntitySnapshot = (
     entityType: HistoricalRecord["entityType"],
@@ -1900,15 +1744,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!entity) return undefined;
     const isDeletion = recordType === "DELETION";
     const keepAttachments = options?.keepAttachments !== false;
-
     // Find any linked archive items
     const linkedDocs = archive.filter(
       (a) => a.recordId === entity.id || a.entityId === entity.id
     );
-
     // Extract attachments
     const retainedAttachments: RetainedAttachment[] = [];
-
     // Add from archive collection
     linkedDocs.forEach((d) => {
       retainedAttachments.push({
@@ -1922,7 +1763,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         uploadedAt: d.createdAt,
       });
     });
-
     // Check direct file fields (e.g. cheque imageUrl, caseDocuments)
     if (entity.imageUrl && !retainedAttachments.some((a) => a.fileUrl === entity.imageUrl)) {
       retainedAttachments.push({
@@ -1935,7 +1775,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         uploadedAt: new Date().toISOString(),
       });
     }
-
     if (Array.isArray(entity.caseDocuments)) {
       entity.caseDocuments.forEach((cd: any) => {
         if (!retainedAttachments.some((a) => a.id === cd.id)) {
@@ -1951,7 +1790,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       });
     }
-
     // Handle archive collection based on user choice
     if (isDeletion) {
       if (keepAttachments) {
@@ -1980,12 +1818,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     }
-
     // Determine entity code, title, and current status
     let entityCode = entity.id;
     let entityTitle = "";
     let currentStatus = "ACTIVE";
-
     switch (entityType) {
       case "LEASE":
         entityCode = entity.leaseNumber || entity.id;
@@ -2033,7 +1869,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentStatus = entity.status || "OPEN";
         break;
     }
-
     let snapshotData = JSON.parse(JSON.stringify(entity));
     if (entityType === "MAINTENANCE") {
       const u = units.find((x) => x.id === entity.unitId);
@@ -2127,7 +1962,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ownerName: o?.nameAr || o?.nameEn || snapshotData.ownerName,
       };
     }
-
     const histRecord: HistoricalRecord = {
       id: "hist-" + Date.now() + "-" + crypto.randomUUID().split("-")[0],
       originalId: entity.id,
@@ -2146,10 +1980,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       retainedAttachments: retainedAttachments,
       snapshotData: snapshotData,
     };
-
     setHistoricalRecords((prev) => [histRecord, ...prev]);
     safeSetDoc(doc(db, "historicalRecords", histRecord.id), histRecord);
-
     logAudit(
       isDeletion ? "DELETE" : "UPDATE",
       "HISTORICAL_RECORD",
@@ -2159,10 +1991,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ? `تم حذف ${entityTitle} وحفظه في السجلات التاريخية بحالة (${currentStatus}). تم الاحتفاظ بـ (${histRecord.retainedAttachmentsCount}) مرفق.`
         : `تم حفظ نسخة احتياطية (Version) لـ ${entityTitle} قبل التعديل.`
     );
-
     return histRecord;
   };
-
   const archiveEntityToHistory = (
     entityType: HistoricalRecord["entityType"],
     entity: any,
@@ -2170,15 +2000,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): HistoricalRecord | undefined => {
     return saveEntitySnapshot(entityType, entity, "DELETION", options);
   };
-
   const restoreHistoricalRecord = (id: string): { success: boolean; message?: string } => {
     const record = historicalRecords.find((r) => r.id === id);
     if (!record || !record.snapshotData) {
       return { success: false, message: "Record not found in historical archive" };
     }
-
     const data = record.snapshotData;
-
     switch (record.entityType) {
       case "LEASE":
         setLeases((prev) => [data as Lease, ...prev.filter((l) => l.id !== data.id)]);
@@ -2231,13 +2058,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         safeSetDoc(doc(db, "maintenance_requests", data.id), data);
         break;
     }
-
     // Remove from historicalRecords if it was a deletion
     if (record.recordType === "DELETION") {
       setHistoricalRecords((prev) => prev.filter((r) => r.id !== id));
       deleteDoc(doc(db, "historicalRecords", id)).catch(() => {});
     }
-
     logAudit(
       "STATUS_CHANGE",
       "HISTORICAL_RECORD",
@@ -2247,7 +2072,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ? `تم استعادة سجل محذوف: ${record.entityTitle}`
         : `تم الرجوع عن تعديل واستعادة نسخة سابقة: ${record.entityTitle}`
     );
-
     return { 
       success: true, 
       message: record.recordType === "DELETION" 
@@ -2255,7 +2079,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         : `تم الرجوع عن التعديلات بنجاح` 
     };
   };
-
   const deleteHistoricalRecord = (id: string) => {
     const record = historicalRecords.find((r) => r.id === id);
     setHistoricalRecords((prev) => prev.filter((r) => r.id !== id));
@@ -2270,7 +2093,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
     }
   };
-
   // Helper for dynamic Tenant Risk Scoring
   const calculateTenantRisk = (tntId: string, customWeights = riskConfig): { score: number; level: RiskLevel; factors: string[] } => {
     const tenantCheques = cheques.filter((c) => c.tenantId === tntId);
@@ -2279,28 +2101,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const bouncedCheques = tenantCheques.filter((c) => c.originalStatus === "BOUNCED");
     const bouncedCount = bouncedCheques.length;
     const totalOutstanding = bouncedCheques.reduce((sum, c) => sum + c.outstanding, 0);
-
     const factors: string[] = [];
-
     if (totalChequesCount === 0) {
       return { score: 10, level: "LOW", factors: ["No historical cheque records (New Tenant)"] };
     }
-
     const bounceRatio = totalChequesCount > 0 ? (bouncedCount / totalChequesCount) : 0;
-    
     // Compute normalized subscores (0 - 100)
     let bouncedCountScore = Math.min(bouncedCount * 30, 100);
     let ratioScore = Math.min(bounceRatio * 100, 100);
     let outstandingScore = Math.min((totalOutstanding / 100000) * 100, 100);
     let casesScore = Math.min(tenantCases.length * 50, 100);
-
     const totalWeight =
       customWeights.bouncedChequesCountWeight +
       customWeights.bouncedRatioWeight +
       customWeights.outstandingAmountWeight +
       customWeights.delayDaysWeight +
       customWeights.casesFiledWeight;
-
     const weightedScore = Math.round(
       (bouncedCountScore * customWeights.bouncedChequesCountWeight +
         ratioScore * customWeights.bouncedRatioWeight +
@@ -2308,31 +2124,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         casesScore * customWeights.casesFiledWeight) /
         totalWeight
     );
-
     const finalScore = Math.max(5, Math.min(weightedScore, 100));
-
     if (bouncedCount > 0) factors.push(`${bouncedCount} returned cheques historically`);
     if (totalOutstanding > 0) factors.push(`AED ${totalOutstanding.toLocaleString()} currently outstanding`);
     if (tenantCases.length > 0) factors.push(`${tenantCases.length} active rental dispute case(s)`);
     if (factors.length === 0) factors.push("Clean payment compliance track record");
-
     let level: RiskLevel = "LOW";
     if (finalScore > customWeights.mediumThreshold) {
       level = "HIGH";
     } else if (finalScore > customWeights.lowThreshold) {
       level = "MEDIUM";
     }
-
     return { score: finalScore, level, factors };
   };
-
   const recalculateTenantRisk = (tenantId: string) => {
     const risk = calculateTenantRisk(tenantId);
     setTenants((prev) =>
       prev.map((t) => (t.id === tenantId ? { ...t, riskScore: risk.score, riskLevel: risk.level, riskFactors: risk.factors } : t))
     );
   };
-
   // Automatically recalculate and link tenant risk whenever cheques, cases, or riskConfig change
   useEffect(() => {
     setTenants((prev) => {
@@ -2353,26 +2163,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return changed ? nextTenants : prev;
     });
   }, [cheques, cases, riskConfig]);
-
   // -------------------------------------------------------------
   // Master Data Methods with Duplicate Prevention & Data Integrity
   // -------------------------------------------------------------
-
   // Helper normalization functions for duplicate checking & data integrity using central Arabic normalizer
   const normalizeText = (str?: string): string => {
     return normalizeArabicText(str, true);
   };
-
   const normalizePhone = (phone?: string): string => {
     if (!phone) return "";
     return phone.replace(/[^\d+]/g, "").replace(/^00/, "+");
   };
-
   const normalizeIdNumber = (idStr?: string): string => {
     if (!idStr) return "";
     return idStr.replace(/[^\w]/g, "").toUpperCase();
   };
-
   const addOwner = (data: Omit<Owner, "id" | "createdAt">): Owner => {
     const newOwner: Owner = {
       ...data,
@@ -2384,7 +2189,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logAudit("CREATE", "OWNER", newOwner.id, newOwner.nameEn, `Created new owner profile ${newOwner.nameEn} (${newOwner.code})`);
     return newOwner;
   };
-
   const updateOwner = (id: string, patch: Partial<Owner>) => {
     const owner = owners.find((o) => o.id === id);
     if (owner) {
@@ -2395,7 +2199,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (o.id === id) {
           const updated = { ...o, ...patch };
           safeSetDoc(doc(db, "owners", id), updated, { merge: true });
-          
           // Cross-table update: Update ownerName in related cases
           if (patch.nameEn || patch.nameAr) {
             const newName = language === "ar" ? (patch.nameAr || o.nameAr) : (patch.nameEn || o.nameEn);
@@ -2410,15 +2213,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               })
             );
           }
-          
           if (patch.trn !== undefined && patch.trn !== o.trn) {
             logAudit("UPDATE", "OWNER", id, o.nameEn, `Updated TRN from ${o.trn || "غير مسجل"} to ${patch.trn || "غير مسجل"}`);
           }
-
           if (patch.specialAdminFeeRate !== undefined && patch.specialAdminFeeRate !== o.specialAdminFeeRate) {
             logAudit("UPDATE", "OWNER", id, o.nameEn, `Updated Special Admin Fee Rate from ${o.specialAdminFeeRate ?? "Default"}% to ${patch.specialAdminFeeRate}%`);
           }
-          
           logAudit("UPDATE", "OWNER", id, o.nameEn, `Updated owner details`);
           return updated;
         }
@@ -2426,26 +2226,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     );
   };
-
-
   const updateCompanyProfile = (profile: CompanyProfile) => {
     const fullProfile = { ...DEFAULT_COMPANY_PROFILE, ...profile };
     setCompanyProfile(fullProfile);
     safeSetDoc(doc(db, "settings", "companyProfile"), fullProfile, { merge: true });
     logAudit("UPDATE", "COMPANY_PROFILE", "COMPANY_PROFILE", "Company Profile", "تم تحديث بيانات ملف الشركة المركزي");
   };
-
   const activeLetterheadTemplate = (companyProfile?.letterheadTemplates || []).find(
     (t) => t.isActive || t.id === companyProfile?.activeLetterheadId
   );
-
   const addCompanyLetterheadTemplate = (
     templateData: Omit<CompanyLetterheadTemplate, "id" | "uploadedAt" | "uploadedByUserId" | "uploadedByUserName">
   ): { success: boolean; template?: CompanyLetterheadTemplate; error?: string } => {
     try {
       const existingTemplates = companyProfile?.letterheadTemplates || [];
       const isFirst = existingTemplates.length === 0;
-
       const newTemplate: CompanyLetterheadTemplate = {
         ...templateData,
         id: "lh_" + Date.now() + "_" + crypto.randomUUID().split("-")[0],
@@ -2454,19 +2249,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         uploadedByUserName: currentUser?.nameAr || currentUser?.nameEn || "مسؤول النظام",
         isActive: templateData.isActive !== undefined ? templateData.isActive : isFirst,
       };
-
       let updatedTemplates = [...existingTemplates];
       if (newTemplate.isActive) {
         updatedTemplates = updatedTemplates.map((t) => ({ ...t, isActive: false }));
       }
       updatedTemplates.unshift(newTemplate);
-
       const updatedProfile: CompanyProfile = {
         ...companyProfile,
         letterheadTemplates: updatedTemplates,
         activeLetterheadId: newTemplate.isActive ? newTemplate.id : companyProfile?.activeLetterheadId,
       };
-
       updateCompanyProfile(updatedProfile);
       logAudit(
         "DOCUMENT_UPLOAD",
@@ -2475,14 +2267,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         newTemplate.fileName,
         `تم رفع ورقة رسمية جديدة للشركة: ${newTemplate.fileName}`
       );
-
       return { success: true, template: newTemplate };
     } catch (err: any) {
       console.error("Error adding letterhead template:", err);
       return { success: false, error: err?.message || "فشل رفع القالب" };
     }
   };
-
   const setActiveCompanyLetterhead = (
     templateId: string
   ): { success: boolean; error?: string } => {
@@ -2492,18 +2282,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!target) {
         return { success: false, error: "القالب غير موجود" };
       }
-
       const updatedTemplates = existingTemplates.map((t) => ({
         ...t,
         isActive: t.id === templateId,
       }));
-
       const updatedProfile: CompanyProfile = {
         ...companyProfile,
         letterheadTemplates: updatedTemplates,
         activeLetterheadId: templateId,
       };
-
       updateCompanyProfile(updatedProfile);
       logAudit(
         "UPDATE",
@@ -2512,14 +2299,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         target.fileName,
         `تم اعتماد الورقة الرسمية كقالب رسمي نشط: ${target.fileName}`
       );
-
       return { success: true };
     } catch (err: any) {
       console.error("Error setting active letterhead:", err);
       return { success: false, error: err?.message || "فشل اعتماد القالب" };
     }
   };
-
   const deleteCompanyLetterheadTemplate = (
     templateId: string
   ): { success: boolean; error?: string } => {
@@ -2529,10 +2314,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!target) {
         return { success: false, error: "القالب غير موجود" };
       }
-
       const filteredTemplates = existingTemplates.filter((t) => t.id !== templateId);
       let newActiveId = companyProfile?.activeLetterheadId;
-
       if (target.isActive || companyProfile?.activeLetterheadId === templateId) {
         if (filteredTemplates.length > 0) {
           filteredTemplates[0].isActive = true;
@@ -2541,13 +2324,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           newActiveId = undefined;
         }
       }
-
       const updatedProfile: CompanyProfile = {
         ...companyProfile,
         letterheadTemplates: filteredTemplates,
         activeLetterheadId: newActiveId,
       };
-
       updateCompanyProfile(updatedProfile);
       logAudit(
         "DELETE",
@@ -2556,14 +2337,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         target.fileName,
         `تم حذف قالب الورقة الرسمية: ${target.fileName}`
       );
-
       return { success: true };
     } catch (err: any) {
       console.error("Error deleting letterhead template:", err);
       return { success: false, error: err?.message || "فشل حذف القالب" };
     }
   };
-
   const checkFinancialEditPermission = (entityType: AuditLogEntry["entityType"], modificationReason?: string): { allowed: boolean; error?: string } => {
     const financialEntities: AuditLogEntry["entityType"][] = [
       "CHEQUE", "COLLECTION", "MAINTENANCE_INVOICE", "COMMISSION", 
@@ -2571,7 +2350,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       "FINANCIAL_TRANSACTION", "PAYMENT_ALLOCATION", "REVERSAL",
       "CHART_OF_ACCOUNTS"
     ];
-    
     if (financialEntities.includes(entityType)) {
       if (!hasPermission("EDIT_SAVED_FINANCIAL_RECORDS")) {
         console.warn(`[Security Guard] Unauthorized attempt to edit saved financial record (${entityType})`);
@@ -2589,7 +2367,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     return { allowed: true };
   };
-
   const checkDeleteIntegrity = (entityType: EntityIntegrityType, entityId: string): DeleteIntegrityCheckResult => {
     return checkEntityDeleteIntegrity(entityType, entityId, {
       tenants,
@@ -2604,11 +2381,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       archive,
     });
   };
-
   const deleteOwner = (id: string, options?: DeleteRecordOptions) => {
     const owner = owners.find(o => o.id === id);
     if (!owner) return;
-
     if (!options?.force) {
       const check = checkDeleteIntegrity("OWNER", id);
       if (!check.canDelete) {
@@ -2617,12 +2392,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
     }
-
     archiveEntityToHistory("OWNER", owner, options);
     setOwners((prev) => prev.filter((o) => o.id !== id));
     deleteDoc(doc(db, "owners", id)).catch(() => {});
   };
-
   const addProperty = (data: Omit<Property, "id" | "createdAt">): Property => {
     const newProp: Property = {
       ...data,
@@ -2634,7 +2407,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logAudit("CREATE", "PROPERTY", newProp.id, newProp.nameEn, `Added new property ${newProp.nameEn}`);
     return newProp;
   };
-
   const updateProperty = (id: string, patch: Partial<Property>) => {
     const property = properties.find((p) => p.id === id);
     if (property) {
@@ -2652,11 +2424,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
     logAudit("UPDATE", "PROPERTY", id, "Property", "Updated property details");
   };
-
   const deleteProperty = (id: string, options?: DeleteRecordOptions) => {
     const property = properties.find(p => p.id === id);
     if (!property) return;
-
     if (!options?.force) {
       const check = checkDeleteIntegrity("PROPERTY", id);
       if (!check.canDelete) {
@@ -2665,12 +2435,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
     }
-
     archiveEntityToHistory("PROPERTY", property, options);
     setProperties((prev) => prev.filter((p) => p.id !== id));
     deleteDoc(doc(db, "properties", id)).catch(() => {});
   };
-
   const addUnit = (data: Omit<Unit, "id" | "createdAt">): Unit => {
     const newUnit: Unit = {
       ...data,
@@ -2682,28 +2450,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logAudit("CREATE", "UNIT", newUnit.id, `Unit ${newUnit.unitNumber}`, `Added unit ${newUnit.unitNumber}`);
     return newUnit;
   };
-
   const updateUnit = (id: string, patch: Partial<Unit>) => {
     const unit = units.find((u) => u.id === id);
     if (unit) {
       saveEntitySnapshot("UNIT", unit, "VERSION");
     }
-
     // OCCUPANCY GOVERNANCE: Check if unit is occupied by an uncancelled/unterminated lease
     const occupyingLeases = getUnitOccupyingLeases(id, leases);
     const hasOccupyingLease = occupyingLeases.length > 0;
-
     if (hasOccupyingLease && patch.status === "VACANT") {
       const activeLease = occupyingLeases[0];
       const msgAr = `⚠️ حظر تغيير حالة الوحدة: لا يمكن تغيير حالة الوحدة رقم (${unit?.unitNumber || id}) إلى شاغرة (VACANT) لأنها مرتبطة بعقد إيجار قائم #${activeLease.leaseNumber} بحالة [${activeLease.contractStatus}]. انتهاء مدة العقد لا يجعل الوحدة شاغرة؛ يجب فسخ العقد أو إلغاؤه رسمياً من إدارة العقود أولاً.`;
       const msgEn = `⚠️ Unit Occupancy Protection: Cannot set unit #${unit?.unitNumber || id} to VACANT because lease #${activeLease.leaseNumber} is active/uncancelled [${activeLease.contractStatus}]. Lease must be cancelled or terminated first.`;
-      
       alert(language === "ar" ? msgAr : msgEn);
       // Enforce status to remain OCCUPIED and retain tenant link
       patch.status = "OCCUPIED";
       patch.currentTenantId = activeLease.tenantId;
       patch.currentLeaseId = activeLease.id;
-
       logAudit(
         "STATUS_CHANGE",
         "UNIT",
@@ -2712,13 +2475,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         `Attempted to manually set unit to VACANT while occupying lease #${activeLease.leaseNumber} exists. Action overridden to OCCUPIED.`
       );
     }
-
     setUnits((prev) =>
       prev.map((u) => {
         if (u.id === id) {
           const updated = { ...u, ...patch };
           safeSetDoc(doc(db, "units", id), updated, { merge: true });
-          
           // If status was changed manually to VACANT/MAINTENANCE and NO occupying lease exists, clear linked lease info
           if ((patch.status === "VACANT" || patch.status === "MAINTENANCE") && !hasOccupyingLease) {
             const clearedUnit = {
@@ -2729,7 +2490,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             safeSetDoc(doc(db, "units", id), clearedUnit, { merge: true });
             return clearedUnit;
           }
-          
           return updated;
         }
         return u;
@@ -2737,11 +2497,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
     logAudit("UPDATE", "UNIT", id, "Unit", "Updated unit details");
   };
-
   const deleteUnit = (id: string, options?: DeleteRecordOptions) => {
     const unit = units.find(u => u.id === id);
     if (!unit) return;
-
     if (!options?.force) {
       const check = checkDeleteIntegrity("UNIT", id);
       if (!check.canDelete) {
@@ -2750,12 +2508,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
     }
-
     archiveEntityToHistory("UNIT", unit, options);
     setUnits((prev) => prev.filter((u) => u.id !== id));
     deleteDoc(doc(db, "units", id)).catch(() => {});
   };
-
   const addTenant = (data: Omit<Tenant, "id" | "createdAt" | "riskScore" | "riskLevel" | "riskFactors">): Tenant => {
     const newTenant: Tenant = {
       ...data,
@@ -2771,7 +2527,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setTenants((prev) => [newTenant, ...prev]);
     safeSetDoc(doc(db, "tenants", newTenant.id), newTenant);
     logAudit("CREATE", "TENANT", newTenant.id, newTenant.nameEn, `Created tenant profile ${newTenant.nameEn}`);
-
     // Automated notification dispatch to tenant upon creating tenant profile
     if (newTenant.email) {
       setTimeout(() => {
@@ -2790,10 +2545,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }).catch((err) => console.error("Auto welcome email failed:", err));
       }, 100);
     }
-
     return newTenant;
   };
-
   const updateTenant = (id: string, patch: Partial<Tenant>) => {
     const tenant = tenants.find((t) => t.id === id);
     if (tenant) {
@@ -2804,7 +2557,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (t.id === id) {
           const updated = { ...t, ...patch };
           safeSetDoc(doc(db, "tenants", id), updated, { merge: true });
-          
           // Cross-table update: Update drawerName in related cheques if it was matching the old name
           if (patch.nameEn || patch.nameAr) {
             setCheques((prevCheques) =>
@@ -2821,28 +2573,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               })
             );
           }
-          
           return updated;
         }
         return t;
       })
     );
     logAudit("UPDATE", "TENANT", id, "Tenant", "Updated tenant profile");
-
     if (patch.specialAdminFeeRate !== undefined && patch.specialAdminFeeRate !== tenant?.specialAdminFeeRate) {
       logAudit("UPDATE", "TENANT", id, tenant?.nameEn || "Tenant", `Updated Special Admin Fee Rate from ${tenant?.specialAdminFeeRate ?? "Default"}% to ${patch.specialAdminFeeRate}%`);
     }
-    
     // Auto-recalculate risk if key fields change
     if (patch.emiratesId || patch.tradeLicenseNo || patch.phone) {
       setTimeout(() => recalculateTenantRisk(id), 200);
     }
   };
-
   const deleteTenant = (id: string, options?: DeleteRecordOptions) => {
     const tenant = tenants.find(t => t.id === id);
     if (!tenant) return;
-
     if (!options?.force) {
       const check = checkDeleteIntegrity("TENANT", id);
       if (!check.canDelete) {
@@ -2851,12 +2598,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
     }
-
     archiveEntityToHistory("TENANT", tenant, options);
     setTenants((prev) => prev.filter((t) => t.id !== id));
     deleteDoc(doc(db, "tenants", id)).catch(() => {});
   };
-
   const addLease = (data: Omit<Lease, "id" | "createdAt">): Lease => {
     const isAuthorized =
       !currentUser ||
@@ -2867,7 +2612,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       currentUser.role === "DATA_ENTRY" ||
       hasPermission("LEASES.CREATE") ||
       hasPermission("MANAGE_MASTER_DATA");
-
     if (!isAuthorized) {
       const msg = language === "ar" 
         ? "خطأ: ليس لديك صلاحية لإضافة أو تحرير العقود. هذه الصلاحية حصرية للمصرح لهم فقط."
@@ -2875,7 +2619,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       alert(msg);
       throw new Error(msg);
     }
-
     // AUTHORITATIVE UNIT OCCUPANCY VALIDATION & DUPLICATE LEASE PREVENTION
     if (data.unitId) {
       const validation = validateUnitAvailabilityForLease({
@@ -2884,7 +2627,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         leases,
         language: (language as any) || "ar",
       });
-
       if (!validation.isAvailable) {
         logAudit(
           "STATUS_CHANGE",
@@ -2905,7 +2647,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         alert(errMessage);
         throw new Error(errMessage);
       }
-
       if (validation.isIntegrityMismatch) {
         logAudit(
           "STATUS_CHANGE",
@@ -2916,7 +2657,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         );
       }
     }
-
     const newLease: Lease = {
       ...data,
       id: "lse-" + Date.now() + "-" + crypto.randomUUID().split("-")[0],
@@ -2924,13 +2664,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setLeases((prev) => [newLease, ...prev]);
     safeSetDoc(doc(db, "leases", newLease.id), newLease);
-
     // Process additional lease expenses if provided
     if (newLease.leaseExpenses && newLease.leaseExpenses.length > 0) {
       const nowIso = new Date().toISOString();
       const userId = currentUser?.id || "sys-01";
       const userName = currentUser?.nameAr || currentUser?.nameEn || "System Admin";
-
       newLease.leaseExpenses.forEach((exp, idx) => {
         const expRecord: PropertyExpenseRecord = {
           id: `exp-${Date.now()}-${idx}`,
@@ -2958,7 +2696,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         safeSetDoc(doc(db, "property_expenses", expRecord.id), expRecord);
       });
     }
-
     // If unit is assigned and lease status is occupying (ACTIVE, EXPIRED, RENEWED, etc.), mark unit as OCCUPIED
     const isActiveLease = isOccupyingLeaseStatus(newLease.contractStatus);
     if (newLease.unitId && isActiveLease) {
@@ -2980,9 +2717,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })
       );
     }
-
     logAudit("CREATE", "LEASE", newLease.id, newLease.leaseNumber, `Created lease contract ${newLease.leaseNumber}`);
-
     // Automated notification dispatch for new lease to tenant and owner
     setTimeout(() => {
       try {
@@ -2990,7 +2725,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const prop = properties.find((p) => p.id === newLease.propertyId);
         const own = owners.find((o) => o.id === (prop ? prop.ownerId : ""));
         const unt = units.find((u) => u.id === newLease.unitId);
-
         if ((tnt && tnt.email) || (own && own.email)) {
           fetch("/api/notifications/dispatch-lease", {
             method: "POST",
@@ -3017,10 +2751,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error("Auto lease notification error:", err);
       }
     }, 100);
-
     return newLease;
   };
-
   const updateLease = (id: string, patch: Partial<Lease>) => {
     const isAuthorized =
       !currentUser ||
@@ -3033,7 +2765,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       hasPermission("LEASES.RENEW") ||
       hasPermission("LEASES.EDIT" as any) ||
       hasPermission("MANAGE_MASTER_DATA");
-
     if (!isAuthorized) {
       const msg = language === "ar" 
         ? "خطأ: ليس لديك صلاحية لتعديل العقود. هذه الصلاحية حصرية للمصرح لهم فقط."
@@ -3041,12 +2772,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       alert(msg);
       throw new Error(msg);
     }
-
     const lease = leases.find((l) => l.id === id);
     if (lease) {
       saveEntitySnapshot("LEASE", lease, "VERSION");
     }
-
     // VALIDATE UNIT CHANGE IF ASSIGNING TO A NEW UNIT
     if (patch.unitId && lease && patch.unitId !== lease.unitId) {
       const validation = validateUnitAvailabilityForLease({
@@ -3056,17 +2785,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         leases,
         language: (language as any) || "ar",
       });
-
       if (!validation.isAvailable) {
         const errMessage = language === "ar" ? validation.blockReasonAr : validation.blockReasonEn;
         alert(errMessage);
         throw new Error(errMessage);
       }
     }
-
     let oldLease: Lease | undefined;
     let updatedLeaseList: Lease[] = [];
-
     setLeases((prev) => {
       const next = prev.map((l) => {
         if (l.id === id) {
@@ -3080,14 +2806,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updatedLeaseList = next;
       return next;
     });
-
     // Synchronize unit occupancy status
     if (oldLease) {
       const newUnitId = patch.unitId !== undefined ? patch.unitId : oldLease.unitId;
       const newTenantId = patch.tenantId !== undefined ? patch.tenantId : oldLease.tenantId;
       const newStatus = patch.contractStatus !== undefined ? patch.contractStatus : oldLease.contractStatus;
       const unitChanged = patch.unitId !== undefined && patch.unitId !== oldLease.unitId;
-
       setUnits((prevUnits) =>
         prevUnits.map((u) => {
           // 1. If unit changed, release the previous unit to its original status (VACANT or MAINTENANCE) if no other occupying lease exists
@@ -3096,7 +2820,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const otherActiveLease = updatedLeaseList.find(
               (l) => l.id !== id && l.unitId === oldLease!.unitId && isOccupyingLeaseStatus(l.contractStatus)
             );
-
             if (otherActiveLease) {
               const updatedUnit: Unit = {
                 ...u,
@@ -3118,7 +2841,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               return updatedUnit;
             }
           }
-
           // 2. Update current / target unit
           if (u.id === newUnitId) {
             if (!isOccupyingLeaseStatus(newStatus)) {
@@ -3126,7 +2848,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               const otherActiveLease = updatedLeaseList.find(
                 (l) => l.id !== id && l.unitId === newUnitId && isOccupyingLeaseStatus(l.contractStatus)
               );
-
               if (otherActiveLease) {
                 const updatedUnit: Unit = {
                   ...u,
@@ -3161,15 +2882,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               return updatedUnit;
             }
           }
-
           return u;
         })
       );
     }
-
     logAudit("UPDATE", "LEASE", id, "Lease", "Updated lease details");
   };
-
   const deleteLease = (id: string, options?: DeleteRecordOptions) => {
     const isAuthorized =
       !currentUser ||
@@ -3178,7 +2896,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       currentUser.role === "MANAGER" ||
       hasPermission("DELETE_RECORDS") ||
       hasPermission("MANAGE_MASTER_DATA");
-
     if (!isAuthorized) {
       const msg = language === "ar" 
         ? "خطأ: ليس لديك صلاحية لحذف العقود."
@@ -3186,10 +2903,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       alert(msg);
       throw new Error(msg);
     }
-
     const lease = leases.find((l) => l.id === id);
     if (!lease) return;
-
     if (!options?.force) {
       const check = checkDeleteIntegrity("LEASE", id);
       if (!check.canDelete) {
@@ -3198,12 +2913,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
     }
-
     archiveEntityToHistory("LEASE", lease, options);
     const remainingLeases = leases.filter((l) => l.id !== id);
     setLeases(remainingLeases);
     deleteDoc(doc(db, "leases", id)).catch(() => {});
-
     if (lease) {
       if (lease.unitId) {
         setUnits((prevUnits) =>
@@ -3213,7 +2926,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               const otherActiveLease = remainingLeases.find(
                 (l) => l.unitId === lease.unitId && isOccupyingLeaseStatus(l.contractStatus)
               );
-
               if (otherActiveLease) {
                 const updatedUnit: Unit = {
                   ...u,
@@ -3241,7 +2953,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
   };
-
   const renewLease = (leaseId: string, newEndDate: string, annualRent: number, overrideReason?: string) => {
     const isAuthorized =
       !currentUser ||
@@ -3252,7 +2963,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       hasPermission("LEASES.RENEW") ||
       hasPermission("LEASES.CREATE") ||
       hasPermission("MANAGE_MASTER_DATA");
-
     if (!isAuthorized) {
       const msg = language === "ar" 
         ? "خطأ: ليس لديك صلاحية لتجديد العقود."
@@ -3260,13 +2970,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       alert(msg);
       throw new Error(msg);
     }
-
     const lease = leases.find((l) => l.id === leaseId);
     if (!lease) return;
-
     const tenant = tenants.find((t) => t.id === lease.tenantId);
     const isHighRisk = tenant && tenant.riskLevel === "HIGH";
-
     const updated = {
       ...lease,
       endDate: newEndDate,
@@ -3275,10 +2982,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       riskOverrideReason: isHighRisk ? overrideReason : (deleteField() as any),
       riskOverriddenBy: isHighRisk ? currentUser?.nameEn : (deleteField() as any),
     };
-
     setLeases((prev) => prev.map((l) => (l.id === leaseId ? updated : l)));
     safeSetDoc(doc(db, "leases", leaseId), updated, { merge: true });
-
     if (lease.unitId) {
       setUnits((prevUnits) =>
         prevUnits.map((u) => {
@@ -3296,7 +3001,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })
       );
     }
-
     if (isHighRisk && overrideReason) {
       logAudit(
         "RISK_OVERRIDE",
@@ -3310,7 +3014,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } else {
       logAudit("UPDATE", "LEASE", leaseId, lease.leaseNumber, `Renewed lease contract until ${newEndDate}`);
     }
-
     // Automated notification dispatch for renewed lease to tenant and owner
     setTimeout(() => {
       try {
@@ -3318,7 +3021,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const prop = properties.find((p) => p.id === lease.propertyId);
         const own = owners.find((o) => o.id === (prop ? prop.ownerId : ""));
         const unt = units.find((u) => u.id === lease.unitId);
-
         if ((tnt && tnt.email) || (own && own.email)) {
           fetch("/api/notifications/dispatch-lease", {
             method: "POST",
@@ -3346,11 +3048,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }, 100);
   };
-
   // -------------------------------------------------------------
   // PHASE 45: Integrated Lease Renewal Engine & Workflow
   // -------------------------------------------------------------
-
   const createLeaseRenewal = (
     data: Omit<LeaseRenewalRecord, "id" | "renewalNumber" | "createdAt" | "createdById" | "createdByName" | "status">
   ): { success: boolean; renewal?: LeaseRenewalRecord; error?: string } => {
@@ -3364,11 +3064,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: language === "ar" ? "تاريخ الاستحقاق المتوقع إلزامي لجميع الدفعات المؤجلة (Deferred)" : "Expected Due Date is mandatory for all Deferred payments",
       };
     }
-
     const nowIso = new Date().toISOString();
     const userId = currentUser?.id || "sys-01";
     const userName = currentUser?.nameAr || currentUser?.nameEn || "مسؤول النظام";
-
     const newRenewal: LeaseRenewalRecord = {
       ...data,
       id: "rnw-" + Date.now() + "-" + crypto.randomUUID().split("-")[0],
@@ -3378,7 +3076,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdByName: userName,
       createdAt: nowIso,
     };
-
     // Update original lease status to UNDER_RENEWAL
     setLeases((prev) =>
       prev.map((l) => {
@@ -3390,10 +3087,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return l;
       })
     );
-
     setLeaseRenewals((prev) => [newRenewal, ...prev]);
     safeSetDoc(doc(db, "lease_renewals", newRenewal.id), newRenewal);
-
     logAudit(
       "CREATE",
       "LEASE",
@@ -3401,7 +3096,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `طلب تجديد عقد #${newRenewal.renewalNumber}`,
       `تم إنشاء طلب تجديد لعقد الإيجار #${newRenewal.originalLeaseNumber} بإيجار جديد ${newRenewal.newAnnualRent.toLocaleString()} درهم (نسبة الزيادة: ${(newRenewal.increasePercentage || 0).toFixed(2)}%) وحالته قيد الاعتماد.`
     );
-
     // Operational notification for management
     const notif: NotificationRecord = {
       id: "notif-" + Date.now(),
@@ -3415,10 +3109,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt: nowIso,
     };
     setNotifications((prev) => [notif, ...prev]);
-
     return { success: true, renewal: newRenewal };
   };
-
   const updateLeaseRenewal = (
     id: string,
     patch: Partial<LeaseRenewalRecord>,
@@ -3426,23 +3118,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): { success: boolean; error?: string } => {
     const target = leaseRenewals.find((r) => r.id === id);
     if (!target) return { success: false, error: "Renewal record not found" };
-
     if (target.status === "APPROVED") {
       const checkPerm = checkFinancialEditPermission("LEASE", modificationReason);
       if (!checkPerm.allowed) {
         return { success: false, error: checkPerm.error };
       }
     }
-
     const updated: LeaseRenewalRecord = {
       ...target,
       ...patch,
       updatedAt: new Date().toISOString(),
     };
-
     setLeaseRenewals((prev) => prev.map((r) => (r.id === id ? updated : r)));
     safeSetDoc(doc(db, "lease_renewals", id), updated, { merge: true });
-
     logAudit(
       "UPDATE",
       "LEASE",
@@ -3453,10 +3141,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       JSON.stringify(updated),
       modificationReason
     );
-
     return { success: true };
   };
-
   const approveLeaseRenewal = (
     id: string,
     reviewNotes?: string
@@ -3468,23 +3154,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       currentUser?.role === "MANAGER" ||
       hasPermission("EDIT_SAVED_FINANCIAL_RECORDS") ||
       hasPermission("MANAGE_MASTER_DATA");
-
     if (!isAuthorized) {
       return {
         success: false,
         error: language === "ar" ? "غير مصرح لك باعتماد تجديد العقود. الصلاحية مقتصرة على الإدارة." : "Unauthorized to approve lease renewals.",
       };
     }
-
     const renewal = leaseRenewals.find((r) => r.id === id);
     if (!renewal) return { success: false, error: "Renewal record not found" };
     if (renewal.status === "APPROVED") return { success: false, error: "Renewal is already approved" };
-
     const originalLease = leases.find((l) => l.id === renewal.originalLeaseId);
     const nowIso = new Date().toISOString();
     const userId = currentUser?.id || "sys-01";
     const userName = currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
-
     // 1. Build installments for the new lease
     const generatedInstallments = (renewal.paymentSchedule || []).map((item, idx) => ({
       installmentNumber: idx + 1,
@@ -3494,14 +3176,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status: item.isAdvance ? ("COLLECTED" as const) : ("PENDING" as const),
       notes: item.notes,
     }));
-
     // 2. Create the renewed Lease
     const newLeaseId = "lse-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
     const newLeaseNumber = generateSequentialNumber(leases, "leaseNumber", "EFR-CON-", 4, false);
-
     const depositAmount = renewal.securityDeposit || originalLease?.securityDeposit || 0;
     const hasOriginalDeposit = Boolean(originalLease && (originalLease.securityDeposit || 0) > 0);
-
     const createdLease: Lease = {
       id: newLeaseId,
       leaseNumber: newLeaseNumber,
@@ -3546,7 +3225,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       ] : [],
     };
-
     // Add the new lease and mark original lease as RENEWED with carried forward deposit
     const updatedOriginalLease = originalLease ? {
       ...originalLease,
@@ -3554,7 +3232,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       carriedForwardToLeaseId: newLeaseId,
       securityDepositStatus: (originalLease.securityDeposit || 0) > 0 ? ("CARRIED_FORWARD" as const) : originalLease.securityDepositStatus,
     } : null;
-
     if (originalLease && (originalLease.securityDeposit || 0) !== depositAmount) {
       const diff = depositAmount - (originalLease.securityDeposit || 0);
       recordFinancialAdjustment({
@@ -3568,7 +3245,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         effectiveDate: nowIso.split("T")[0]
       });
     }
-
     setLeases((prev) => [
       createdLease,
       ...prev.map((l) => (l.id === renewal.originalLeaseId && updatedOriginalLease ? updatedOriginalLease : l)),
@@ -3577,7 +3253,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (updatedOriginalLease) {
       safeSetDoc(doc(db, "leases", updatedOriginalLease.id), sanitizeForFirestore(updatedOriginalLease), { merge: true });
     }
-
     // Ensure unit remains OCCUPIED with the new active lease
     setUnits((prev) =>
       prev.map((u) => {
@@ -3594,13 +3269,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return u;
       })
     );
-
     // 3. Generate Cheques, Deferred Records & Advance Payments
     const createdCheques: Cheque[] = [];
     const createdDeferred: DeferredPaymentRecord[] = [];
     const createdReceipts: CollectionRecord[] = [];
     const createdExpenses: PropertyExpenseRecord[] = [];
-
     (renewal.paymentSchedule || []).forEach((item, idx) => {
       if (item.paymentMethod === "CHEQUE" && item.chequeDetails) {
         const chq: Cheque = {
@@ -3683,11 +3356,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         safeSetDoc(doc(db, "collections", colReceipt.id), colReceipt);
       }
     });
-
     // 5. Send Tenant Notification
     const tenantObj = tenants.find((t) => t.id === renewal.tenantId);
     const notifContent = `عزيزي المستأجر ${tenantObj?.nameAr || renewal.tenantNameAr || ""}\nتم اعتماد تجديد عقد الإيجار الخاص بكم بنجاح.\nرقم العقد الجديد: ${newLeaseNumber}\nالفترة: من ${renewal.newStartDate} إلى ${renewal.newEndDate}\nقيمة الإيجار السنوي: ${Number(renewal.newAnnualRent || 0).toLocaleString()} درهم\nعدد الدفعات: ${renewal.installmentsCount}\nشكراً لتعاملكم مع شركة صقر الإمارات للعقارات.`;
-
     const notif: NotificationRecord = {
       id: "notif-" + Date.now(),
       channel: "WHATSAPP",
@@ -3701,7 +3372,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt: nowIso,
     };
     setNotifications((prev) => [notif, ...prev]);
-
     logAudit(
       "UPDATE",
       "LEASE",
@@ -3709,16 +3379,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `اعتماد تجديد عقد #${newLeaseNumber}`,
       `تم اعتماد طلب التجديد #${renewal.renewalNumber} وتفعيل العقد الجديد #${newLeaseNumber} بإيجار ${Number(renewal.newAnnualRent || 0).toLocaleString()} AED من قبل ${userName}.`
     );
-
     // Record optional commission/admin fees from renewal record
     if (renewal.includeAdminFees) {
       const currentCommissionYear = new Date(renewal.newStartDate).getFullYear().toString();
-      
       if (renewal.ownerFeeEnabled) {
         const ownerFeeAmount = renewal.ownerFeeBasis === "PERCENTAGE_OF_RENT"
           ? Math.round((renewal.newAnnualRent * Number(renewal.ownerFeeRate || 0)) / 100)
           : Number(renewal.ownerFeeFixed || 0);
-
         if (ownerFeeAmount > 0) {
           const ownerRes = addCommissionObligation({
             leaseId: createdLease.id,
@@ -3743,7 +3410,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             createdById: userId,
             createdByName: userName,
           });
-
           // Immediate Collection if specified on renewal
           if (ownerRes.success && ownerRes.commission && renewal.ownerFeeImmediateCollection) {
             collectAdministrativeFee(
@@ -3756,12 +3422,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
       }
-
       if (renewal.tenantFeeEnabled) {
         const tenantFeeAmount = renewal.tenantFeeBasis === "PERCENTAGE_OF_RENT"
           ? Math.round((renewal.newAnnualRent * Number(renewal.tenantFeeRate || 0)) / 100)
           : Number(renewal.tenantFeeFixed || 0);
-
         if (tenantFeeAmount > 0) {
           const tenantRes = addCommissionObligation({
             leaseId: createdLease.id,
@@ -3786,7 +3450,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             createdById: userId,
             createdByName: userName,
           });
-
           // Immediate Collection if specified on renewal
           if (tenantRes.success && tenantRes.commission && renewal.tenantFeeImmediateCollection) {
             collectAdministrativeFee(
@@ -3800,7 +3463,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     }
-
     // 6. Record Additional Lease Expenses
     if (renewal.leaseExpenses && renewal.leaseExpenses.length > 0) {
       renewal.leaseExpenses.forEach((exp, idx) => {
@@ -3831,7 +3493,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         safeSetDoc(doc(db, "property_expenses", expRecord.id), expRecord);
       });
     }
-
     const updatedRenewal: LeaseRenewalRecord = {
       ...renewal,
       status: "APPROVED",
@@ -3842,24 +3503,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       approvedAt: nowIso,
       updatedAt: nowIso,
     };
-
     setLeaseRenewals((prev) => prev.map((r) => (r.id === renewal.id ? updatedRenewal : r)));
     safeSetDoc(doc(db, "lease_renewals", renewal.id), updatedRenewal, { merge: true });
-
     return { success: true, renewal: updatedRenewal, newLease: createdLease };
   };
-
   const rejectLeaseRenewal = (
     id: string,
     rejectionReason: string
   ): { success: boolean; error?: string } => {
     const target = leaseRenewals.find((r) => r.id === id);
     if (!target) return { success: false, error: "Renewal record not found" };
-
     const userId = currentUser?.id || "sys-01";
     const userName = currentUser?.nameAr || currentUser?.nameEn || "مسؤول النظام";
     const nowIso = new Date().toISOString();
-
     const updated: LeaseRenewalRecord = {
       ...target,
       status: "REJECTED",
@@ -3869,7 +3525,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       reviewedAt: nowIso,
       updatedAt: nowIso,
     };
-
     // Revert original lease status back to ACTIVE if it was UNDER_RENEWAL
     setLeases((prev) =>
       prev.map((l) => {
@@ -3881,10 +3536,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return l;
       })
     );
-
     setLeaseRenewals((prev) => prev.map((r) => (r.id === id ? updated : r)));
     safeSetDoc(doc(db, "lease_renewals", id), updated, { merge: true });
-
     logAudit(
       "UPDATE",
       "LEASE",
@@ -3892,10 +3545,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `رفض طلب تجديد #${target.renewalNumber}`,
       `تم رفض طلب التجديد #${target.renewalNumber}. السبب: ${rejectionReason}`
     );
-
     return { success: true };
   };
-
   const recordDeferredPayment = (
     data: Omit<DeferredPaymentRecord, "id" | "deferredNumber" | "collectedAmount" | "outstandingAmount" | "status" | "createdAt" | "createdById" | "createdByName">
   ): { success: boolean; deferred?: DeferredPaymentRecord; error?: string } => {
@@ -3905,11 +3556,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: language === "ar" ? "تاريخ الاستحقاق المتوقع إلزامي للدفعات المؤجلة" : "Expected Due Date is mandatory for Deferred payments",
       };
     }
-
     const userId = currentUser?.id || "sys-01";
     const userName = currentUser?.nameAr || currentUser?.nameEn || "مسؤول النظام";
     const nowIso = new Date().toISOString();
-
     const newDef: DeferredPaymentRecord = {
       ...data,
       id: "def-" + Date.now() + "-" + crypto.randomUUID().split("-")[0],
@@ -3921,10 +3570,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdByName: userName,
       createdAt: nowIso,
     };
-
     setDeferredPayments((prev) => [newDef, ...prev]);
     safeSetDoc(doc(db, "deferred_payments", newDef.id), newDef);
-
     logAudit(
       "CREATE",
       "LEASE",
@@ -3932,10 +3579,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `تسجيل دفعة مؤجلة #${newDef.deferredNumber}`,
       `تم تسجيل دفعة مؤجلة بمبلغ ${newDef.deferredAmount.toLocaleString()} AED للمستأجر ${newDef.tenantName} تستحق بتاريخ ${newDef.expectedDueDate}.`
     );
-
     return { success: true, deferred: newDef };
   };
-
   const collectDeferredPayment = async (params: {
     deferredId: string;
     amount: number;
@@ -3943,18 +3588,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     transactionReference?: string;
     notes?: string;
   }): Promise<{ success: boolean; receipt?: CollectionRecord; error?: string }> => {
+    assertCloudWriteAvailable(language as "ar" | "en");
     const target = deferredPayments.find((d) => d.id === params.deferredId);
     if (!target) return { success: false, error: "Deferred payment not found" };
     if (target.status === "COLLECTED") return { success: false, error: "Deferred payment is already collected" };
-
     const userId = currentUser?.id || "sys-01";
     const userName = currentUser?.nameAr || currentUser?.nameEn || "مسؤول التحصيل";
     const nowIso = new Date().toISOString();
-
     const newCollected = target.collectedAmount + params.amount;
     const newOutstanding = Math.max(0, target.deferredAmount - newCollected);
     const isFullyCollected = newOutstanding <= 0.01;
-
     // Create real financial receipt
     const receipt: CollectionRecord = {
       id: "col-" + Date.now(),
@@ -3972,10 +3615,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       notes: params.notes || `تحصيل دفعة مؤجلة #${target.deferredNumber}`,
       createdAt: nowIso,
     };
-
     setCollections((prev) => [receipt, ...prev]);
     safeSetDoc(doc(db, "collections", receipt.id), receipt);
-
     const updatedDef: DeferredPaymentRecord = {
       ...target,
       collectedAmount: newCollected,
@@ -3988,10 +3629,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updatedAt: nowIso,
       notes: params.notes ? (target.notes ? `${target.notes} | ${params.notes}` : params.notes) : target.notes,
     };
-
     setDeferredPayments((prev) => prev.map((d) => (d.id === params.deferredId ? updatedDef : d)));
     safeSetDoc(doc(db, "deferred_payments", params.deferredId), updatedDef, { merge: true });
-
     logAudit(
       "FINANCIAL_PAYMENT",
       "COLLECTION",
@@ -3999,30 +3638,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `تحصيل دفعة مؤجلة #${target.deferredNumber}`,
       `تم تحصيل مبلغ ${params.amount.toLocaleString()} AED من الدفعة المؤجلة #${target.deferredNumber} للمستأجر ${target.tenantName} (${params.paymentMethod}).`
     );
-
     return { success: true, receipt };
   };
-
   const cancelDeferredPayment = (
     deferredId: string,
     reason: string
   ): { success: boolean; error?: string } => {
     const target = deferredPayments.find((d) => d.id === deferredId);
     if (!target) return { success: false, error: "Deferred payment not found" };
-
     const checkPerm = checkFinancialEditPermission("LEASE", reason);
     if (!checkPerm.allowed) return { success: false, error: checkPerm.error };
-
     const updated: DeferredPaymentRecord = {
       ...target,
       status: "CANCELLED",
       notes: target.notes ? `${target.notes} | تم الإلغاء: ${reason}` : `تم الإلغاء: ${reason}`,
       updatedAt: new Date().toISOString(),
     };
-
     setDeferredPayments((prev) => prev.map((d) => (d.id === deferredId ? updated : d)));
     safeSetDoc(doc(db, "deferred_payments", deferredId), updated, { merge: true });
-
     logAudit(
       "UPDATE",
       "LEASE",
@@ -4030,10 +3663,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `إلغاء دفعة مؤجلة #${target.deferredNumber}`,
       `تم إلغاء الدفعة المؤجلة #${target.deferredNumber}. السبب: ${reason}`
     );
-
     return { success: true };
   };
-
   const processUnifiedPayment = async (params: {
     leaseId: string;
     amount: number;
@@ -4065,6 +3696,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     approvalCode?: string; // Add approvalCode
     fromCase?: boolean;
   }): Promise<{ success: boolean; receipt?: CollectionRecord; error?: string }> => {
+    assertCloudWriteAvailable(language as "ar" | "en");
     // 1. Idempotency Guard (Prevent duplicate collections on same lease obligation / reference / cheque)
     const ref = params.referenceNumber?.trim() || params.chequeDetails?.chequeNumber?.trim() || params.chequeId;
     if (ref) {
@@ -4082,12 +3714,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
     }
-
     // 2. Remaining Balance Guard (Authoritative Check)
     const currentBalances = recalculateAllFinancialBalances({
       owners, leases, cheques, collections, commissions: [], paymentAllocations, reversals: financialReversals, adjustments: [], ownerTransfers: []
     });
-
     // 2.1 Financial Period Validation
     const periodCheck = validateTransactionPeriod(params.paymentDate, financialPeriods);
     if (!periodCheck.allowed) {
@@ -4096,7 +3726,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn,
       };
     }
-    
     // Validate that the total payment amount does not exceed the valid outstanding obligations on the lease
     const tenantBalance = currentBalances.tenantBalances[params.leaseId];
     if (tenantBalance && params.amount > (tenantBalance.outstanding || 0) + 0.01) {
@@ -4107,7 +3736,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : `Collection amount (${params.amount.toLocaleString()} AED) exceeds the actual outstanding balance (${(tenantBalance.outstanding || 0).toLocaleString()} AED).`,
       };
     }
-
     if (isCardPayment(params.paymentMethod) && !params.approvalCode) {
       return {
         success: false,
@@ -4116,7 +3744,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : "Approval Code is mandatory for card payments.",
       };
     }
-
     if (params.chequeId) {
       const caseCheck = checkCaseControlledCheque(params.chequeId);
       if (caseCheck.isControlled && !params.fromCase) {
@@ -4128,7 +3755,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
     }
-
     for (const alloc of params.allocations) {
       if (alloc.targetType === "CHEQUE") {
         const chq = cheques.find(c => c.id === alloc.targetId);
@@ -4201,7 +3827,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     }
-
     // 3. Resolve and strictly validate authoritative entity identities
     const leaseObj = params.leaseId ? leases.find((l) => l.id === params.leaseId) : undefined;
     if (params.leaseId && !leaseObj) {
@@ -4212,12 +3837,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : `Payment failed: Lease contract ${params.leaseId} was not found in the system.`,
       };
     }
-
     const resolvedOwnerId = leaseObj?.ownerId || (params as any).ownerId;
     const resolvedTenantId = leaseObj?.tenantId || (params as any).tenantId;
     const resolvedPropertyId = leaseObj?.propertyId || (params as any).propertyId;
     const resolvedUnitId = leaseObj?.unitId || (params as any).unitId;
-
     if (!resolvedOwnerId || !resolvedTenantId) {
       return {
         success: false,
@@ -4226,7 +3849,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : "Payment failed: Could not resolve authoritative Owner or Tenant identity. Please verify contract relationships.",
       };
     }
-
     // 4. If Cheque method, create the authoritative Cheque entity
     let createdChequeId = "";
     let newlyCreatedCheque: Cheque | null = null;
@@ -4270,10 +3892,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       newlyCreatedCheque = newChq;
       logAudit("CREATE", "CHEQUE", newChq.id, newChq.chequeNumber, `Created Cheque #${newChq.chequeNumber} for Lease Contract ${params.leaseId}`);
     }
-
     const totalAllocated = params.allocations.reduce((sum, a) => sum + a.amount, 0);
     const reference = params.referenceNumber?.trim() || params.chequeDetails?.chequeNumber?.trim();
-
     // 5. Create the main CollectionRecord
     const receipt: CollectionRecord = {
       id: "col-" + Date.now(),
@@ -4293,24 +3913,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       notes: params.notes,
       createdAt: new Date().toISOString(),
     };
-
     if (params.attachment) {
       (receipt as any).driveFileId = params.attachment.driveFileId;
       (receipt as any).driveWebViewLink = params.attachment.driveWebViewLink;
       (receipt as any).fileName = params.attachment.fileName;
     }
-
     // 6. Create PaymentAllocations and collect target entity updates
     const createdAllocations: PaymentAllocation[] = [];
     const commissionsToUpdate = new Map<string, CommissionObligation>();
     const chequesToUpdate = new Map<string, Cheque>();
     const leasesToUpdate = new Map<string, Lease>();
-
     // Seed newly created cheque if exists
     if (newlyCreatedCheque) {
       chequesToUpdate.set(newlyCreatedCheque.id, newlyCreatedCheque);
     }
-
     for (const item of params.allocations) {
       const alloc: PaymentAllocation = {
         id: "pal-" + Date.now() + "-" + crypto.randomUUID().split("-")[0],
@@ -4325,7 +3941,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createdById: currentUser?.id || "system",
       };
       createdAllocations.push(alloc);
-
       if (item.targetType === "COMMISSION") {
         const c = commissionsToUpdate.get(item.targetId) || commissions.find((com) => com.id === item.targetId);
         if (c) {
@@ -4358,7 +3973,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             status: isFullyCollected ? ("COLLECTED" as const) : c.status,
           };
           chequesToUpdate.set(c.id, updatedChq);
-
           // Also update corresponding lease installment status if fully collected
           if (isFullyCollected && c.leaseId) {
             const l = leasesToUpdate.get(c.leaseId) || leases.find((lea) => lea.id === c.leaseId);
@@ -4380,7 +3994,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const [lId, instNumStr] = item.targetId.split(":");
         const instNum = parseInt(instNumStr);
         const l = leasesToUpdate.get(lId) || leases.find((lea) => lea.id === lId);
-        
         let linkedChequeId: string | null = null;
         if (l) {
           let instList = l.installments && l.installments.length > 0
@@ -4395,16 +4008,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   status: "PENDING" as const,
                 };
               });
-
           instList = instList.map((inst) => {
             if (inst.installmentNumber === instNum) {
               if ((inst as any).chequeId) linkedChequeId = (inst as any).chequeId;
-              
               const otherAllocated = paymentAllocations
                 .filter((p) => p.targetType === "LEASE_INSTALLMENT" && p.targetId === item.targetId && p.status === "ACTIVE")
                 .reduce((sum, p) => sum + p.allocatedAmount, 0);
               const totalAllocatedToInst = otherAllocated + item.amount;
-
               let status: "PENDING" | "CLEARED" | "BOUNCED" | "COLLECTED" | "WAIVED" = "PENDING";
               if (totalAllocatedToInst >= inst.amount - 0.01) {
                 status = "COLLECTED";
@@ -4413,11 +4023,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
             return inst;
           });
-
           const updatedLease = { ...l, installments: instList };
           leasesToUpdate.set(l.id, updatedLease);
         }
-
         // Sync cheque status if a cheque was linked to this installment
         if (linkedChequeId) {
           const c = chequesToUpdate.get(linkedChequeId) || cheques.find((chq) => chq.id === linkedChequeId);
@@ -4439,7 +4047,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     }
-
     if (createdChequeId) {
       const c = chequesToUpdate.get(createdChequeId) || cheques.find((chq) => chq.id === createdChequeId);
       if (c) {
@@ -4456,7 +4063,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         chequesToUpdate.set(c.id, updated);
       }
     }
-
     // 7. Calculate and construct REQUIRED Journal Entries
     const rentAllocations = params.allocations.filter(
       (a) => a.targetType === "LEASE_INSTALLMENT" || a.targetType === "CHEQUE" || a.targetType === "RENT" || a.targetType === "UNALLOCATED_PREPAYMENT"
@@ -4464,13 +4070,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const rentAmount = rentAllocations.length > 0 
       ? rentAllocations.reduce((sum, a) => sum + a.amount, 0)
       : (params.allocations.every(a => a.targetType !== "COMMISSION") ? params.amount : 0);
-
     const commissionAllocations = params.allocations.filter((a) => a.targetType === "COMMISSION");
     const commAmount = commissionAllocations.reduce((sum, a) => sum + a.amount, 0);
-
     let rentJournalRecord: JournalEntryRecord | null = null;
     let commJournalRecord: JournalEntryRecord | null = null;
-
     if (rentAmount > 0) {
       const rentJournalData = buildRentCollectionJournal(
         {
@@ -4498,7 +4101,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const rentJeId = "je-" + Date.now() + "-rent-" + crypto.randomUUID().split("-")[0];
       const year = new Date().getFullYear();
-      const rentEntryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+      const [rentEntryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
       rentJournalRecord = {
         ...rentJournalData,
         id: rentJeId,
@@ -4509,7 +4112,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createdAt: new Date().toISOString(),
       };
     }
-
     if (commAmount > 0) {
       const firstComm = commissions.find(c => c.id === commissionAllocations[0]?.targetId);
       const commJournalData = buildAdminFeeJournal(
@@ -4540,7 +4142,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const commJeId = "je-" + Date.now() + "-comm-" + crypto.randomUUID().split("-")[0];
       const year = new Date().getFullYear();
-      const commEntryNumber = `JE-${year}-${String(journalEntries.length + (rentJournalRecord ? 2 : 1)).padStart(5, "0")}`;
+      const [commEntryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length + (rentJournalRecord ? 1 : 0));
       commJournalRecord = {
         ...commJournalData,
         id: commJeId,
@@ -4551,7 +4153,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createdAt: new Date().toISOString(),
       };
     }
-
     // 8. Atomic persistence with writeBatch
     const batch = writeBatch(db);
     batch.set(doc(db, "collections", receipt.id), sanitizeForFirestore(receipt));
@@ -4573,7 +4174,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (commJournalRecord) {
       batch.set(doc(db, "journal_entries", commJournalRecord.id), sanitizeForFirestore(commJournalRecord));
     }
-
     try {
       await batch.commit();
     } catch (batchErr: any) {
@@ -4585,15 +4185,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : `Failed to commit financial transaction: ${batchErr?.message || "Transaction aborted"}`,
       };
     }
-
     // 9. Update pure React states ONLY after successful commit
     setCollections((prev) => [receipt, ...prev]);
     setPaymentAllocations((prev) => [...createdAllocations, ...prev]);
-
     if (commissionsToUpdate.size > 0) {
       setCommissions((prev) => prev.map((c) => commissionsToUpdate.get(c.id) || c));
     }
-
     if (chequesToUpdate.size > 0) {
       setCheques((prev) => {
         const existingIds = new Set(prev.map((c) => c.id));
@@ -4602,18 +4199,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return [...newCheques, ...updatedList];
       });
     }
-
     if (leasesToUpdate.size > 0) {
       setLeases((prev) => prev.map((l) => leasesToUpdate.get(l.id) || l));
     }
-
     const newJournalsToSet: JournalEntryRecord[] = [];
     if (rentJournalRecord) newJournalsToSet.push(rentJournalRecord);
     if (commJournalRecord) newJournalsToSet.push(commJournalRecord);
     if (newJournalsToSet.length > 0) {
       setJournalEntries((prev) => [...prev, ...newJournalsToSet]);
     }
-
     // 10. Register/link derived receipt document in Electronic Archive
     const existingArchiveDoc = archive.find((a) => a.recordId === receipt.id || a.entityId === receipt.id);
     if (!existingArchiveDoc) {
@@ -4637,7 +4231,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         driveWebViewLink: receipt.driveWebViewLink,
       });
     }
-
     logAudit(
       "FINANCIAL_PAYMENT",
       "COLLECTION",
@@ -4646,20 +4239,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `Recorded ${params.paymentMethod} collection of ${params.amount.toLocaleString()} AED for Lease Contract ${leaseObj?.leaseNumber || params.leaseId}. ` +
         `Allocated ${totalAllocated.toLocaleString()} AED across ${params.allocations.length} targets.`
     );
-
     return { success: true, receipt };
   };
-
   const updateChequeWithSafetyConfirmation = async (
     params: ChequeSecurityConfirmationParams
   ): Promise<{ success: boolean; receipt?: CollectionRecord; error?: string }> => {
     const target = cheques.find((c) => c.id === params.chequeId);
     if (!target) return { success: false, error: "Cheque not found" };
-
     const userId = currentUser?.id || "sys-01";
     const userName = currentUser?.nameAr || currentUser?.nameEn || "مسؤول النظام";
     const nowIso = new Date().toISOString();
-
     if (["COLLECT", "CASH_SETTLEMENT", "BANK_TRANSFER_SETTLEMENT", "CARD_SETTLEMENT", "RECOVERY"].includes(params.action)) {
       if (target.status === "COLLECTED" || target.outstanding <= 0) {
         return {
@@ -4679,7 +4268,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
     }
-
     if (params.action === "BOUNCE") {
       const updatedChq: Cheque = {
         ...target,
@@ -4691,7 +4279,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       setCheques((prev) => prev.map((c) => (c.id === target.id ? updatedChq : c)));
       safeSetDoc(doc(db, "cheques", target.id), updatedChq, { merge: true });
-
       logAudit(
         "UPDATE",
         "CHEQUE",
@@ -4699,19 +4286,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         `إرجاع الشيك #${target.chequeNumber}`,
         `تم تأكيد إرجاع الشيك #${target.chequeNumber} لسبب (${params.returnReason || "INSUFFICIENT_FUNDS"}).`
       );
-
       return { success: true };
     }
-
     let pMethod: PaymentMethod = "CHEQUE";
     if (params.action === "CASH_SETTLEMENT") pMethod = "CASH";
     else if (params.action === "BANK_TRANSFER_SETTLEMENT") pMethod = "BANK_TRANSFER";
     else if (params.action === "CARD_SETTLEMENT") pMethod = "CREDIT_CARD";
     else if (params.action === "COLLECT") pMethod = params.paymentMethod || "CHEQUE";
     else if (params.action === "RECOVERY") pMethod = params.paymentMethod || "BANK_TRANSFER";
-
     const collectAmount = target.outstanding || target.amount;
-
     return processUnifiedPayment({
       leaseId: target.leaseId,
       amount: collectAmount,
@@ -4731,25 +4314,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ],
     });
   };
-
   const dispatchRenewalNotification = async (
     renewalId: string,
     channel: "WHATSAPP" | "EMAIL" | "PORTAL" = "WHATSAPP"
   ): Promise<{ success: boolean; message: string }> => {
     const rnw = leaseRenewals.find((r) => r.id === renewalId);
     if (!rnw) return { success: false, message: "Renewal not found" };
-
     const tenant = tenants.find((t) => t.id === rnw.tenantId);
-    
     let msgContent = `عزيزي المستأجر ${tenant?.nameAr || rnw.tenantNameAr || ""}\nنفيدكم بأنه تم اعتماد تجديد عقد الإيجار رقم ${rnw.newLeaseNumber || rnw.originalLeaseNumber}\nالقيمة السنوية: ${Number(rnw.newAnnualRent || 0).toLocaleString()} درهم\nالفترة: من ${rnw.newStartDate} إلى ${rnw.newEndDate}\nصقر الإمارات للعقارات.`;
-
     const tpl = messageTemplates.find(t => t.id === "LEASE_RENEWED");
     if (tpl) {
       msgContent = (language === "ar" ? tpl.bodyAr : tpl.bodyEn)
         .replace(/{tenantName}/g, tenant?.nameAr || tenant?.nameEn || rnw.tenantNameAr || rnw.tenantNameEn || "Tenant")
         .replace(/{leaseNumber}/g, rnw.newLeaseNumber || rnw.originalLeaseNumber || "");
     }
-
     const notif: NotificationRecord = {
       id: "notif-" + Date.now(),
       channel: channel as any,
@@ -4762,21 +4340,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       content: msgContent,
       createdAt: new Date().toISOString(),
     };
-
     setNotifications((prev) => [notif, ...prev]);
     return { success: true, message: language === "ar" ? "تم إرسال إشعار التجديد للمستأجر بنجاح" : "Renewal notification delivered" };
   };
-
   const dispatchPaymentReceiptNotification = async (
     receiptId: string,
     channel: "WHATSAPP" | "EMAIL" = "WHATSAPP"
   ): Promise<{ success: boolean; message: string }> => {
     const rec = collections.find((c) => c.id === receiptId);
     if (!rec) return { success: false, message: "Receipt not found" };
-
     const tenant = tenants.find((t) => t.id === rec.tenantId);
     const msgContent = `سند قبض إلكتروني #${rec.receiptNumber}\nالمستلم من: ${rec.payerName}\nالمبلغ: ${rec.amountEntered.toLocaleString()} درهم\nالتاريخ: ${rec.paymentDate}\nطريقة الدفع: ${rec.paymentMethod}\nشركة صقر الإمارات للعقارات.`;
-
     const notif: NotificationRecord = {
       id: "notif-" + Date.now(),
       channel: channel as any,
@@ -4789,23 +4363,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       content: msgContent,
       createdAt: new Date().toISOString(),
     };
-
     setNotifications((prev) => [notif, ...prev]);
     return { success: true, message: language === "ar" ? "تم إرسال سند القبض للمستأجر بنجاح" : "Receipt notification sent" };
   };
-
   const dispatchChequeReminderNotification = async (
     chequeId: string,
     reminderType: "SEVEN_DAYS_BEFORE" | "FIVE_DAYS_BEFORE" | "DUE_TODAY" | "OVERDUE"
   ): Promise<{ success: boolean; message: string }> => {
     const chq = cheques.find((c) => c.id === chequeId);
     if (!chq) return { success: false, message: "Cheque not found" };
-
     const tenant = tenants.find((t) => t.id === chq.tenantId);
     const daysText = reminderType === "SEVEN_DAYS_BEFORE" ? "خلال 7 أيام" : reminderType === "FIVE_DAYS_BEFORE" ? "خلال 5 أيام" : reminderType === "DUE_TODAY" ? "اليوم" : "متأخر";
-    
     let msgContent = `عزيزي ${tenant?.nameAr || tenant?.nameEn || "المستأجر"}، تذكير بموعد استحقاق الشيك رقم ${chq.chequeNumber} المسحوب على بنك ${chq.bankName} بمبلغ ${chq.amount.toLocaleString()} درهم وتاريخ استحقاقه ${chq.dueDate} (${daysText}). يرجى التأكد من توفر الرصيد الكافي.`;
-    
     const tpl = messageTemplates.find(t => t.id === "APPROACHING_DUE");
     if (tpl) {
       msgContent = (language === "ar" ? tpl.bodyAr : tpl.bodyEn)
@@ -4814,7 +4383,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .replace(/{chequeAmount}/g, chq.amount.toLocaleString())
         .replace(/{dueDate}/g, chq.dueDate);
     }
-
     try {
       // 1. Dispatch actual email via SMTP
       if (tenant?.email) {
@@ -4836,7 +4404,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Failed to trigger SMTP for cheque reminder", err);
     }
-
     const notif: NotificationRecord = {
       id: "notif-" + Date.now() + crypto.randomUUID().split("-")[0],
       channel: "EMAIL",
@@ -4850,60 +4417,49 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       content: msgContent,
       createdAt: new Date().toISOString(),
     };
-
     setNotifications((prev) => [notif, ...prev]);
     safeSetDoc(doc(db, "notifications", notif.id), notif);
-
     // Update cheque reminder count
     const updatedChq = { ...chq, reminderCount: (chq.reminderCount || 0) + 1, whatsAppStatus: "SENT" as const };
     setCheques((prev) => prev.map((c) => c.id === chq.id ? updatedChq : c));
     safeSetDoc(doc(db, "cheques", chq.id), updatedChq, { merge: true });
-
     return { success: true, message: language === "ar" ? `تم إرسال تذكير الشيك (${daysText}) بنجاح عبر SMTP` : "Cheque reminder sent via SMTP" };
   };
-
   const runAutomatedChequeReminders = async () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const targetDate = new Date(today);
     targetDate.setDate(today.getDate() + 7);
     const targetDateStr = targetDate.toISOString().split("T")[0];
-
     let sentCount = 0;
-
     for (const chq of cheques) {
       if (chq.status === "PENDING" && chq.dueDate === targetDateStr) {
         // Check if we already sent a reminder for this cheque recently to prevent duplicates
         const alreadySent = notifications.some(
           (n) => n.chequeId === chq.id && n.type === "SEVEN_DAY_REMINDER" && n.createdAt.startsWith(today.toISOString().split("T")[0])
         );
-
         if (!alreadySent) {
           await dispatchChequeReminderNotification(chq.id, "SEVEN_DAYS_BEFORE");
           sentCount++;
         }
       }
     }
-    
     if (sentCount > 0) {
       console.log(`[Auto Reminders] Sent ${sentCount} reminders for cheques due in 7 days.`);
     }
     return { success: true, count: sentCount };
   };
-
   const dispatchDeferredReminderNotification = async (
     deferredId: string,
     targetType: "TENANT" | "RESPONSIBLE_EMPLOYEE" = "TENANT"
   ): Promise<{ success: boolean; message: string }> => {
     const def = deferredPayments.find((d) => d.id === deferredId);
     if (!def) return { success: false, message: "Deferred payment not found" };
-
     const tenant = tenants.find((t) => t.id === def.tenantId);
     const msgContent =
       targetType === "TENANT"
         ? `تذكير: نود تذكيركم بموعد سداد الدفعة المؤجلة بمبلغ ${def.outstandingAmount.toLocaleString()} درهم المستحقة في تاريخ ${def.expectedDueDate} لعقد الإيجار #${def.leaseNumber || ""}.`
         : `تنبيه متابعة: الدفعة المؤجلة #${def.deferredNumber} للمستأجر ${def.tenantName} بمبلغ ${def.outstandingAmount.toLocaleString()} درهم مستحقة بتاريخ ${def.expectedDueDate}. يرجى المتابعة والتحصيل.`;
-
     const notif: NotificationRecord = {
       id: "notif-" + Date.now(),
       channel: targetType === "TENANT" ? "WHATSAPP" : ("PORTAL" as any),
@@ -4916,15 +4472,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       content: msgContent,
       createdAt: new Date().toISOString(),
     };
-
     setNotifications((prev) => [notif, ...prev]);
     return { success: true, message: language === "ar" ? "تم إرسال التنبيه بنجاح" : "Deferred reminder sent" };
   };
-
   // -------------------------------------------------------------
   // Cheque Management Methods
   // -------------------------------------------------------------
-
   const checkDuplicateCheque = (
     chequeNumber: string,
     drawerName?: string,
@@ -4934,14 +4487,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): Cheque | undefined => {
     const cleanNum = (chequeNumber || "").trim().toLowerCase();
     if (!cleanNum) return undefined;
-
     return cheques.find((c) => {
       // 1. Must match cheque number
       const existingChequeNum = (c.chequeNumber || "").trim().toLowerCase();
       if (existingChequeNum !== cleanNum) {
         return false;
       }
-
       // 2. Check Drawer / Writer Name (اسم كاتب الشيك / الساحب) or Tenant
       let drawerMatches = false;
       const targetDrawer = (drawerName || "").trim().toLowerCase();
@@ -4949,23 +4500,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const existingTenant = tenants.find((t) => t.id === c.tenantId);
       const tenantAr = (existingTenant?.nameAr || "").trim().toLowerCase();
       const tenantEn = (existingTenant?.nameEn || "").trim().toLowerCase();
-
       if (targetDrawer) {
         drawerMatches =
           (existingDrawer !== "" && (existingDrawer.includes(targetDrawer) || targetDrawer.includes(existingDrawer))) ||
           (tenantAr !== "" && (tenantAr.includes(targetDrawer) || targetDrawer.includes(tenantAr))) ||
           (tenantEn !== "" && (tenantEn.includes(targetDrawer) || targetDrawer.includes(tenantEn)));
       }
-
       if (!drawerMatches && tenantId) {
         drawerMatches = c.tenantId === tenantId;
       }
-
       // If drawer info isn't available anywhere, we fallback to true so we don't accidentally miss if other strong fields match
       if (!targetDrawer && !tenantId) {
         drawerMatches = true;
       }
-
       // 3. Check Lease Contract (عقد الإيجار)
       let leaseMatches = false;
       if (leaseId && leaseId.trim() !== "") {
@@ -4974,12 +4521,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // If leaseId was not explicitly set or selected, check tenant match
         leaseMatches = Boolean(tenantId && c.tenantId === tenantId);
       }
-
       // Match is confirmed only when Cheque Number, Drawer Name, AND Lease Contract match
       return drawerMatches && leaseMatches;
     });
   };
-
   /**
    * Synchronizes a cheque's state bidirectionally with corresponding lease installment schedule.
    */
@@ -5003,23 +4548,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } else if (effectiveStatus === "PENDING" || effectiveStatus === "POST_DATED" || effectiveStatus === "DEPOSITED") {
       instStatus = "PENDING";
     }
-
     setLeases((prevLeases) => {
       let leaseUpdated = false;
       const newLeases = prevLeases.map((l) => {
         const isDirectLease = cheque.leaseId && (l.id === cheque.leaseId || l.leaseNumber === cheque.leaseId);
         const isTenantMatch = l.tenantId === cheque.tenantId && (!cheque.propertyId || l.propertyId === cheque.propertyId);
-
         if (isDirectLease || isTenantMatch || !cheque.leaseId) {
           if (!l.installments || l.installments.length === 0) return l;
-
           let installmentMatched = false;
           const updatedInstallments = l.installments.map((inst) => {
             const isMatch =
               (inst.chequeId && inst.chequeId === cheque.id) ||
               isSameChequeNumber(inst.chequeNumber, cheque.chequeNumber) ||
               (isDirectLease && inst.dueDate === cheque.dueDate && Math.abs((inst.amount || 0) - (cheque.amount || 0)) < 1.0);
-
             if (isMatch) {
               installmentMatched = true;
               return {
@@ -5031,12 +4572,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
             return inst;
           });
-
           if (installmentMatched) {
             leaseUpdated = true;
             const updatedLease = { ...l, installments: updatedInstallments };
             safeSetDoc(doc(db, "leases", l.id), updatedLease, { merge: true });
-
             // If cheque was missing leaseId or propertyId, link it back
             if (!cheque.leaseId || cheque.leaseId !== l.id) {
               cheque.leaseId = l.id;
@@ -5052,23 +4591,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 { merge: true }
               );
             }
-
             return updatedLease;
           }
         }
         return l;
       });
-
       return leaseUpdated ? newLeases : prevLeases;
     });
   };
-
   const addCheque = (
     chequeData: Omit<Cheque, "id" | "createdAt" | "totalApplied" | "outstanding" | "whatsAppStatus" | "reminderCount">
   ): Cheque => {
     const isBounced = chequeData.status === "BOUNCED" || chequeData.originalStatus === "BOUNCED";
     const initialStatus = chequeData.status;
-
     const newCheque: Cheque = {
       ...chequeData,
       id: "chq-" + Date.now(),
@@ -5080,13 +4615,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       reminderCount: 0,
       createdAt: new Date().toISOString(),
     };
-
     setCheques((prev) => [newCheque, ...prev]);
     safeSetDoc(doc(db, "cheques", newCheque.id), newCheque);
-
     // Sync with corresponding lease installment immediately
     syncChequeWithLease(newCheque, newCheque.status);
-
     logAudit(
       "CREATE",
       "CHEQUE",
@@ -5094,21 +4626,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `Cheque #${newCheque.chequeNumber}`,
       `Created cheque record #${newCheque.chequeNumber} for AED ${newCheque.amount.toLocaleString()} (Status: ${initialStatus})`
     );
-
     // If bounced, trigger notification simulation and recalculate risk
     if (isBounced) {
       setTimeout(() => {
         recalculateTenantRisk(newCheque.tenantId);
       }, 200);
     }
-
     return newCheque;
   };
-
   const updateCheque = (id: string, patch: Partial<Cheque>, modificationReason?: string): { success: boolean; error?: string } => {
     const target = cheques.find((c) => c.id === id);
     if (!target) return { success: false, error: "Cheque not found" };
-
     // Check if critical financial values are being changed
     const hasFinancialChanges =
       (patch.amount !== undefined && patch.amount !== target.amount) ||
@@ -5116,7 +4644,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       (patch.propertyId !== undefined && patch.propertyId !== target.propertyId) ||
       (patch.tenantId !== undefined && patch.tenantId !== target.tenantId) ||
       (patch.leaseId !== undefined && patch.leaseId !== target.leaseId);
-
     if (hasFinancialChanges) {
       return {
         success: false,
@@ -5125,19 +4652,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : "Core financial properties of a cheque are immutable under strict financial governance rules."
       };
     }
-
     const check = checkFinancialEditPermission("CHEQUE", modificationReason);
     if (!check.allowed) return { success: false, error: check.error };
-
     saveEntitySnapshot("CHEQUE", target, "VERSION");
-
     const updated = { ...target, ...patch };
     setCheques((prev) => prev.map((c) => (c.id === id ? updated : c)));
     safeSetDoc(doc(db, "cheques", id), updated, { merge: true });
-
     // Sync with corresponding lease installment
     syncChequeWithLease(updated, patch.status);
-
     logAudit(
       "FINANCIAL_RECORD_EDIT", 
       "CHEQUE", 
@@ -5150,7 +4672,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
     return { success: true };
   };
-
   const deleteCheque = (id: string, options?: DeleteRecordOptions) => {
     const msg = language === "ar"
       ? "الشيكات المسجلة في النظام غير قابلة للحذف لضمان سلامة السجلات المالية ومطابقتها."
@@ -5158,7 +4679,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     alert(msg);
     return;
   };
-
   const updateChequeStatus = (
     id: string,
     newStatus: ChequeStatus,
@@ -5176,7 +4696,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): { success: boolean; error?: string } => {
     const target = cheques.find((c) => c.id === id);
     if (!target) return { success: false, error: "Cheque not found" };
-
     const caseCheck = checkCaseControlledCheque(id);
     if (caseCheck.isControlled && !fromCase && (newStatus === "COLLECTED" || newStatus === "CLEARED")) {
       return {
@@ -5186,16 +4705,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : `Sorry, this cheque is reserved under an active legal case and its status cannot be changed to Collected/Cleared manually except from the linked case.`,
       };
     }
-
     const check = checkFinancialEditPermission("CHEQUE", modificationReason);
     if (!check.allowed) return { success: false, error: check.error };
-
     saveEntitySnapshot("CHEQUE", target, "VERSION");
-
     const wasBouncedEver = target.originalStatus === "BOUNCED" || newStatus === "BOUNCED";
     const oldStatus = target.status;
     const nowIso = new Date().toISOString();
-
     const auditEntry: ChequeAuditEntry = {
       id: "aud-" + Date.now(),
       previousStatus: oldStatus,
@@ -5209,9 +4724,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       slipNumber: additionalData?.bankBounceSlipNumber || additionalData?.reference,
       proofUrl: additionalData?.proofUrl || additionalData?.bounceProofUrl,
     };
-
     const isCleared = newStatus === "CLEARED" || newStatus === "COLLECTED";
-
     const updated: Cheque = {
       ...target,
       status: newStatus,
@@ -5225,13 +4738,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       bounceProofUrl: additionalData?.bounceProofUrl || target.bounceProofUrl,
       auditTrail: [auditEntry, ...(target.auditTrail || [])],
     };
-
     setCheques((prev) => prev.map((c) => (c.id === id ? updated : c)));
     safeSetDoc(doc(db, "cheques", id), updated, { merge: true });
-
     // Bidirectional sync with lease installment
     syncChequeWithLease(updated, newStatus);
-
     logAudit(
       "FINANCIAL_RECORD_EDIT",
       "CHEQUE",
@@ -5242,14 +4752,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       newStatus,
       modificationReason
     );
-
     setTimeout(() => {
       recalculateTenantRisk(target.tenantId);
     }, 150);
-
     return { success: true };
   };
-
   const depositCheque = async (params: {
     chequeId: string;
     depositedDate: string;
@@ -5266,21 +4773,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const targetSnap = await transaction.get(targetRef);
         if (!targetSnap.exists()) throw new Error("Cheque not found");
         const target = targetSnap.data() as Cheque;
-
         const caseCheck = checkCaseControlledCheque(params.chequeId);
         if (caseCheck.isControlled) {
           throw new Error(language === "ar" ? `عذراً، هذا الشيك محجوز على ذمة قضية.` : `Sorry, this cheque is reserved under an active legal case.`);
         }
-
         if (target.status === "DEPOSITED") throw new Error(language === "ar" ? "الشيك مودع مسبقاً." : "This cheque is already deposited.");
         if (target.status === "CLEARED" || target.status === "COLLECTED") throw new Error(language === "ar" ? "لا يمكن إيداع شيك مسوى مسبقاً." : "This cheque has already been cleared or collected.");
         if (target.status === "CANCELLED" || target.status === "REPLACED") throw new Error(language === "ar" ? `لا يمكن إيداع شيك غير سارٍ (${target.status}).` : `Cannot deposit a ${target.status} cheque.`);
-
         if (!params.depositProofUrl && !params.depositSlipNumber) throw new Error(language === "ar" ? "يجب إرفاق إثبات الإيداع أو إدخال رقم الحافظة." : "Bank deposit proof or slip number is required.");
-
         const oldStatus = target.status;
         const nowIso = new Date().toISOString();
-
         const auditEntry: ChequeAuditEntry = {
           id: "aud-" + Date.now(),
           previousStatus: oldStatus,
@@ -5292,7 +4794,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           proofUrl: params.depositProofUrl,
           notes: params.notes,
         };
-
         const updated: Cheque = {
           ...target,
           status: "DEPOSITED",
@@ -5303,24 +4804,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           depositNotes: params.notes || target.depositNotes,
           auditTrail: [auditEntry, ...(target.auditTrail || [])],
         };
-
         transaction.set(targetRef, sanitizeForFirestore(updated), { merge: true });
-
         return updated;
       });
-
       setCheques((prev) => prev.map((c) => (c.id === params.chequeId ? result : c)));
       syncChequeWithLease(result, "DEPOSITED");
-
       logAudit("FINANCIAL_RECORD_EDIT", "CHEQUE", params.chequeId, `Cheque #${result.chequeNumber}`, `Deposited in bank.`);
-
       return { success: true };
     } catch (e: any) {
       console.error(e);
       return { success: false, error: e.message };
     }
   };
-
   const clearCheque = async (params: {
     chequeId: string;
     clearingDate: string;
@@ -5330,25 +4825,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     userId?: string;
     userName?: string;
   }): Promise<{ success: boolean; error?: string }> => {
+    assertCloudWriteAvailable(language as "ar" | "en");
     try {
       const result = await runTransaction(db, async (transaction) => {
         const targetRef = doc(db, "cheques", params.chequeId);
         const targetSnap = await transaction.get(targetRef);
         if (!targetSnap.exists()) throw new Error("Cheque not found");
         const target = targetSnap.data() as Cheque;
-
         const caseCheck = checkCaseControlledCheque(params.chequeId);
         if (caseCheck.isControlled) {
           throw new Error(language === "ar" ? `عذراً، هذا الشيك محجوز على ذمة قضية.` : `Sorry, this cheque is reserved under an active legal case.`);
         }
-
         if (target.status === "CLEARED") throw new Error(language === "ar" ? "الشيك تمت مقاصته وصرفه في الحساب البنكي مسبقاً." : "This cheque has already been cleared.");
         if (target.status === "COLLECTED") throw new Error(language === "ar" ? "تم تحصيل هذا الشيك مسبقاً بموجب سند قبض." : "This cheque has already been collected.");
         if (target.status === "CANCELLED" || target.status === "REPLACED") throw new Error(language === "ar" ? `لا يمكن مقاصة شيك غير سارٍ (${target.status}).` : `Cannot clear a ${target.status} cheque.`);
-
         if (!params.clearingProofUrl) throw new Error(language === "ar" ? "يجب إرفاق إثبات المقاصة / التحصيل البنكي لاعتماد الصرف." : "Bank clearing proof is strictly required.");
         if (!params.clearingRef || !params.clearingRef.trim()) throw new Error(language === "ar" ? "يجب إدخال رقم المرجع المصرفي لعملية المقاصة البنكية." : "Bank clearing reference number is required.");
-
         if (!target.ownerId || !target.tenantId) {
           throw new Error(
             language === "ar"
@@ -5356,15 +4848,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               : "Missing owner or tenant identity in cheque record. Operation stopped to prevent anonymous financial entries."
           );
         }
-
         const periodCheck = validateTransactionPeriod(params.clearingDate, financialPeriods);
         if (!periodCheck.allowed) {
           throw new Error(language === "ar" ? periodCheck.errorAr : periodCheck.errorEn);
         }
-
         const oldStatus = target.status;
         const nowIso = new Date().toISOString();
-
         const auditEntry: ChequeAuditEntry = {
           id: "aud-" + Date.now(),
           previousStatus: oldStatus,
@@ -5376,7 +4865,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           proofUrl: params.clearingProofUrl,
           notes: params.notes,
         };
-
         const updated: Cheque = {
           ...target,
           status: "CLEARED",
@@ -5389,9 +4877,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           totalApplied: target.amount,
           auditTrail: [auditEntry, ...(target.auditTrail || [])],
         };
-
         transaction.set(targetRef, sanitizeForFirestore(updated), { merge: true });
-
         const colId = "col-" + Date.now();
         const receiptNumber = generateSequentialNumber(collections, "receiptNumber", "RCP-", 4, false);
         const receipt: CollectionRecord = {
@@ -5413,7 +4899,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdAt: nowIso,
         };
         transaction.set(doc(db, "collections", colId), sanitizeForFirestore(receipt));
-
         const allocId = "pal-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
         const alloc: PaymentAllocation = {
           id: allocId,
@@ -5427,7 +4912,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdAt: nowIso,
         };
         transaction.set(doc(db, "payment_allocations", allocId), sanitizeForFirestore(alloc));
-
         // Required Rent Collection Journal Entry
         const journalData = buildRentCollectionJournal(
           {
@@ -5452,7 +4936,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         const jeId = "je-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
         const year = new Date().getFullYear();
-        const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+        const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
         const journalRecord: JournalEntryRecord = {
           ...journalData,
           id: jeId,
@@ -5463,28 +4947,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdAt: nowIso,
         };
         transaction.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
-
         return { updated, receipt, alloc, journalRecord };
       });
-
       setCheques((prev) => prev.map((c) => (c.id === params.chequeId ? result.updated : c)));
       setCollections((prev) => [result.receipt, ...prev]);
       setPaymentAllocations((prev) => [...prev, result.alloc]);
       setJournalEntries((prev) => [...prev, result.journalRecord]);
-
       syncChequeWithLease(result.updated, "CLEARED");
       dispatchChequeCollectedNotification(result.updated.id);
-
       logAudit("FINANCIAL_RECORD_EDIT", "CHEQUE", params.chequeId, `Cheque #${result.updated.chequeNumber}`, `Cleared and reconciled in bank.`);
       setTimeout(() => { recalculateTenantRisk(result.updated.tenantId); }, 150);
-
       return { success: true };
     } catch (e: any) {
       console.error(e);
       return { success: false, error: e.message };
     }
   };
-
   const bulkUpdateCheques = (ids: string[], patch: Partial<Cheque>) => {
     setCheques((prev) =>
       prev.map((c) => {
@@ -5499,7 +4977,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
     logAudit("UPDATE", "CHEQUE", ids.join(","), `Bulk Cheques (${ids.length})`, `Bulk updated ${ids.length} cheques`);
   };
-
   /**
    * Replaces a cheque (Bounced, Pending, or Post-Dated) with one or more replacement cheques.
    * - Preserves the original cheque record (never deletes it)
@@ -5532,7 +5009,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!origCheque) {
       return { success: false, error: "الشيك الأصلي غير موجود" };
     }
-
     const caseCheck = checkCaseControlledCheque(params.originalChequeId);
     if (caseCheck.isControlled) {
       return {
@@ -5542,7 +5018,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : "Sorry, this cheque is reserved under an active legal case and cannot be replaced.",
       };
     }
-
     if (origCheque.status === "REPLACED" || origCheque.status === "CANCELLED" || origCheque.status === "COLLECTED" || origCheque.status === "CLEARED") {
       return {
         success: false,
@@ -5551,28 +5026,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : `Cannot replace a terminal or settled cheque with status (${origCheque.status}).`,
       };
     }
-
     if (!params.reason || !params.reason.trim()) {
       return {
         success: false,
         error: language === "ar" ? "سبب استبدال الشيك إلزامي للتوثيق المالي." : "Cheque replacement reason is mandatory for audit trail.",
       };
     }
-
     if (!params.replacementCheques || params.replacementCheques.length === 0) {
       return {
         success: false,
         error: language === "ar" ? "يرجى إضافة شيك بديل واحد على الأقل." : "Please add at least one replacement cheque.",
       };
     }
-
     const totalReplacementAmount = params.replacementCheques.reduce((sum, chq) => sum + (Number(chq.amount) || 0), 0);
     const targetOutstanding = origCheque.outstanding > 0 ? origCheque.outstanding : origCheque.amount;
-
     if (totalReplacementAmount <= 0) {
       return { success: false, error: "مجموع مبالغ الشيكات البديلة يجب أن يكون أكبر من الصفر" };
     }
-
     if (Math.abs(totalReplacementAmount - targetOutstanding) > 0.01) {
       return {
         success: false,
@@ -5581,10 +5051,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : `Total replacement cheques (AED ${totalReplacementAmount.toLocaleString()}) does not match original cheque outstanding balance (AED ${targetOutstanding.toLocaleString()}).`,
       };
     }
-
     const repGroupId = "rep-grp-" + Date.now();
     const repDate = params.date || new Date().toISOString().split("T")[0];
-
     // Locate linked lease
     let targetLease = leases.find((l) => origCheque.leaseId && (l.id === origCheque.leaseId || l.leaseNumber === origCheque.leaseId));
     if (!targetLease && origCheque.tenantId) {
@@ -5592,15 +5060,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         (l) => l.tenantId === origCheque.tenantId && (!origCheque.propertyId || l.propertyId === origCheque.propertyId)
       );
     }
-
     // Process all replacement cheques (new or existing)
     const finalReplacementCheques: Cheque[] = [];
     const newChequeIds: string[] = [];
     const existingChequeIdsToUpdate = new Set<string>();
-
     for (let idx = 0; idx < params.replacementCheques.length; idx++) {
       const item = params.replacementCheques[idx];
-
       if (item.existingChequeId) {
         // Validate existing cheque
         const existingChq = cheques.find((c) => c.id === item.existingChequeId);
@@ -5612,7 +5077,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               : `Existing cheque with ID (${item.existingChequeId}) not found.`,
           };
         }
-
         if (
           existingChq.status === "REPLACED" ||
           existingChq.status === "CANCELLED" ||
@@ -5627,7 +5091,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               : `Existing cheque #${existingChq.chequeNumber} is not eligible for replacement because its status is (${existingChq.status}).`,
           };
         }
-
         // Check if existing cheque is locked by a legal case
         const existingCaseCheck = checkCaseControlledCheque(existingChq.id);
         if (existingCaseCheck.isControlled) {
@@ -5638,10 +5101,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               : `Existing cheque #${existingChq.chequeNumber} is locked by an active legal case and cannot be used as replacement.`,
           };
         }
-
         newChequeIds.push(existingChq.id);
         existingChequeIdsToUpdate.add(existingChq.id);
-
         const updatedExisting: Cheque = {
           ...existingChq,
           chequeNumber: item.chequeNumber ? String(item.chequeNumber).trim() : existingChq.chequeNumber,
@@ -5674,16 +5135,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             ...(existingChq.auditTrail || []),
           ],
         };
-
         finalReplacementCheques.push(updatedExisting);
       } else {
         // Create new replacement cheque
         const newChqId = `chq-rep-${Date.now()}-${idx + 1}`;
         newChequeIds.push(newChqId);
-
         const isDue = new Date(item.dueDate) <= new Date();
         const initialStatus: ChequeStatus = isDue ? "PENDING" : "POST_DATED";
-
         const newChq: Cheque = {
           id: newChqId,
           chequeNumber: String(item.chequeNumber).trim(),
@@ -5708,7 +5166,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           accountNumber: item.accountNumber || origCheque.accountNumber,
           notes: `شيك بديل عن الشيك رقم #${origCheque.chequeNumber}. ${item.notes || ""}`,
           createdAt: new Date().toISOString(),
-
           // Replacement tracking fields
           originalChequeId: origCheque.id,
           isReplacement: true,
@@ -5727,11 +5184,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             },
           ],
         };
-
         finalReplacementCheques.push(newChq);
       }
     }
-
     const origAuditEntry: ChequeAuditEntry = {
       id: "aud-" + Date.now(),
       previousStatus: origCheque.status,
@@ -5741,7 +5196,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       performedByUserId: currentUser?.id || "system",
       notes: `تم الاستبدال بـ ${params.replacementCheques.length} شيك بديل (${params.replacementCheques.map(c => "#" + c.chequeNumber).join(", ")}). السبب: ${params.reason.trim()}`,
     };
-
     // Update original cheque: status -> REPLACED, outstanding -> 0 (locked, historical)
     const updatedOriginal: Cheque = {
       ...origCheque,
@@ -5754,7 +5208,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       notes: `${origCheque.notes ? origCheque.notes + "\n" : ""}تم استبداله بالشيك/الشيكات (${params.replacementCheques.map(c => "#" + c.chequeNumber).join(", ")}) بتاريخ ${repDate}. السبب: ${params.reason.trim()}`,
       auditTrail: [origAuditEntry, ...(origCheque.auditTrail || [])],
     };
-
     // Synchronize Lease Installment Schedule
     let updatedLease: Lease | null = null;
     if (targetLease && targetLease.installments && targetLease.installments.length > 0) {
@@ -5764,11 +5217,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isSameChequeNumber(inst.chequeNumber, origCheque.chequeNumber) ||
           (inst.dueDate === origCheque.dueDate && Math.abs((inst.amount || 0) - (origCheque.amount || 0)) < 1.0)
       );
-
       if (origInstIdx !== -1) {
         const currentInsts = [...targetLease.installments];
         const origInst = currentInsts[origInstIdx];
-
         if (finalReplacementCheques.length === 1) {
           const singleRep = finalReplacementCheques[0];
           currentInsts[origInstIdx] = {
@@ -5791,16 +5242,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             status: "PENDING",
             notes: `تجزئة واستبدال (${cIdx + 1}/${finalReplacementCheques.length}) من الشيك #${origCheque.chequeNumber}. ${params.reason.trim()}`,
           }));
-
           currentInsts.splice(origInstIdx, 1, ...splitInsts);
         }
-
         // Re-sequence all installment numbers cleanly
         const resequencedInsts = currentInsts.map((inst, i) => ({
           ...inst,
           installmentNumber: i + 1,
         }));
-
         updatedLease = {
           ...targetLease,
           installments: resequencedInsts,
@@ -5809,7 +5257,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
     }
-
     // Persist replacement and updated records
     try {
       finalReplacementCheques.forEach((chq) => {
@@ -5822,25 +5269,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e) {
       console.error("Firestore persistence failed in replaceCheque:", e);
     }
-
     // Update in-memory state
     setCheques((prev) => {
       const newItems = finalReplacementCheques.filter((c) => !existingChequeIdsToUpdate.has(c.id));
       const existingMap = new Map(finalReplacementCheques.filter((c) => existingChequeIdsToUpdate.has(c.id)).map((c) => [c.id, c]));
-
       const updatedPrev = prev.map((c) => {
         if (c.id === origCheque.id) return updatedOriginal;
         if (existingMap.has(c.id)) return existingMap.get(c.id)!;
         return c;
       });
-
       return [...newItems, ...updatedPrev];
     });
-
     if (updatedLease) {
       setLeases((prev) => prev.map((l) => (l.id === updatedLease!.id ? updatedLease! : l)));
     }
-
     logAudit(
       "FINANCIAL_RECORD_EDIT",
       "CHEQUE",
@@ -5851,10 +5293,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       "REPLACED",
       params.reason.trim()
     );
-
     return { success: true, newCheques: finalReplacementCheques };
   };
-
   /**
    * Cancels a cheque while safeguarding the financial obligation, lease schedule, and audit trail.
    */
@@ -5867,7 +5307,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }): { success: boolean; error?: string } => {
     const target = cheques.find((c) => c.id === params.chequeId);
     if (!target) return { success: false, error: "الشيك غير موجود" };
-
     const caseCheck = checkCaseControlledCheque(params.chequeId);
     if (caseCheck.isControlled) {
       return {
@@ -5877,7 +5316,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : "Sorry, this cheque is reserved under an active legal case and cannot be cancelled.",
       };
     }
-
     if (target.status === "CANCELLED") {
       return { success: false, error: "الشيك ملغى بالفعل ومقفل دفترياً." };
     }
@@ -5887,19 +5325,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (target.status === "CLEARED" || target.status === "COLLECTED") {
       return { success: false, error: "لا يمكن إلغاء شيك تم صرفه أو تحصيله بالكامل." };
     }
-
     if (!params.reason || !params.reason.trim()) {
       return { success: false, error: "سبب الإلغاء إلزامي لتوثيق السجل المحاسبي." };
     }
-
     const check = checkFinancialEditPermission("CHEQUE", params.reason);
     if (!check.allowed) return { success: false, error: check.error };
-
     saveEntitySnapshot("CHEQUE", target, "VERSION");
-
     const todayStr = new Date().toISOString().split("T")[0];
     const nowIso = new Date().toISOString();
-
     const auditEntry: ChequeAuditEntry = {
       id: "aud-" + Date.now(),
       previousStatus: target.status,
@@ -5911,7 +5344,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       reason: params.reason.trim(),
       reference: params.settlementRef,
     };
-
     const updated: Cheque = {
       ...target,
       status: "CANCELLED",
@@ -5924,13 +5356,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       notes: `${target.notes ? target.notes + "\n" : ""}تم إلغاء الشيك بتاريخ ${todayStr}. نوع الإلغاء: ${params.cancellationType}. السبب: ${params.reason.trim()}${params.settlementRef ? ` | المرجع: ${params.settlementRef}` : ""}`,
       auditTrail: [auditEntry, ...(target.auditTrail || [])],
     };
-
     // Find linked lease and sync installment
     let targetLease = leases.find((l) => target.leaseId && (l.id === target.leaseId || l.leaseNumber === target.leaseId));
     if (!targetLease && target.tenantId) {
       targetLease = leases.find((l) => l.tenantId === target.tenantId && (!target.propertyId || l.propertyId === target.propertyId));
     }
-
     let updatedLease: Lease | null = null;
     if (targetLease && targetLease.installments && targetLease.installments.length > 0) {
       const instIdx = targetLease.installments.findIndex(
@@ -5939,12 +5369,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isSameChequeNumber(inst.chequeNumber, target.chequeNumber) ||
           (inst.dueDate === target.dueDate && Math.abs((inst.amount || 0) - (target.amount || 0)) < 1.0)
       );
-
       if (instIdx !== -1) {
         const updatedInstallments = [...targetLease.installments];
         let newInstStatus: "PENDING" | "WAIVED" | "COLLECTED" = "PENDING";
         let instNote = `تم إلغاء الشيك #${target.chequeNumber}. السبب: ${params.reason.trim()}`;
-
         if (params.cancellationType === "APPROVED_WAIVER") {
           newInstStatus = "WAIVED";
           instNote = `تم إلغاء الشيك وإعفاء الدفعة بموافقة المالك. السبب: ${params.reason.trim()}`;
@@ -5959,21 +5387,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           newInstStatus = "PENDING";
           instNote = `تم إلغاء الورقة المالية للشيك #${target.chequeNumber}. القسط ما زال مستحقاً بانتظار وسيلة سداد بديلة.`;
         }
-
         updatedInstallments[instIdx] = {
           ...updatedInstallments[instIdx],
           status: newInstStatus,
           chequeId: params.cancellationType === "APPROVED_WAIVER" || params.cancellationType === "SETTLED_OTHER_MEANS" ? target.id : undefined,
           notes: instNote,
         };
-
         updatedLease = {
           ...targetLease,
           installments: updatedInstallments,
         };
       }
     }
-
     // Persist to database
     try {
       safeSetDoc(doc(db, "cheques", target.id), updated, { merge: true });
@@ -5983,12 +5408,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e) {
       console.error("Firestore persistence failed in cancelCheque:", e);
     }
-
     setCheques((prev) => prev.map((c) => (c.id === target.id ? updated : c)));
     if (updatedLease) {
       setLeases((prev) => prev.map((l) => (l.id === updatedLease!.id ? updatedLease! : l)));
     }
-
     logAudit(
       "FINANCIAL_RECORD_EDIT",
       "CHEQUE",
@@ -5999,10 +5422,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       "CANCELLED",
       params.reason.trim()
     );
-
     return { success: true };
   };
-
   /**
    * Dedicated action to mark a lease installment as BOUNCED.
    * Finds or auto-creates the linked cheque in the cheques register,
@@ -6017,18 +5438,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!targetLease) {
       return { success: false, error: "عقد الإيجار غير موجود" };
     }
-
     const instList = targetLease.installments || [];
     const inst = instList.find((i) => i.installmentNumber === installmentNumber);
     if (!inst) {
       return { success: false, error: "القسط غير موجود في العقد" };
     }
-
     // 1. Find or create linked cheque
     let linkedCheque = findLinkedChequeForInstallment(cheques, inst, targetLease);
     const todayStr = new Date().toISOString().split("T")[0];
     const bounceReason = reason || "Marked as bounced from lease installment schedule";
-
     if (linkedCheque) {
       const oldStatus = linkedCheque.status;
       const updatedCheque: Cheque = {
@@ -6044,10 +5462,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         tenantId: targetLease.tenantId,
         outstanding: linkedCheque.outstanding > 0 ? linkedCheque.outstanding : linkedCheque.amount,
       };
-
       setCheques((prev) => prev.map((c) => (c.id === linkedCheque!.id ? updatedCheque : c)));
       safeSetDoc(doc(db, "cheques", linkedCheque.id), updatedCheque, { merge: true });
-
       logAudit(
         "FINANCIAL_RECORD_EDIT",
         "CHEQUE",
@@ -6065,12 +5481,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const chqNum = inst.chequeNumber
         ? String(inst.chequeNumber).trim()
         : `CHQ-${targetLease.leaseNumber || targetLease.id.substring(0, 4)}-${installmentNumber}`;
-
       const resolvedOwnerId = targetLease.ownerId || prop?.ownerId;
       if (!resolvedOwnerId) {
         return { success: false, error: "لا يمكن إنشاء سجل الشيك المرتجع لعدم وجود مالك مرتبط بعقد الإيجار." };
       }
-
       const newCheque: Cheque = {
         id: "chq-" + Date.now(),
         chequeNumber: chqNum,
@@ -6095,10 +5509,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createdAt: new Date().toISOString(),
         notes: `Auto-created and marked as bounced from lease #${targetLease.leaseNumber}. ${bounceReason}`,
       };
-
       setCheques((prev) => [newCheque, ...prev]);
       safeSetDoc(doc(db, "cheques", newCheque.id), newCheque);
-
       logAudit(
         "CREATE",
         "CHEQUE",
@@ -6108,7 +5520,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
       linkedCheque = newCheque;
     }
-
     // 2. Update installment status in lease
     const updatedInstallments = instList.map((i) => {
       if (i.installmentNumber === installmentNumber) {
@@ -6121,18 +5532,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return i;
     });
-
     const updatedLease = { ...targetLease, installments: updatedInstallments };
     setLeases((prev) => prev.map((l) => (l.id === targetLease.id ? updatedLease : l)));
     safeSetDoc(doc(db, "leases", targetLease.id), updatedLease, { merge: true });
-
     setTimeout(() => {
       recalculateTenantRisk(targetLease.tenantId);
     }, 200);
-
     return { success: true, cheque: linkedCheque };
   };
-
   /**
    * Updates an installment status directly in a lease contract.
    */
@@ -6144,7 +5551,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): { success: boolean; error?: string } => {
     const targetLease = leases.find((l) => l.id === leaseId || l.leaseNumber === leaseId);
     if (!targetLease) return { success: false, error: "Lease not found" };
-
     const instList = targetLease.installments || [];
     const updatedInstallments = instList.map((inst) => {
       if (inst.installmentNumber === installmentNumber) {
@@ -6156,14 +5562,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return inst;
     });
-
     const updatedLease = { ...targetLease, installments: updatedInstallments };
     setLeases((prev) => prev.map((l) => (l.id === targetLease.id ? updatedLease : l)));
     safeSetDoc(doc(db, "leases", targetLease.id), updatedLease, { merge: true });
     return { success: true };
   };
-
-  
   const extractDocumentOCR = async (documentType: string, imageBase64: string, mimeType = "image/jpeg"): Promise<any> => {
     try {
       let cleanB64 = (imageBase64 || "").trim();
@@ -6172,7 +5575,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       cleanB64 = cleanB64.replace(/[\r\n\s]/g, "");
       const safeDataUrl = `data:${mimeType};base64,${cleanB64}`;
-
       if (documentType === "EMIRATES_ID") {
         try {
           const { OCRV2Engine } = await import("../services/ocr/v2/OCRV2Engine");
@@ -6188,7 +5590,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (v2Err) {
           console.warn("[DataContext] OCR V2 fallback to V1 for Emirates ID:", v2Err);
         }
-
         const res = await OCRService.extractDocument(cleanB64, "EMIRATES_ID", "accurate", mimeType);
         return {
           success: res.success,
@@ -6199,7 +5600,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           errorAr: res.errorAr,
         };
       }
-
       if (documentType === "CHEQUE") {
         try {
           const { OCRV2Engine } = await import("../services/ocr/v2/OCRV2Engine");
@@ -6215,7 +5615,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (v2Err) {
           console.warn("[DataContext] OCR V2 fallback to V1 for Cheque:", v2Err);
         }
-
         const res = await OCRService.extractCheque(cleanB64, mimeType);
         return {
           success: res.success,
@@ -6226,7 +5625,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           errorAr: res.errorAr,
         };
       }
-
       const res = await OCRService.extractDocument(cleanB64, documentType, "accurate", mimeType);
       return {
         success: res.success,
@@ -6241,7 +5639,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: e.message || "Failed to process OCR" };
     }
   };
-
   const extractChequeOCR = async (imageBase64: string, mimeType = "image/jpeg"): Promise<any> => {
     try {
       let cleanB64 = (imageBase64 || "").trim();
@@ -6249,7 +5646,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         cleanB64 = cleanB64.substring(cleanB64.lastIndexOf(",") + 1);
       }
       cleanB64 = cleanB64.replace(/[\r\n\s]/g, "");
-
       const res = await OCRService.extractCheque(cleanB64, mimeType);
       return {
         success: res.success,
@@ -6267,7 +5663,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
   };
-
   const extractChequeBatchOCR = async (payload: { imageBase64?: string; images?: string[]; mimeType?: string }): Promise<any> => {
     try {
       let safeBase64 = payload.imageBase64;
@@ -6280,7 +5675,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         return img ? img.replace(/[\r\n\s]/g, "") : img;
       });
-
       const res = await OCRService.extractChequeBatch({
         imageBase64: safeBase64,
         images: safeImages,
@@ -6300,12 +5694,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
   };
-
   // -------------------------------------------------------------
   // Collections Workflow
   // -------------------------------------------------------------
-
   const recordCollection = async (params: { chequeId: string; amountEntered: number; bouncedFeeAmount?: number; paymentMethod: PaymentMethod; payerName: string; notes?: string; transactionReference?: string; approvalCode?: string; fromCase?: boolean; userId?: string; userName?: string; }): Promise<{ success: boolean; appliedAmount: number; isOverpayment: boolean; error?: string; receipt?: CollectionRecord }> => {
+    assertCloudWriteAvailable(language as "ar" | "en");
     try {
       const paymentDate = new Date().toISOString().split("T")[0];
       const periodCheck = validateTransactionPeriod(paymentDate, financialPeriods);
@@ -6317,48 +5710,37 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn,
         };
       }
-
       const result = await runTransaction(db, async (transaction) => {
         const chequeRef = doc(db, "cheques", params.chequeId);
         const chequeSnap = await transaction.get(chequeRef);
         if (!chequeSnap.exists()) throw new Error("Cheque not found");
-        
         const cheque = chequeSnap.data() as Cheque;
         if (!cheque.ownerId || !cheque.tenantId) {
           throw new Error(language === "ar" ? "بيانات المالك أو المستأجر غير مكتملة في سجل الشيك." : "Missing owner or tenant identity in cheque record.");
         }
-
         const caseCheck = checkCaseControlledCheque(params.chequeId);
         if (caseCheck.isControlled && !params.fromCase) {
           throw new Error(language === "ar" ? `هذا الشيك محجوز على ذمة قضية قانونية مفتوحة رقم ${caseCheck.caseNumber}، ولا يمكن تحصيله إلا من داخل القضية.` : `This cheque is reserved under open legal case #${caseCheck.caseNumber}.`);
         }
-
         if (cheque.status === "CLEARED" || cheque.status === "REPLACED" || cheque.status === "CANCELLED" || (cheque.outstanding <= 0 && cheque.status === "COLLECTED")) {
           throw new Error(language === "ar" ? `لا يمكن تحصيل شيك غير سارٍ أو مسدد بالكامل مسبقاً (الحالة: ${cheque.status}).` : `Cannot record payment for an inactive or already fully settled cheque (Status: ${cheque.status}).`);
         }
-
         if (isCardPayment(params.paymentMethod) && !params.approvalCode) {
           throw new Error(language === "ar" ? "يجب إدخال رقم الموافقة (Approval Code) عند الدفع بالبطاقة الائتمانية." : "Approval Code is mandatory for card payments.");
         }
-
         const outstanding = cheque.outstanding;
         const isOverpayment = params.amountEntered > outstanding;
         const appliedAmount = Math.min(params.amountEntered, outstanding);
-
         const newTotalApplied = cheque.totalApplied + appliedAmount;
         const newOutstanding = cheque.amount - newTotalApplied;
         const isFullyCollected = newOutstanding <= 0;
-
         const newCollectionStatus: CollectionStatus = isFullyCollected ? "FULLY_COLLECTED_AFTER_BOUNCE" : "PARTIAL_COLLECTION";
         const newChequeStatus: ChequeStatus = isFullyCollected ? "COLLECTED" : cheque.status;
-
         const bouncedFee = params.bouncedFeeAmount || 0;
         const isBouncedFeeAlreadyCollected = cheque.bouncedFeeCollected;
         const finalBouncedFee = isBouncedFeeAlreadyCollected ? 0 : bouncedFee;
-
         const receiptId = "col-" + Date.now();
         const receiptNumber = generateSequentialNumber(collections, "receiptNumber", "RCP-", 4, false);
-
         const colAuditEntry: ChequeAuditEntry = {
           id: "aud-" + Date.now(),
           previousStatus: cheque.status,
@@ -6369,7 +5751,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           reference: params.transactionReference,
           notes: `تحصيل مالي: تم تطبيق ${appliedAmount.toLocaleString()} درهم بموجب السند #${receiptNumber}. المتبقي: ${Math.max(0, newOutstanding).toLocaleString()} درهم.`,
         };
-
         const updatedChqWithAudit: Cheque = {
           ...cheque,
           totalApplied: newTotalApplied,
@@ -6380,7 +5761,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           bouncedFeeCollectedAmount: (cheque.bouncedFeeCollectedAmount || 0) + finalBouncedFee,
           auditTrail: [colAuditEntry, ...(cheque.auditTrail || [])],
         };
-
         const receipt: CollectionRecord = {
           id: receiptId,
           receiptNumber: receiptNumber,
@@ -6401,7 +5781,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           notes: params.notes,
           createdAt: new Date().toISOString(),
         };
-
         const allocId = "pal-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
         const alloc: PaymentAllocation = {
           id: allocId,
@@ -6414,7 +5793,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdById: params.userId || currentUser?.id || "system",
           createdAt: new Date().toISOString(),
         };
-
         // Construct balanced rent collection journal entry
         const journalData = buildRentCollectionJournal(
           {
@@ -6439,7 +5817,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         const jeId = "je-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
         const year = new Date().getFullYear();
-        const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+        const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
         const journalRecord: JournalEntryRecord = {
           ...journalData,
           id: jeId,
@@ -6449,20 +5827,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           totalCredit: jVal.totalCredit,
           createdAt: new Date().toISOString(),
         };
-
         transaction.set(chequeRef, sanitizeForFirestore(updatedChqWithAudit), { merge: true });
         transaction.set(doc(db, "collections", receiptId), sanitizeForFirestore(receipt));
         transaction.set(doc(db, "payment_allocations", allocId), sanitizeForFirestore(alloc));
         transaction.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
-
         return { updatedChqWithAudit, receipt, alloc, journalRecord, isFullyCollected, appliedAmount, isOverpayment };
       });
-
       setCheques((prev) => prev.map((c) => (c.id === params.chequeId ? result.updatedChqWithAudit : c)));
       setCollections((prev) => [result.receipt, ...prev]);
       setPaymentAllocations((prev) => [...prev, result.alloc]);
       setJournalEntries((prev) => [...prev, result.journalRecord]);
-
       if (result.isFullyCollected) {
         syncChequeWithLease(result.updatedChqWithAudit, "COLLECTED");
       }
@@ -6478,18 +5852,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           })
         );
       }
-
       logAudit("FINANCIAL_PAYMENT", "COLLECTION", result.receipt.id, `Receipt #${result.receipt.receiptNumber}`, `Collected ${result.appliedAmount.toLocaleString()} AED against Cheque #${result.updatedChqWithAudit.chequeNumber}.`);
-
       setTimeout(() => { recalculateTenantRisk(result.updatedChqWithAudit.tenantId); }, 150);
-
       return { success: true, appliedAmount: result.appliedAmount, isOverpayment: result.isOverpayment, receipt: result.receipt };
     } catch (e: any) {
       console.error(e);
       return { success: false, appliedAmount: 0, isOverpayment: false, error: e.message };
     }
   };
-
   const deleteCollection = (id: string, options?: DeleteRecordOptions) => {
     const msg = language === "ar"
       ? "المقبوضات المالية المسجلة محمية تماماً ضد الحذف بموجب الحوكمة المالية الصارمة. يرجى استخدام عملية عكس المقبوضات بدلاً من ذلك."
@@ -6497,17 +5867,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     alert(msg);
     return;
   };
-
   // -------------------------------------------------------------
   // ERP Phase 1: Commission Engine & Financial Allocations
   // -------------------------------------------------------------
-
   const addVatRate = (data: Omit<VatRateRecord, "id" | "createdAt" | "createdById" | "createdByName">) => {
     if (vatRates.some(v => v.category === data.category && v.effectiveFrom === data.effectiveFrom)) {
       return { success: false, error: "Duplicate effective date for this category." };
     }
     if (data.rate < 0) return { success: false, error: "Rate cannot be negative." };
-
     const newRate: VatRateRecord = {
       ...data,
       id: "vat-" + Date.now(),
@@ -6515,46 +5882,38 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdById: currentUser?.id || "system",
       createdByName: currentUser?.nameEn || "System",
     };
-
     setVatRates(prev => [...prev, newRate]);
     safeSetDoc(doc(db, "vatRates", newRate.id), newRate);
     logAudit("CREATE", "CHART_OF_ACCOUNTS", newRate.id, `VAT Rate ${data.rate}%`, `Created new VAT rate effective ${data.effectiveFrom}`);
     return { success: true };
   };
-
   const updateVatRate = (id: string, patch: Partial<VatRateRecord>, reason?: string) => {
     const existing = vatRates.find(v => v.id === id);
     if (!existing) return { success: false, error: "Rate not found." };
-
     // Prevent changing rates that are already in the past and likely used
     const today = new Date().toISOString().split("T")[0];
     if (existing.effectiveFrom < today && patch.rate !== undefined && patch.rate !== existing.rate) {
       return { success: false, error: "Cannot modify historical VAT rates already in effect." };
     }
-
     const updated = { ...existing, ...patch, updatedAt: new Date().toISOString() };
     setVatRates(prev => prev.map(v => v.id === id ? updated : v));
     safeSetDoc(doc(db, "vatRates", id), updated, { merge: true });
     logAudit("UPDATE", "CHART_OF_ACCOUNTS", id, `VAT Rate ${existing.rate}%`, reason || `Updated VAT rate details`, JSON.stringify(existing), JSON.stringify(updated));
     return { success: true };
   };
-
   const deleteVatRate = (id: string, reason?: string) => {
     const existing = vatRates.find(v => v.id === id);
     if (!existing) return { success: false, error: "Rate not found." };
-
     // Check if used by transactions (simplified check for this phase: if effective from is in past, assume used)
     const today = new Date().toISOString().split("T")[0];
     if (existing.effectiveFrom <= today) {
       return { success: false, error: "Cannot delete a VAT rate that is currently or was previously in effect." };
     }
-
     setVatRates(prev => prev.filter(v => v.id !== id));
     deleteDoc(doc(db, "vatRates", id));
     logAudit("DELETE", "CHART_OF_ACCOUNTS", id, `VAT Rate ${existing.rate}%`, reason || "Deleted VAT rate record");
     return { success: true };
   };
-
   const addCommissionObligation = (
     data: Omit<
       CommissionObligation,
@@ -6566,19 +5925,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!periodCheck.allowed) {
       return { success: false, error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn };
     }
-
     const seq = data.businessKeySequence || "PRIMARY";
     const businessKey = generateCommissionBusinessKey(data.leaseId, data.partyType, data.commissionType, seq);
-
     const contractYear = String(
       data.contractualCommissionYear ||
       (data.dueDate ? new Date(data.dueDate).getFullYear() : new Date().getFullYear())
     );
-
     // Business Rule Phase 53: Sequential Revenue Tracking
     // Format: leaseId:partyType:commissionType:contractYear:sequence
     const fullBusinessKey = `${businessKey}:${contractYear}`;
-
     const existingYearDuplicate = commissions.find(
       (c) =>
         c.status !== "CANCELLED" &&
@@ -6588,7 +5943,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         String(c.contractualCommissionYear || (c.dueDate ? new Date(c.dueDate).getFullYear() : (c.createdAt ? new Date(c.createdAt).getFullYear() : new Date().getFullYear()))) === contractYear &&
         (c.businessKeySequence || "PRIMARY") === seq
     );
-
     if (isDuplicateCommission(commissions, fullBusinessKey) || (!data.isOverride && existingYearDuplicate)) {
       return {
         success: false,
@@ -6597,14 +5951,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : `Administrative fees already recorded for this party for contractual year ${contractYear}. Duplicate fees are prohibited.`,
       };
     }
-
     // Calculate total commission amount and tax components
     let totalAmount = 0;
     let vatAmount = 0;
     let vatRate = 0;
     let netRevenueAmount = 0;
     let taxTreatment: "VAT_DEDUCTION" | "NONE" = "NONE";
-
     if (data.calculationBasis === "PERCENTAGE_OF_RENT") {
       const calc = calculateCommissionAmount(
         data.baseAmount,
@@ -6620,7 +5972,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       taxTreatment = calc.taxTreatment;
     } else {
       totalAmount = data.calculationBasis === "FIXED_AMOUNT" ? (data.fixedAmount || 0) : (data.totalCommissionAmount || 0);
-      
       // Central VAT logic for Administrative Fee (VAT-Inclusive Basis)
       if (data.commissionType === "ADMIN_FEE") {
         vatRate = getApplicableVatRate(data.dueDate || new Date().toISOString(), vatRates, "ADMIN_FEE");
@@ -6632,7 +5983,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         taxTreatment = "NONE";
       }
     }
-
     const newCommission: CommissionObligation = {
       ...data,
       id: "com-" + Date.now() + "-" + crypto.randomUUID().split("-")[0],
@@ -6649,10 +5999,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdById: currentUser?.id || "system",
       createdByName: currentUser?.nameEn || "System User",
     };
-
     setCommissions((prev) => [newCommission, ...prev]);
     safeSetDoc(doc(db, "commissions", newCommission.id), newCommission);
-
     logAudit(
       "COMMISSION_CREATED",
       "COMMISSION",
@@ -6660,14 +6008,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `${newCommission.partyType} Commission (${newCommission.commissionType})`,
       `Created ${newCommission.partyType} commission obligation of AED ${totalAmount.toLocaleString()} for Lease ${newCommission.leaseId} (Rate: ${newCommission.ratePercentage || 0}%, Key: ${businessKey})`
     );
-
     return { success: true, commission: newCommission };
   };
-
   const updateCommissionObligation = (id: string, patch: Partial<CommissionObligation>, modificationReason?: string): { success: boolean; error?: string } => {
     const existing = commissions.find((c) => c.id === id);
     if (!existing) return { success: false, error: "Commission record not found" };
-
     // Phase 53: Immutability Rule - Amount cannot be changed after save
     if (patch.totalCommissionAmount !== undefined && patch.totalCommissionAmount !== existing.totalCommissionAmount) {
       return {
@@ -6677,12 +6022,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : "Commission amount is immutable after save. Use reversal or adjustment workflows for corrections.",
       };
     }
-
     const check = checkFinancialEditPermission("COMMISSION", modificationReason);
     if (!check.allowed) return { success: false, error: check.error };
-
     saveEntitySnapshot("COMMISSION", existing, "VERSION");
-
     let updatedPatch = { ...patch };
     // Trigger recalculation of tax fields if critical financial fields are modified
     if (patch.totalCommissionAmount !== undefined || patch.ratePercentage !== undefined || patch.commissionType !== undefined || patch.baseAmount !== undefined) {
@@ -6690,7 +6032,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const rate = patch.ratePercentage !== undefined ? patch.ratePercentage : existing.ratePercentage;
       const type = patch.commissionType !== undefined ? patch.commissionType : existing.commissionType;
       const party = existing.partyType;
-
       const calc = calculateCommissionAmount(
         baseAmount, 
         party, 
@@ -6700,7 +6041,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         existing.dueDate,
         vatRates
       );
-
       updatedPatch = {
         ...updatedPatch,
         vatAmount: calc.vatAmount,
@@ -6708,7 +6048,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         netRevenueAmount: calc.netRevenue,
         taxTreatment: calc.taxTreatment,
       };
-
       // If total amount was manually specified, ensure VAT/Net are derived from it
       if (patch.totalCommissionAmount !== undefined) {
         if (type === "ADMIN_FEE") {
@@ -6726,11 +6065,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     }
-
     const updated = { ...existing, ...updatedPatch, updatedAt: new Date().toISOString() };
     setCommissions((prev) => prev.map((c) => (c.id === id ? updated : c)));
     safeSetDoc(doc(db, "commissions", id), updated, { merge: true });
-
     logAudit(
       "FINANCIAL_RECORD_EDIT",
       "COMMISSION",
@@ -6743,7 +6080,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
     return { success: true };
   };
-
   const collectAdministrativeFee = async (
     id: string,
     amount: number,
@@ -6757,35 +6093,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       dailyDepositId?: string;
     }
   ): Promise<{ success: boolean; error?: string }> => {
+    assertCloudWriteAvailable(language as "ar" | "en");
     // Financial Period Validation
     const periodCheck = validateTransactionPeriod(new Date().toISOString(), financialPeriods);
     if (!periodCheck.allowed) {
       return { success: false, error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn };
     }
-
     try {
       const existing = commissions.find((c) => c.id === id);
       if (!existing) {
         return { success: false, error: language === "ar" ? "سجل الرسوم غير موجود." : "Commission obligation record not found." };
       }
-
       // Duplicate collection protection
       if (existing.status === "FULLY_COLLECTED" || existing.status === "COLLECTED" || (existing.collectedAmount || 0) >= existing.totalCommissionAmount - 0.01) {
         return { success: false, error: language === "ar" ? "تم تحصيل هذه الرسوم بالكامل مسبقاً." : "This fee obligation has already been fully collected." };
       }
-
       if (existing.status === "CANCELLED" || existing.status === "REVERSED" || existing.status === "WAIVED") {
         return {
           success: false,
           error: language === "ar" ? "لا يمكن تحصيل رسوم ملغاة أو معفاة أو معكوسة." : "Cannot collect a cancelled, waived, or reversed fee obligation.",
         };
       }
-
       const availableBalance = existing.totalCommissionAmount - (existing.collectedAmount || 0);
       if (amount > availableBalance + 0.01) {
         return { success: false, error: language === "ar" ? "المبلغ يتجاوز الرصيد المستحق المتبقي." : "Amount exceeds remaining outstanding balance." };
       }
-
       // Financial Collection Gate: Cash must ONLY be collected/settled via Daily Deposits workflow
       const isDailyDepositsFlow = options?.sourceWorkflow === "DAILY_DEPOSITS" || options?.sourceWorkflow === "SETTLEMENT_GATE";
       if (paymentMethod === "CASH" && !isDailyDepositsFlow) {
@@ -6796,7 +6128,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             : "Cash administrative fee collection must be processed exclusively via the Daily Deposits workflow to ensure verified bank deposit.",
         };
       }
-
       // For Bank Transfer or Credit Card direct settlement, require reference or proof
       if ((paymentMethod === "BANK_TRANSFER" || paymentMethod === "CREDIT_CARD") && !referenceNumber && !options?.proofDocumentId && !existing.proofDocumentId) {
         return {
@@ -6806,45 +6137,35 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             : "Please provide a transaction reference number or attach payment proof for direct settlement.",
         };
       }
-
       const userId = currentUser?.id || "sys";
       const userName = currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
-
       // Deterministic IDs for idempotency
       const receiptId = idempotencyKey ? `col-adm-${idempotencyKey}` : `col-adm-${id}-${Date.now()}`;
       const allocationId = idempotencyKey ? `all-adm-${idempotencyKey}` : `all-adm-${id}-${Date.now()}`;
-
       let updatedCommission: CommissionObligation | null = null;
       let newReceipt: CollectionRecord | null = null;
       let newAllocation: PaymentAllocation | null = null;
       let createdJournalRecord: JournalEntryRecord | null = null;
-
       await runTransaction(db, async (transaction) => {
         const commRef = doc(db, "commissions", id);
         const commSnap = await transaction.get(commRef);
-
         if (!commSnap.exists()) {
           throw new Error("سجل الرسوم غير موجود.");
         }
-
         const commData = commSnap.data() as CommissionObligation;
-
         if (commData.status === "FULLY_COLLECTED" || (commData.collectedAmount || 0) >= commData.totalCommissionAmount - 0.01) {
           throw new Error("تم تحصيل هذه الرسوم بالكامل مسبقاً.");
         }
-
         const currentBal = commData.totalCommissionAmount - (commData.collectedAmount || 0);
         if (amount > currentBal + 0.01) {
           throw new Error("المبلغ يتجاوز الرصيد المتبقي.");
         }
-
         const receiptRef = doc(db, "collections", receiptId);
         const receiptSnap = await transaction.get(receiptRef);
         if (receiptSnap.exists()) {
           // Idempotency: Already processed!
           return;
         }
-
         // Determine payer name directly within transaction closure
         let refinedPayerName = userName;
         if (commData.partyType === "TENANT" && commData.tenantId) {
@@ -6854,11 +6175,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const o = owners.find((oo) => oo.id === commData.ownerId);
           if (o) refinedPayerName = language === "ar" ? o.nameAr : o.nameEn;
         }
-
         const newCollected = (commData.collectedAmount || 0) + amount;
         const isFullySettled = newCollected >= commData.totalCommissionAmount - 0.01;
         const newOutstanding = Math.max(0, commData.totalCommissionAmount - newCollected);
-
         updatedCommission = {
           ...commData,
           collectedAmount: newCollected,
@@ -6873,7 +6192,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           updatedById: userId,
           updatedByName: userName,
         };
-
         newReceipt = {
           id: receiptId,
           receiptNumber: "RCP-ADM-" + new Date().getFullYear() + "-" + crypto.randomUUID().split("-")[0],
@@ -6892,7 +6210,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdAt: new Date().toISOString(),
           idempotencyKey,
         };
-
         newAllocation = {
           id: allocationId,
           collectionId: receiptId,
@@ -6902,12 +6219,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           allocatedAmount: amount,
           allocationDate: newReceipt.paymentDate,
           status: "ACTIVE",
-
           createdAt: newReceipt.createdAt,
           createdById: userId,
           idempotencyKey,
         };
-
         const journalData = buildAdminFeeJournal(
           {
             commissionId: id,
@@ -6933,7 +6248,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         const jeId = "je-adm-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
         const year = new Date().getFullYear();
-        const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+        const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
         createdJournalRecord = {
           ...journalData,
           id: jeId,
@@ -6943,29 +6258,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           totalCredit: jVal.totalCredit,
           createdAt: new Date().toISOString(),
         };
-
         transaction.set(commRef, sanitizeForFirestore(updatedCommission), { merge: true });
         transaction.set(receiptRef, sanitizeForFirestore(newReceipt));
         transaction.set(doc(db, "payment_allocations", allocationId), sanitizeForFirestore(newAllocation));
         transaction.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(createdJournalRecord));
       });
-
       // If return was early due to idempotency, no state update needed
       if (!updatedCommission || !newReceipt || !newAllocation) {
         return { success: true };
       }
-
       const receiptObj = newReceipt as CollectionRecord;
       const commObj = updatedCommission as CommissionObligation;
       const allocObj = newAllocation as PaymentAllocation;
-
       setCommissions((prev) => prev.map((c) => (c.id === id ? commObj : c)));
       setCollections((prev) => [receiptObj, ...prev]);
       setPaymentAllocations((prev) => [allocObj, ...prev]);
       if (createdJournalRecord) {
         setJournalEntries((prev) => [...prev, createdJournalRecord!]);
       }
-
       logAudit(
         "FINANCIAL_PAYMENT",
         "COLLECTION",
@@ -6973,13 +6283,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         `Receipt #${receiptObj.receiptNumber}`,
         `تحصيل رسوم إدارية بمبلغ ${amount.toLocaleString()} AED (${paymentMethod})`
       );
-
       return { success: true };
     } catch (e: any) {
       return { success: false, error: e?.message || "Failed to collect admin fee" };
     }
   };
-
   const settleAdministrativeFee = async (params: {
     commissionId: string;
     proofBase64?: string;
@@ -6998,6 +6306,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     dailyDepositId?: string;
     linkedDailyDeposit?: DailyDepositRecord;
   }): Promise<{ success: boolean; error?: string }> => {
+    assertCloudWriteAvailable(language as "ar" | "en");
     const {
       commissionId,
       proofBase64,
@@ -7016,45 +6325,37 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       dailyDepositId,
       linkedDailyDeposit,
     } = params;
-
     // RBAC Authorization check
     const check = checkFinancialEditPermission("COMMISSION", "Settlement");
     if (!check.allowed) return { success: false, error: check.error };
-
     // Financial Period Validation
     const periodCheck = validateTransactionPeriod(new Date().toISOString(), financialPeriods);
     if (!periodCheck.allowed) {
       return { success: false, error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn };
     }
-
     const existing = commissions.find((c) => c.id === commissionId);
     if (!existing) return { success: false, error: language === "ar" ? "سجل الرسوم غير موجود." : "Commission obligation record not found." };
-
     // Idempotency check: If already settled and fully collected, return success
     if (existing.status === "FULLY_COLLECTED" || existing.status === "COLLECTED" || (typeof existing.outstandingBalance === "number" && existing.outstandingBalance <= 0)) {
       return { success: true };
     }
-
     if (existing.status === "CANCELLED" || existing.status === "REVERSED" || existing.status === "WAIVED") {
       return {
         success: false,
         error: language === "ar" ? "لا يمكن تسوية رسوم ملغاة أو معكوسة ماليًا." : "Cannot settle a cancelled or reversed commission obligation."
       };
     }
-
     // Determine the authoritative payment method
     const effectivePaymentMethod: PaymentMethod | undefined =
       providedPaymentMethod ||
       (existing.paymentMethod as PaymentMethod) ||
       (existing.partyType === "OWNER" ? "BANK_TRANSFER" : undefined);
-
     if (!effectivePaymentMethod) {
       return {
         success: false,
         error: language === "ar" ? "طريقة التحصيل / الدفع غير محددة لهذه الرسوم الإدارية." : "Payment method is required for administrative fee settlement.",
       };
     }
-
     // CASH Settlement Controls: Must link to a valid Daily Deposit
     let verifiedDailyDeposit: DailyDepositRecord | null = null;
     if (effectivePaymentMethod === "CASH") {
@@ -7068,7 +6369,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               : "CASH Administrative Fee cannot be settled directly without a linked and verified Daily Deposit.",
         };
       }
-
       const matchedDeposit = linkedDailyDeposit || (targetDepositId ? dailyDeposits.find((d) => d.id === targetDepositId) : null);
       if (!matchedDeposit) {
         return {
@@ -7079,7 +6379,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               : "The specified Daily Deposit record does not exist in the system (invalid or fabricated ID).",
         };
       }
-
       if (matchedDeposit.status !== "VERIFIED" && matchedDeposit.status !== "RECONCILED") {
         return {
           success: false,
@@ -7089,7 +6388,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               : "The linked Daily Deposit record must be verified before settling this cash transaction.",
         };
       }
-
       const expectedAmount = existing.outstandingBalance || (existing.totalCommissionAmount - (existing.collectedAmount || 0));
       if (matchedDeposit.amount < expectedAmount - 0.01) {
         return {
@@ -7100,7 +6398,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               : `Daily deposit amount (${matchedDeposit.amount.toLocaleString()} AED) is less than the due administrative fee (${expectedAmount.toLocaleString()} AED).`,
         };
       }
-
       if (matchedDeposit.sourceId && matchedDeposit.sourceId !== existing.id && matchedDeposit.sourceId !== existing.leaseId && !matchedDeposit.id.startsWith("dep-")) {
         return {
           success: false,
@@ -7110,23 +6407,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               : "The Daily Deposit record is not linked to this financial transaction.",
         };
       }
-
       verifiedDailyDeposit = matchedDeposit;
     }
-
     // Resolve proof document from archive
     const resolvedArchiveDoc = existing.proofDocumentId
       ? archive.find((a) => a.id === existing.proofDocumentId && (a.entityId === commissionId || a.recordId === commissionId))
       : archive.find((a) => a.entityId === commissionId || a.recordId === commissionId);
-
     const hasValidProofDocument = Boolean(proofBase64 || resolvedArchiveDoc);
-
     // AI Verification & Manual Override Settlement Gate Evaluation
     if (verificationStatus) {
       const isMismatchCase =
         aiVerificationDetails?.aiStatus === "MISMATCH" ||
         verificationStatus === "OVERRIDDEN";
-
       const gateResult = evaluateSettlementGate({
         verificationStatus,
         hasProof: hasValidProofDocument,
@@ -7138,7 +6430,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         userRole: currentUser?.role,
         isMismatch: isMismatchCase,
       });
-
       if (!gateResult.allowed) {
         return {
           success: false,
@@ -7151,14 +6442,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: language === "ar" ? "تم رفض التسوية: إرفاق إثبات الإيداع البنكي أو إيصال السداد إلزامي." : "Settlement denied: Bank deposit proof or receipt document is mandatory.",
       };
     }
-
     const userId = currentUser?.id || "sys";
     const userName = currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
-
     try {
       let archiveDocId = existing.proofDocumentId;
       let newArchiveRecord: ElectronicArchiveItem | null = null;
-
       if (archiveDocId) {
         const isDuplicateUsed = commissions.some(
           (c) => c.id !== commissionId && c.proofDocumentId === archiveDocId
@@ -7173,7 +6461,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
         }
       }
-
       if (proofBase64 && !archiveDocId) {
         const existingArchive = archive.find((a) => a.entityId === commissionId || a.recordId === commissionId);
         if (existingArchive) {
@@ -7203,10 +6490,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } as ElectronicArchiveItem;
         }
       }
-
       const amountToCollect = existing.outstandingBalance || (existing.totalCommissionAmount - (existing.collectedAmount || 0));
       const sourceWorkflow = effectivePaymentMethod === "CASH" ? "DAILY_DEPOSITS" : "DIRECT_SETTLEMENT";
-
       const collectRes = await collectAdministrativeFee(
         commissionId,
         amountToCollect,
@@ -7220,11 +6505,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           dailyDepositId: effectivePaymentMethod === "CASH" ? (dailyDepositId || (existing as any).dailyDepositId || linkedDailyDeposit?.id) : undefined,
         }
       );
-
       if (!collectRes.success) {
         return collectRes;
       }
-
       // Update commission record with proof, daily deposit id, and verification metadata
       const updatedComm: Partial<CommissionObligation> = {
         proofDocumentId: archiveDocId,
@@ -7238,17 +6521,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         paymentMethod: effectivePaymentMethod,
         ...(effectivePaymentMethod === "CASH" && (dailyDepositId || linkedDailyDeposit?.id) ? { dailyDepositId: dailyDepositId || linkedDailyDeposit?.id } : {}),
       };
-
       setCommissions((prev) =>
         prev.map((c) => (c.id === commissionId ? { ...c, ...updatedComm } : c))
       );
       safeSetDoc(doc(db, "commissions", commissionId), updatedComm, { merge: true });
-
       if (newArchiveRecord) {
         setArchive((prev) => [newArchiveRecord!, ...prev]);
         safeSetDoc(doc(db, "archive", newArchiveRecord.id), sanitizeForFirestore(newArchiveRecord));
       }
-
       // If the administrative fee was paid in CASH, post a bank deposit journal moving funds from Cash in Hand (1020) to Operating Bank (1010)
       if (effectivePaymentMethod === "CASH" && verifiedDailyDeposit) {
         const depositJournal = buildBankDepositJournal(
@@ -7263,7 +6543,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           },
           chartOfAccounts
         );
-        const depRes = postJournalEntry(depositJournal);
+        const depRes = await postJournalEntry(depositJournal);
         if (!depRes.success) {
           return {
             success: false,
@@ -7273,7 +6553,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
         }
       }
-
       // Build and log structured audit record
       const auditPayload = buildVerificationAuditRecord({
         transactionId: existing.id,
@@ -7296,7 +6575,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         userRole: currentUser?.role || "FINANCE",
         finalStatus: verificationStatus || "MANUALLY_VERIFIED",
       });
-
       logAudit(
         "FINANCIAL_PAYMENT",
         "COMMISSION",
@@ -7307,13 +6585,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         JSON.stringify(auditPayload),
         overrideReason
       );
-
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err?.message || "Failed to settle administrative fee" };
     }
   };
-
   const collectSecurityDeposit = async (params: {
     leaseId: string;
     amount: number;
@@ -7328,6 +6604,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     proofBase64?: string;
     proofFileName?: string;
   }): Promise<{ success: boolean; receipt?: CollectionRecord; journalEntry?: JournalEntryRecord; error?: string }> => {
+    assertCloudWriteAvailable(language as "ar" | "en");
     const {
       leaseId,
       amount,
@@ -7342,27 +6619,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       proofBase64,
       proofFileName,
     } = params;
-
     const lease = leases.find((l) => l.id === leaseId);
     if (!lease) {
       return { success: false, error: language === "ar" ? "عقد الإيجار غير موجود." : "Lease contract not found." };
     }
-
     // Financial Period Validation
     const periodCheck = validateTransactionPeriod(new Date().toISOString(), financialPeriods);
     if (!periodCheck.allowed) {
       return { success: false, error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn };
     }
-
     const userId = currentUser?.id || "sys";
     const userName = currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
     const tenant = tenants.find((t) => t.id === lease.tenantId);
     const resolvedPayerName = payerName || (tenant ? (language === "ar" ? tenant.nameAr : tenant.nameEn) : "المستأجر");
-
     try {
       const nowIso = new Date().toISOString();
       const todayDate = nowIso.split("T")[0];
-
       // Handle archive document if proof provided
       let archiveDocId: string | undefined = undefined;
       let newArchiveRecord: ElectronicArchiveItem | null = null;
@@ -7390,11 +6662,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdAt: nowIso,
         } as ElectronicArchiveItem;
       }
-
       // Generate Official Receipt Voucher (DEP-REC-)
       const receiptId = "col-dep-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
       const receiptNumber = generateSequentialNumber(collections, "receiptNumber", "DEP-REC-", 4, false);
-
       const newReceipt: CollectionRecord = {
         id: receiptId,
         receiptNumber,
@@ -7416,7 +6686,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         securityDepositIsUndatedCheque: isUndatedCheque,
         createdAt: nowIso,
       };
-
       // Allocation Record
       const allocationId = "alloc-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
       const newAllocation: PaymentAllocation = {
@@ -7431,7 +6700,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createdAt: nowIso,
         createdById: userId,
       };
-
       // Update Lease record
       const historyItem: SecurityDepositHistoryItem = {
         id: `sd-hist-${Date.now()}`,
@@ -7442,7 +6710,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         receiptNumber,
         notes: `تم تحصيل التأمين بواسطة ${paymentMethod}${chequeNumber ? ` (شيك #${chequeNumber})` : ""}`,
       };
-
       const updatedLease: Lease = {
         ...lease,
         securityDeposit: amount,
@@ -7458,7 +6725,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         securityDepositVerificationStatus: paymentMethod === "CASH" ? "PENDING_VERIFICATION" : "VERIFIED",
         securityDepositHistory: [...(lease.securityDepositHistory || []), historyItem],
       };
-
       const journalData = buildSecurityDepositCollectionJournal(
         chartOfAccounts,
         {
@@ -7478,7 +6744,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           notes: notes || `تحصيل أمانات تأمين صيانة مستأجر لعقد إيجار #${lease.leaseNumber} (حساب 2020)`,
         }
       );
-      
       const jVal = validateJournalEntry(journalData);
       if (!jVal.isValid) {
         return {
@@ -7488,10 +6753,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             : `Journal validation failed: ${jVal.error}`,
         };
       }
-
       const jeId = "je-sd-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
       const year = new Date().getFullYear();
-      const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+      const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
       const journalRecord: JournalEntryRecord = {
         ...journalData,
         id: jeId,
@@ -7501,7 +6765,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         totalCredit: jVal.totalCredit,
         createdAt: nowIso,
       };
-
       const batch = writeBatch(db);
       batch.set(doc(db, "collections", receiptId), sanitizeForFirestore(newReceipt));
       batch.set(doc(db, "payment_allocations", allocationId), sanitizeForFirestore(newAllocation));
@@ -7510,13 +6773,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (newArchiveRecord) {
         batch.set(doc(db, "archive", newArchiveRecord.id), sanitizeForFirestore(newArchiveRecord));
       }
-
       try {
         await batch.commit();
       } catch (e: any) {
         return { success: false, error: e?.message || "Failed to commit security deposit collection" };
       }
-
       setCollections((prev) => [newReceipt, ...prev]);
       setPaymentAllocations((prev) => [newAllocation, ...prev]);
       setLeases((prev) => prev.map((l) => (l.id === leaseId ? updatedLease : l)));
@@ -7524,9 +6785,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (newArchiveRecord) {
         setArchive((prev) => [newArchiveRecord, ...prev]);
       }
-      
       let postedJournal = journalRecord;
-
       logAudit(
         "FINANCIAL_PAYMENT",
         "LEASE",
@@ -7534,13 +6793,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         `Lease #${lease.leaseNumber}`,
         `تحصيل أمانات تأمين صيانة مستأجر لعقد #${lease.leaseNumber} بمبلغ AED ${amount.toLocaleString()} (حساب 2020 - سند #${receiptNumber})`
       );
-
       return { success: true, receipt: newReceipt, journalEntry: postedJournal };
     } catch (err: any) {
       return { success: false, error: err?.message || "Failed to collect security deposit" };
     }
   };
-
   const settleSecurityDeposit = async (params: {
     leaseId: string;
     proofBase64?: string;
@@ -7558,6 +6815,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     paymentMethod?: PaymentMethod;
     dailyDepositId?: string;
   }): Promise<{ success: boolean; error?: string }> => {
+    assertCloudWriteAvailable(language as "ar" | "en");
     const {
       leaseId,
       proofBase64,
@@ -7574,26 +6832,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       paymentMethod = "BANK_TRANSFER",
       dailyDepositId,
     } = params;
-
     // RBAC Authorization check
     const check = checkFinancialEditPermission("COLLECTION", "Settlement");
     if (!check.allowed) return { success: false, error: check.error };
-
     // Financial Period Validation
     const periodCheck = validateTransactionPeriod(new Date().toISOString(), financialPeriods);
     if (!periodCheck.allowed) {
       return { success: false, error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn };
     }
-
     const existingLease = leases.find((l) => l.id === leaseId);
     if (!existingLease) {
       return { success: false, error: language === "ar" ? "عقد الإيجار غير موجود." : "Lease record not found." };
     }
-
     if (existingLease.securityDepositStatus === "SETTLED" || existingLease.securityDepositStatus === "REFUNDED") {
       return { success: true };
     }
-
     if (existingLease.securityDepositPaymentMethod === "CASH") {
       if (!dailyDepositId) {
         return {
@@ -7614,21 +6867,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           error: language === "ar" ? "سجل الإيداع اليومي المرتبط لم يتم اعتماده." : "The linked daily deposit must be verified.",
         };
       }
+      if (matchedDeposit.amount !== existingLease.securityDeposit) {
+        return { success: false, error: language === "ar" ? "مبلغ الإيداع اليومي لا يطابق التأمين." : "Daily deposit amount mismatch." };
+      }
+      if (matchedDeposit.sourceId !== existingLease.id) {
+        return { success: false, error: language === "ar" ? "الإيداع اليومي غير مرتبط بهذا العقد." : "Daily deposit linkage mismatch." };
+      }
+      if (matchedDeposit.paymentSource !== "SECURITY_DEPOSIT") {
+        return { success: false, error: language === "ar" ? "تصنيف الإيداع اليومي غير صحيح." : "Daily deposit category mismatch." };
+      }
     }
-
     // Resolve proof document from archive
     const resolvedArchiveDoc = existingLease.securityDepositProofDocId
       ? archive.find((a) => a.id === existingLease.securityDepositProofDocId)
       : archive.find((a) => a.entityId === leaseId || a.recordId === leaseId);
-
     const hasValidProofDocument = Boolean(proofBase64 || resolvedArchiveDoc);
-
     // AI Verification & Manual Override Settlement Gate Evaluation
     if (verificationStatus) {
       const isMismatchCase =
         aiVerificationDetails?.aiStatus === "MISMATCH" ||
         verificationStatus === "OVERRIDDEN";
-
       const gateResult = evaluateSettlementGate({
         verificationStatus,
         hasProof: hasValidProofDocument,
@@ -7641,7 +6899,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         userRole: currentUser?.role,
         isMismatch: isMismatchCase,
       });
-
       if (!gateResult.allowed) {
         return {
           success: false,
@@ -7654,14 +6911,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: language === "ar" ? "تم رفض التسوية: إرفاق إثبات الإيداع البنكي أو إيصال السداد إلزامي." : "Settlement denied: Bank deposit proof or receipt document is mandatory.",
       };
     }
-
     const userId = currentUser?.id || "sys";
     const userName = currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
-
     try {
       let archiveDocId = existingLease.securityDepositProofDocId;
       let newArchiveRecord: ElectronicArchiveItem | null = null;
-
       if (proofBase64 && !archiveDocId) {
         archiveDocId = `arch-${Date.now()}-${crypto.randomUUID().split("-")[0]}`;
         newArchiveRecord = {
@@ -7686,28 +6940,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdAt: new Date().toISOString(),
         } as ElectronicArchiveItem;
       }
-
-
       // Update lease verification metadata
       const updatedLeaseData: Partial<Lease> = {
         securityDepositStatus: "HELD",
         securityDepositProofDocId: archiveDocId || existingLease.securityDepositProofDocId,
         securityDepositVerificationStatus: verificationStatus || "VERIFIED",
       };
-
       const batch = writeBatch(db);
       batch.set(doc(db, "leases", leaseId), sanitizeForFirestore(updatedLeaseData), { merge: true });
-
       if (newArchiveRecord) {
         batch.set(doc(db, "archive", newArchiveRecord.id), sanitizeForFirestore(newArchiveRecord));
       }
-
       let newJournalRecord: JournalEntryRecord | null = null;
       if (existingLease.securityDepositPaymentMethod === "CASH" && updatedLeaseData.securityDepositVerificationStatus === "VERIFIED") {
         const journalData = buildBankDepositJournal(
           {
-            sourceType: "SECURITY_DEPOSIT",
-            sourceId: existingLease.id,
+            sourceType: "DAILY_DEPOSIT",
+            sourceId: dailyDepositId!,
             totalAmount: existingLease.securityDeposit || 0,
             transactionDate: new Date().toISOString().split("T")[0],
             referenceNumber: transactionReferenceNumber || existingLease.securityDepositReceiptNumber,
@@ -7725,10 +6974,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               : `Bank deposit journal validation failed: ${jVal.error}`,
           };
         }
-        
         const jeId = "je-sd-dep-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
         const year = new Date().getFullYear();
-        const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+        const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
         newJournalRecord = {
           ...journalData,
           id: jeId,
@@ -7740,13 +6988,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
         batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(newJournalRecord));
       }
-
       try {
         await batch.commit();
       } catch (err: any) {
         return { success: false, error: err?.message || "Failed to settle security deposit." };
       }
-
       setLeases((prev) =>
         prev.map((l) => (l.id === leaseId ? { ...l, ...updatedLeaseData } : l))
       );
@@ -7756,7 +7002,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (newJournalRecord) {
         setJournalEntries((prev) => [...prev, newJournalRecord!]);
       }
-
       // Build and log structured audit record
       const auditPayload = buildVerificationAuditRecord({
         transactionId: existingLease.id,
@@ -7779,7 +7024,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         userRole: currentUser?.role || "FINANCE",
         finalStatus: verificationStatus || "MANUALLY_VERIFIED",
       });
-
       logAudit(
         "FINANCIAL_PAYMENT",
         "LEASE",
@@ -7790,13 +7034,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         JSON.stringify(auditPayload),
         overrideReason
       );
-
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err?.message || "Failed to settle security deposit" };
     }
   };
-
   const refundOrSettleSecurityDeposit = async (params: {
     leaseId: string;
     deductions: {
@@ -7820,28 +7062,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       proofFileName,
       notes,
     } = params;
-
     const lease = leases.find((l) => l.id === leaseId);
     if (!lease) {
       return { success: false, error: language === "ar" ? "عقد الإيجار غير موجود." : "Lease contract not found." };
     }
-
     if (lease.securityDepositStatus === "SETTLED" || lease.securityDepositStatus === "REFUNDED") {
       return { success: false, error: language === "ar" ? "تمت تسوية أو استرداد مبلغ التأمين لهذا العقد مسبقاً." : "Security deposit already settled or refunded." };
     }
-
     // Financial Period Validation
     const periodCheck = validateTransactionPeriod(new Date().toISOString(), financialPeriods);
     if (!periodCheck.allowed) {
       return { success: false, error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn };
     }
-
     const totalHeld = lease.securityDeposit || 0;
     const rentDed = deductions.rentDeduction || 0;
     const maintDed = deductions.maintenanceDeduction || 0;
     const earlyTermDed = deductions.earlyTerminationDeduction || 0;
     const otherDed = deductions.otherDeductions || 0;
-
     let remainingHeld = totalHeld;
     const appliedRentDed = Math.min(remainingHeld, rentDed);
     remainingHeld -= appliedRentDed;
@@ -7851,24 +7088,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     remainingHeld -= appliedEarlyTermDed;
     const appliedOtherDed = Math.min(remainingHeld, otherDed);
     remainingHeld -= appliedOtherDed;
-
     const cappedDeductions = {
       rentDeduction: appliedRentDed,
       maintenanceDeduction: appliedMaintDed,
       earlyTerminationDeduction: appliedEarlyTermDed,
       otherDeductions: appliedOtherDed,
     };
-
     const totalDeductions = Math.round((rentDed + maintDed + earlyTermDed + otherDed) * 100) / 100;
     const totalAppliedDeductions = Math.round((appliedRentDed + appliedMaintDed + appliedEarlyTermDed + appliedOtherDed) * 100) / 100;
     const netRefundAmount = Math.max(0, Math.round((totalHeld - totalAppliedDeductions) * 100) / 100);
     const remainingDueAmount = Math.max(0, Math.round((totalDeductions - totalHeld) * 100) / 100);
-
     const userId = currentUser?.id || "sys";
     const userName = currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
     const nowIso = new Date().toISOString();
     const todayDate = nowIso.split("T")[0];
-
     try {
       let archiveDocId: string | undefined = undefined;
       let newArchiveRecord: ElectronicArchiveItem | null = null;
@@ -7896,7 +7129,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdAt: nowIso,
         } as ElectronicArchiveItem;
       }
-
       const settlementRecord: SecurityDepositSettlement = {
         settlementId: `sd-set-${Date.now()}`,
         settledAt: nowIso,
@@ -7919,9 +7151,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         notes: notes || (language === "ar" ? "تسوية وبراءة ذمة تأمين مستأجر نهائية" : "Final security deposit settlement & clearance"),
         proofDocumentId: archiveDocId,
       };
-
       const finalStatus: SecurityDepositStatus = netRefundAmount > 0 ? "REFUNDED" : "SETTLED";
-
       const historyItem: SecurityDepositHistoryItem = {
         id: `sd-hist-${Date.now()}`,
         date: nowIso,
@@ -7930,14 +7160,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         performedBy: userName,
         notes: `تسوية أمانات التأمين: إجمالي المحتجز AED ${totalHeld} - الخصومات AED ${totalDeductions} = صافي المردود AED ${netRefundAmount}`,
       };
-
       const updatedLease: Lease = {
         ...lease,
         securityDepositStatus: finalStatus,
         securityDepositSettlement: settlementRecord,
         securityDepositHistory: [...(lease.securityDepositHistory || []), historyItem],
       };
-
       // Post Double-Entry Journal Entry
       let postedJournal: JournalEntryRecord | undefined = undefined;
       const journalData = buildSecurityDepositSettlementJournal(
@@ -7968,10 +7196,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             : `Journal validation failed: ${jVal.error}`,
         };
       }
-
       const jeId = "je-sd-ref-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
       const year = new Date().getFullYear();
-      const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+      const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
       const journalRecord: JournalEntryRecord = {
         ...journalData,
         id: jeId,
@@ -7981,27 +7208,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         totalCredit: jVal.totalCredit,
         createdAt: nowIso,
       };
-
       const batch = writeBatch(db);
       batch.set(doc(db, "leases", leaseId), sanitizeForFirestore(updatedLease), { merge: true });
       batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
       if (newArchiveRecord) {
         batch.set(doc(db, "archive", newArchiveRecord.id), sanitizeForFirestore(newArchiveRecord));
       }
-
       try {
         await batch.commit();
       } catch (err: any) {
         return { success: false, error: err?.message || "Failed to settle/refund security deposit" };
       }
-
       setLeases((prev) => prev.map((l) => (l.id === leaseId ? updatedLease : l)));
       setJournalEntries((prev) => [...prev, journalRecord]);
       if (newArchiveRecord) {
         setArchive((prev) => [newArchiveRecord, ...prev]);
       }
       postedJournal = journalRecord;
-
       logAudit(
         "FINANCIAL_PAYMENT",
         "LEASE",
@@ -8009,27 +7232,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         `Lease #${lease.leaseNumber}`,
         `تسوية أمانات تأمين صيانة مستأجر لعقد #${lease.leaseNumber} (محتجز: ${totalHeld} AED, خصومات: ${totalDeductions} AED, مردود: ${netRefundAmount} AED)`
       );
-
       return { success: true, settlement: settlementRecord, journalEntry: postedJournal };
     } catch (err: any) {
       return { success: false, error: err?.message || "Failed to settle security deposit" };
     }
   };
-
   const reverseCommissionObligation = (id: string, reason: string): { success: boolean; error?: string } => {
     const existing = commissions.find((c) => c.id === id);
     if (!existing) return { success: false, error: "سجل الرسوم غير موجود." };
     if (existing.status === "REVERSED") return { success: false, error: "هذه الرسوم ملغاة مسبقاً." };
-
     // Financial Period Validation
     const periodCheck = validateTransactionPeriod(new Date().toISOString(), financialPeriods);
     if (!periodCheck.allowed) {
       return { success: false, error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn };
     }
-
     const userId = currentUser?.id || "sys";
     const userName = currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
-
     const updated: CommissionObligation = {
       ...existing,
       status: "REVERSED",
@@ -8038,10 +7256,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updatedById: userId,
       updatedByName: userName,
     };
-
     setCommissions((prev) => prev.map((c) => (c.id === id ? updated : c)));
     safeSetDoc(doc(db, "commissions", id), updated, { merge: true });
-
     // Record the reversal in the reversals table
     const reversalRecord: FinancialReversalRecord = {
       id: "rev-" + Date.now(),
@@ -8057,13 +7273,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       performedByUserName: userName,
       createdAt: new Date().toISOString(),
     };
-    
     // Check if we need to update FinancialReversalRecord targetType in types.ts
     // For now, using what's available or expanding if needed.
-
     setFinancialReversals(prev => [reversalRecord, ...prev]);
     safeSetDoc(doc(db, "financial_reversals", reversalRecord.id), reversalRecord);
-
     logAudit(
       "UPDATE",
       "COMMISSION",
@@ -8071,14 +7284,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `إلغاء رسوم إدارية - ${existing.partyType}`,
       `تم إلغاء الرسوم الإدارية بقيمة ${existing.totalCommissionAmount.toLocaleString()} AED. السبب: ${reason}`
     );
-
     return { success: true };
   };
-
   const deleteCommissionObligation = (id: string, options?: DeleteRecordOptions) => {
     const existing = commissions.find((c) => c.id === id);
     if (!existing) return;
-
     if (!options?.force && existing.collectedAmount > 0) {
       logAudit(
         "DELETE",
@@ -8089,13 +7299,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
       return;
     }
-
     archiveEntityToHistory("COMMISSION", existing, options);
     setCommissions((prev) => prev.filter((c) => c.id !== id));
     deleteDoc(doc(db, "commissions", id)).catch(() => {});
     logAudit("DELETE", "COMMISSION", id, `${existing.partyType} Commission`, `Deleted commission obligation ${id}`);
   };
-
   const allocatePaymentToTargets = async (params: {
     collectionId: string;
     allocations: Array<{
@@ -8106,11 +7314,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }>;
     idempotencyKey?: string;
   }): Promise<{ success: boolean; allocatedCount: number; error?: string }> => {
+    assertCloudWriteAvailable(language as "ar" | "en");
     const collection = collections.find((c) => c.id === params.collectionId);
     if (!collection) {
       return { success: false, allocatedCount: 0, error: `Collection receipt ${params.collectionId} not found.` };
     }
-
     // Check idempotency if key provided
     if (params.idempotencyKey) {
       const existing = paymentAllocations.find(
@@ -8120,7 +7328,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: true, allocatedCount: 1 };
       }
     }
-
     // Validate allocations against targets
     const validationTargets = params.allocations.map((a) => {
       let targetCurrentOutstanding = 0;
@@ -8133,7 +7340,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else if (a.targetType === "UNALLOCATED_PREPAYMENT") {
         targetCurrentOutstanding = collection.amountEntered;
       }
-
       return {
         targetType: a.targetType,
         targetId: a.targetId,
@@ -8141,14 +7347,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         targetCurrentOutstanding,
       };
     });
-
     const validation = validatePaymentAllocations(collection.amountEntered, validationTargets);
     if (!validation.isValid) {
       return { success: false, allocatedCount: 0, error: validation.error };
     }
-
     const createdAllocations: PaymentAllocation[] = [];
-
     for (const item of params.allocations) {
       const alloc: PaymentAllocation = {
         id: "pal-" + Date.now() + "-" + crypto.randomUUID().split("-")[0],
@@ -8165,7 +7368,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       createdAllocations.push(alloc);
       safeSetDoc(doc(db, "payment_allocations", alloc.id), alloc);
-
       // Mutate target state in memory & Firestore
       if (item.targetType === "COMMISSION") {
         setCommissions((prev) =>
@@ -8212,9 +7414,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         );
       }
     }
-
     setPaymentAllocations((prev) => [...createdAllocations, ...prev]);
-
     logAudit(
       "PAYMENT_ALLOCATED",
       "PAYMENT_ALLOCATION",
@@ -8222,10 +7422,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `Receipt #${collection.receiptNumber}`,
       `Allocated payment receipt #${collection.receiptNumber} (${collection.amountEntered.toLocaleString()} AED) across ${params.allocations.length} target(s)`
     );
-
     return { success: true, allocatedCount: createdAllocations.length };
   };
-
   const reversePaymentReceipt = (
     collectionId: string,
     reason: string
@@ -8234,7 +7432,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!targetCollection) {
       return { success: false, error: "Payment collection record not found." };
     }
-
     // Idempotency check: Already reversed?
     const alreadyReversed = financialReversals.some(
       (r) => r.targetId === collectionId && r.targetType === "COLLECTION"
@@ -8245,7 +7442,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: `Payment receipt #${targetCollection.receiptNumber} has already been reversed. Duplicate reversal rejected.`,
       };
     }
-
     // Financial Period Validation for the REVERSAL date (now)
     const periodCheck = validateTransactionPeriod(new Date().toISOString(), financialPeriods);
     if (!periodCheck.allowed) {
@@ -8256,12 +7452,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : `Financial reversal cannot be performed: ${periodCheck.errorEn}` 
       };
     }
-
     // Identify and reverse all active allocations
     const relatedAllocations = paymentAllocations.filter(
       (a) => a.collectionId === collectionId && a.status === "ACTIVE"
     );
-
     for (const alloc of relatedAllocations) {
       // Revert target state
       if (alloc.targetType === "COMMISSION") {
@@ -8323,7 +7517,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     const otherAllocated = paymentAllocations
                       .filter((p) => p.targetType === "LEASE_INSTALLMENT" && p.targetId === alloc.targetId && p.status === "ACTIVE" && p.id !== alloc.id)
                       .reduce((sum, p) => sum + p.allocatedAmount, 0);
-
                     return {
                       ...inst,
                       status: otherAllocated >= inst.amount - 0.01 ? ("COLLECTED" as const) : ("PENDING" as const),
@@ -8341,7 +7534,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         );
       }
     }
-
     // Mark allocations as REVERSED
     const nowIso = new Date().toISOString();
     setPaymentAllocations((prev) =>
@@ -8360,7 +7552,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return a;
       })
     );
-
     // Create Reversal Record
     const reversalRecord: FinancialReversalRecord = {
       id: "rev-" + Date.now() + "-" + crypto.randomUUID().split("-")[0],
@@ -8376,10 +7567,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       performedByUserName: currentUser?.nameEn || "System Admin",
       createdAt: nowIso,
     };
-
     setFinancialReversals((prev) => [reversalRecord, ...prev]);
     safeSetDoc(doc(db, "financial_reversals", reversalRecord.id), reversalRecord);
-
     logAudit(
       "PAYMENT_REVERSED",
       "REVERSAL",
@@ -8387,10 +7576,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `Reversal #${reversalRecord.reversalNumber}`,
       `Reversed payment receipt #${targetCollection.receiptNumber} (${targetCollection.amountEntered.toLocaleString()} AED). Reason: ${reason}`
     );
-
     return { success: true, reversal: reversalRecord };
   };
-
   const recordLeasePayment = async (params: {
     leaseId: string;
     amount: number;
@@ -8422,7 +7609,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }): Promise<{ success: boolean; receipt?: CollectionRecord; error?: string }> => {
     return processUnifiedPayment(params);
   };
-
   const liquidateUnallocatedAdvance = async (params: {
     leaseId: string;
     allocations: Array<{
@@ -8437,17 +7623,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!leaseObj) {
       return { success: false, allocatedCount: 0, error: "Lease contract not found." };
     }
-
     const totalToAllocate = params.allocations.reduce((sum, a) => sum + a.amount, 0);
     if (totalToAllocate <= 0) {
       return { success: false, allocatedCount: 0, error: "Total allocation amount must be greater than zero." };
     }
-
     // Find all collections for this tenant/lease that have unallocated amounts
     const tenantCollections = collections.filter(
       (c) => c.tenantId === leaseObj.tenantId && c.ownerId === leaseObj.ownerId
     );
-
     // Calculate unallocated balance per collection
     const unallocatedCollections = tenantCollections
       .map((col) => {
@@ -8461,9 +7644,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       })
       .filter((item) => item.unallocated > 0.001);
-
     const totalAvailableAdvance = unallocatedCollections.reduce((sum, item) => sum + item.unallocated, 0);
-
     if (totalToAllocate > totalAvailableAdvance + 0.01) {
       return {
         success: false,
@@ -8474,22 +7655,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             : `Insufficient unallocated advance balance. Available: ${totalAvailableAdvance.toLocaleString()} AED, Requested: ${totalToAllocate.toLocaleString()} AED.`,
       };
     }
-
     let remainingToDistribute = totalToAllocate;
     const newAllocations: PaymentAllocation[] = [];
     const nowIso = new Date().toISOString();
-
     for (const allocReq of params.allocations) {
       if (allocReq.amount <= 0) continue;
       let targetNeeded = allocReq.amount;
-
       for (const item of unallocatedCollections) {
         if (item.unallocated <= 0 || targetNeeded <= 0) continue;
         const take = Math.min(item.unallocated, targetNeeded);
         item.unallocated -= take;
         targetNeeded -= take;
         remainingToDistribute -= take;
-
         const newAlloc: PaymentAllocation = {
           id: "pal-adv-" + Date.now() + "-" + crypto.randomUUID().split("-")[0],
           collectionId: item.col.id,
@@ -8499,21 +7676,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           allocatedAmount: take,
           allocationDate: nowIso.split("T")[0],
           status: "ACTIVE",
-
           createdAt: nowIso,
           createdById: currentUser?.id || "system",
         };
-
         newAllocations.push(newAlloc);
         safeSetDoc(doc(db, "payment_allocations", newAlloc.id), newAlloc);
-
         // Update collection amountApplied
         const newApplied = (item.col.amountApplied || 0) + take;
         setCollections((prev) =>
           prev.map((c) => (c.id === item.col.id ? { ...c, amountApplied: newApplied } : c))
         );
         safeSetDoc(doc(db, "collections", item.col.id), { amountApplied: newApplied }, { merge: true });
-
         // Update target state
         if (allocReq.targetType === "COMMISSION") {
           setCommissions((prev) =>
@@ -8554,16 +7727,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } else if (allocReq.targetType === "LEASE_INSTALLMENT") {
           const [lId, instNumStr] = allocReq.targetId.split(":");
           const instNum = parseInt(instNumStr);
-          
           let linkedChequeId: string | null = null;
-          
           setLeases((prevLeases) =>
             prevLeases.map((l) => {
               if (l.id === lId && l.installments) {
                 const updatedInstList = l.installments.map((inst) => {
                   if (inst.installmentNumber === instNum) {
                     if ((inst as any).chequeId) linkedChequeId = (inst as any).chequeId;
-                    
                     const alreadyAllocated = paymentAllocations
                       .filter((p) => p.targetType === "LEASE_INSTALLMENT" && p.targetId === allocReq.targetId && p.status === "ACTIVE")
                       .reduce((sum, p) => sum + p.allocatedAmount, 0) + take;
@@ -8579,7 +7749,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               return l;
             })
           );
-          
           // Fix: Ensure that if the installment has a linked cheque, the cheque is also updated to reflect the cash collection.
           if (linkedChequeId) {
             setCheques((prev) =>
@@ -8607,9 +7776,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     }
-
     setPaymentAllocations((prev) => [...newAllocations, ...prev]);
-
     logAudit(
       "ADVANCE_LIQUIDATION",
       "LEASE",
@@ -8617,10 +7784,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `عقد ${leaseObj.leaseNumber}`,
       `تم تسوية دفعة مقدمة غير موزعة بمبلغ ${totalToAllocate.toLocaleString()} AED لعقد الإيجار #${leaseObj.leaseNumber} وتوزيعها على الالتزامات.`
     );
-
     return { success: true, allocatedCount: newAllocations.length };
   };
-
   const reverseSinglePaymentAllocation = (
     allocationId: string,
     reason: string
@@ -8632,9 +7797,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (targetAlloc.status === "REVERSED") {
       return { success: false, error: "Payment allocation is already reversed." };
     }
-
     const nowIso = new Date().toISOString();
-
     // Revert target state
     if (targetAlloc.targetType === "COMMISSION") {
       setCommissions((prev) =>
@@ -8683,7 +7846,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })
       );
     }
-
     const updatedAlloc: PaymentAllocation = {
       ...targetAlloc,
       status: "REVERSED",
@@ -8691,10 +7853,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       reversalTimestamp: nowIso,
       reversedById: currentUser?.id || "system",
     };
-
     setPaymentAllocations((prev) => prev.map((a) => (a.id === allocationId ? updatedAlloc : a)));
     safeSetDoc(doc(db, "payment_allocations", allocationId), updatedAlloc, { merge: true });
-
     logAudit(
       "ALLOCATION_REVERSED",
       "PAYMENT_ALLOCATION",
@@ -8702,10 +7862,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `Allocation ${allocationId}`,
       `Reversed allocation of AED ${targetAlloc.allocatedAmount.toLocaleString()} to target ${targetAlloc.targetId}. Reason: ${reason}`
     );
-
     return { success: true };
   };
-
   const recordFinancialAdjustment = (
     params: Omit<FinancialAdjustmentRecord, "id" | "adjustmentNumber" | "createdAt">
   ): { success: boolean; adjustment?: FinancialAdjustmentRecord; error?: string } => {
@@ -8714,17 +7872,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!periodCheck.allowed) {
       return { success: false, error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn };
     }
-
     const newAdj: FinancialAdjustmentRecord = {
       ...params,
       id: "adj-" + Date.now() + "-" + crypto.randomUUID().split("-")[0],
       adjustmentNumber: generateSequentialNumber(financialAdjustments, "adjustmentNumber", "ADJ-"),
       createdAt: new Date().toISOString(),
     };
-
     setFinancialAdjustments((prev) => [newAdj, ...prev]);
     safeSetDoc(doc(db, "financial_adjustments", newAdj.id), newAdj);
-
     logAudit(
       "FINANCIAL_ADJUSTMENT",
       "ADJUSTMENT",
@@ -8732,10 +7887,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `Adjustment #${newAdj.adjustmentNumber}`,
       `Recorded financial ${newAdj.adjustmentType} adjustment of AED ${newAdj.amount.toLocaleString()} for ${newAdj.targetEntityType} (${newAdj.targetEntityId}). Reason: ${newAdj.reason}`
     );
-
     return { success: true, adjustment: newAdj };
   };
-
   const reconcileSystemFinancialBalances = (shouldLogAudit = false): ReconciledFinancialBalances => {
     const result = recalculateAllFinancialBalances({
       leases,
@@ -8748,7 +7901,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       owners,
       ownerTransfers,
     });
-
     if (shouldLogAudit) {
       logAudit(
         "RECONCILIATION_PERFORMED",
@@ -8758,14 +7910,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         `Recalculated derived balances: ${Object.keys(result.tenantBalances).length} tenants, ${Object.keys(result.ownerBalances).length} owners, ${Object.keys(result.chequeBalances).length} cheques, ${Object.keys(result.commissionBalances).length} commissions.`
       );
     }
-
     return result;
   };
-
   // -------------------------------------------------------------
   // ERP PHASE 2: Chart of Accounts, Owner Transfers & Property Expenses
   // -------------------------------------------------------------
-
   const getOwnerPayable = (ownerId: string): OwnerPayableDetails => {
     return computeOwnerPayableDetails(ownerId, {
       collections,
@@ -8776,7 +7925,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       reversals: financialReversals,
     });
   };
-
   const getOwnerStatement = (
     ownerId: string,
     filters?: { propertyId?: string; dateFrom?: string; dateTo?: string }
@@ -8794,7 +7942,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tenants,
     });
   };
-
   const getTenantStatement = (
     tenantId: string,
     filters?: { leaseId?: string; dateFrom?: string; dateTo?: string }
@@ -8811,68 +7958,53 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       reversals: financialReversals,
     });
   };
-
   // -------------------------------------------------------------
   // ERP PHASE 19: Advanced Accounts Receivable & Debt Recovery
   // -------------------------------------------------------------
-
   const getTenantReceivablePosition = (tenantId: string): TenantReceivablePosition => {
     const statement = getTenantStatement(tenantId);
     const tenant = tenants.find(t => t.id === tenantId);
     const activeLease = leases.find(l => l.tenantId === tenantId && (l.contractStatus === "ACTIVE" || l.contractStatus === "RENEWED"));
-    
     // 1. Core Balances
     const outstanding = statement.closingBalance;
     const totalDue = statement.totalDebits;
     const totalPaid = statement.totalCredits;
-    
     // 2. Specific Debt Components
     const tenantBouncedCheques = cheques.filter(c => c.tenantId === tenantId && c.status === "BOUNCED");
     const bouncedChequeAmount = tenantBouncedCheques.reduce((sum, c) => sum + c.outstanding, 0);
-    
     const tenantCommissions = commissions.filter(c => c.tenantId === tenantId && (c.status === "PENDING" || c.status === "DUE" || c.status === "PARTIALLY_COLLECTED"));
     const administrativeFeesDue = tenantCommissions.reduce((sum, c) => sum + c.outstandingBalance, 0);
-    
     const tenantExpenses = propertyExpenses.filter(e => e.tenantId === tenantId && e.costBearer === "TENANT" && e.status !== "REVERSED" && e.status !== "PAID");
     const maintenanceChargesDue = tenantExpenses.filter(e => e.category === "MAINTENANCE").reduce((sum, e) => sum + e.totalAmount, 0);
     const legalChargesDue = tenantExpenses.filter(e => e.category === "LEGAL_FEES").reduce((sum, e) => sum + e.totalAmount, 0);
-
     // 3. Aging Engine
     // Logic: Map debits from statement that aren't yet "covered" by credits
     // For simplicity in this implementation, we take the outstanding balance and attribute it to the oldest due dates
     // In a real system we'd match every debit to every credit (FIFO)
     const aging = { current: 0, days1_30: 0, days31_60: 0, days61_90: 0, days91_120: 0, days121Plus: 0 };
-    
     const now = new Date();
     const debits = statement.transactions.filter(t => t.debit > 0).sort((a, b) => a.date.localeCompare(b.date));
     let remainingToAttribute = outstanding;
-    
     // Reverse attribution (LIFO for current outstanding) - but user wants Aging buckets based on due date
     // Standard aging: Unpaid balance distributed by how long it's been due
     // We'll use a simplified version: If you owe 1000, and your oldest unpaid charge was 40 days ago, that 1000 sits in the 31-60 bucket
-    
     for (const d of debits) {
       if (remainingToAttribute <= 0) break;
       const chargeAmount = d.debit;
       const dueDate = new Date(d.date);
       const diffDays = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
-      
       const amountToBucket = Math.min(chargeAmount, remainingToAttribute);
-      
       if (diffDays <= 0) aging.current += amountToBucket;
       else if (diffDays <= 30) aging.days1_30 += amountToBucket;
       else if (diffDays <= 60) aging.days31_60 += amountToBucket;
       else if (diffDays <= 90) aging.days61_90 += amountToBucket;
       else if (diffDays <= 120) aging.days91_120 += amountToBucket;
       else aging.days121Plus += amountToBucket;
-      
       remainingToAttribute -= amountToBucket;
     }
-
     // 4. Priority & Status
     const reasons: string[] = [];
     let priority: CollectionPriority = "LOW";
-    
     if (outstanding > 1000) {
       priority = "MEDIUM";
       reasons.push("Overdue balance > 1,000 AED");
@@ -8889,7 +8021,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       priority = "CRITICAL";
       reasons.push("Severe aging > 120 days");
     }
-
     let status: TenantReceivablePosition["status"] = "CURRENT";
     if (outstanding > 0) {
       if (priority === "CRITICAL") status = "SEVERELY_OVERDUE";
@@ -8900,7 +8031,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
        status = "LEGAL_ESCALATION";
     }
     if (outstanding <= 0 && totalDue > 0) status = "COLLECTION_COMPLETED";
-
     return {
       tenantId,
       totalDue,
@@ -8916,13 +8046,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status
     };
   };
-
   const addCollectionAction = (data: Omit<CollectionAction, "id" | "actionNumber" | "createdAt" | "createdById">): { success: boolean; action?: CollectionAction; error?: string } => {
     const actionNumber = `COL-ACT-${Date.now().toString().slice(-6)}`;
     const id = `colact-${Date.now()}-${crypto.randomUUID().split("-")[0]}`;
     const createdAt = new Date().toISOString();
     const createdById = currentUser?.id || "sys";
-    
     const newAction: CollectionAction = {
       ...data,
       id,
@@ -8930,28 +8058,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt,
       createdById,
     };
-    
     setCollectionActions(prev => [newAction, ...prev]);
     safeSetDoc(doc(db, "collection_actions", id), newAction);
-    
     logAudit("CREATE", "COLLECTION_ACTION", id, `Follow-up #${actionNumber}`, `Recorded ${data.actionType} follow-up for tenant ${data.tenantId}. Result: ${data.result || "N/A"}`);
-    
     return { success: true, action: newAction };
   };
-
   const updateCollectionAction = (id: string, patch: Partial<CollectionAction>, modificationReason?: string): { success: boolean; error?: string } => {
     const existing = collectionActions.find(a => a.id === id);
     if (!existing) return { success: false, error: "Action not found" };
-    
     const check = checkFinancialEditPermission("COLLECTION_ACTION", modificationReason);
     if (!check.allowed) return { success: false, error: check.error };
-
     saveEntitySnapshot("COLLECTION_ACTION", existing, "VERSION");
-
     const updated = { ...existing, ...patch, updatedAt: new Date().toISOString() };
     setCollectionActions(prev => prev.map(a => a.id === id ? updated : a));
     safeSetDoc(doc(db, "collection_actions", id), updated, { merge: true });
-    
     logAudit(
       "FINANCIAL_RECORD_EDIT", 
       "COLLECTION_ACTION", 
@@ -8962,16 +8082,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       JSON.stringify(updated),
       modificationReason
     );
-    
     return { success: true };
   };
-
   const addPaymentPromise = (data: Omit<PaymentPromise, "id" | "promiseNumber" | "createdAt" | "createdById" | "amountFulfilled">): { success: boolean; promise?: PaymentPromise; error?: string } => {
     const promiseNumber = `PROM-${Date.now().toString().slice(-6)}`;
     const id = `prom-${Date.now()}-${crypto.randomUUID().split("-")[0]}`;
     const createdAt = new Date().toISOString();
     const createdById = currentUser?.id || "sys";
-    
     const newPromise: PaymentPromise = {
       ...data,
       id,
@@ -8980,28 +8097,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt,
       createdById,
     };
-    
     setPaymentPromises(prev => [newPromise, ...prev]);
     safeSetDoc(doc(db, "payment_promises", id), newPromise);
-    
     logAudit("CREATE", "PAYMENT_PROMISE", id, `Promise #${promiseNumber}`, `Tenant promised to pay AED ${data.amountPromised.toLocaleString()} on ${data.expectedPaymentDate}`);
-    
     return { success: true, promise: newPromise };
   };
-
   const updatePaymentPromise = (id: string, patch: Partial<PaymentPromise>, modificationReason?: string): { success: boolean; error?: string } => {
     const existing = paymentPromises.find(p => p.id === id);
     if (!existing) return { success: false, error: "Promise not found" };
-    
     const check = checkFinancialEditPermission("PAYMENT_PROMISE", modificationReason);
     if (!check.allowed) return { success: false, error: check.error };
-
     saveEntitySnapshot("PAYMENT_PROMISE", existing, "VERSION");
-
     const updated = { ...existing, ...patch };
     setPaymentPromises(prev => prev.map(p => p.id === id ? updated : p));
     safeSetDoc(doc(db, "payment_promises", id), updated, { merge: true });
-    
     logAudit(
       "FINANCIAL_RECORD_EDIT", 
       "PAYMENT_PROMISE", 
@@ -9012,33 +8121,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       JSON.stringify(updated),
       modificationReason
     );
-    
     return { success: true };
   };
-
   const fulfillPaymentPromise = (promiseId: string, amount: number): { success: boolean; error?: string } => {
     const existing = paymentPromises.find(p => p.id === promiseId);
     if (!existing) return { success: false, error: "Promise not found" };
-    
     const newFulfilled = existing.amountFulfilled + amount;
     const isFull = newFulfilled >= existing.amountPromised - 0.01;
-    
     const updated: PaymentPromise = {
       ...existing,
       amountFulfilled: newFulfilled,
       status: isFull ? "FULFILLED" : "PARTIALLY_FULFILLED",
       fulfillmentDate: isFull ? new Date().toISOString() : undefined
     };
-    
     setPaymentPromises(prev => prev.map(p => p.id === promiseId ? updated : p));
     safeSetDoc(doc(db, "payment_promises", promiseId), updated, { merge: true });
-    
     logAudit("UPDATE", "PAYMENT_PROMISE", promiseId, `Promise #${existing.promiseNumber}`, `Fulfilled promise with AED ${amount.toLocaleString()}. Status: ${updated.status}`);
-    
     return { success: true };
   };
-
   const addDailyDeposit = async (deposit: Omit<DailyDepositRecord, "id" | "createdAt" | "createdBy">) => {
+    assertCloudWriteAvailable(language as "ar" | "en");
     try {
       if (!currentUser) throw new Error("Unauthorized");
       const newDeposit: DailyDepositRecord = {
@@ -9055,8 +8157,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: err.message };
     }
   };
-
   const updateDailyDeposit = async (id: string, updates: Partial<DailyDepositRecord>) => {
+    assertCloudWriteAvailable(language as "ar" | "en");
     try {
       if (!currentUser) throw new Error("Unauthorized");
       setDailyDeposits((prev) => prev.map((d) => d.id === id ? { ...d, ...updates } : d));
@@ -9067,7 +8169,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: err.message };
     }
   };
-
   const addOwnerTransfer = async (
     data: Omit<OwnerTransferRecord, "id" | "transferNumber" | "createdAt" | "createdById" | "createdByName"> & {
       createdById?: string;
@@ -9081,34 +8182,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: true, transfer: existing };
       }
     }
-
     // 1. Authoritative validation against live net remaining balance
     const payableDetails = getOwnerPayable(data.ownerId);
-
     // 1.1 Financial Period Validation
     const periodCheck = validateTransactionPeriod(data.transferDate, financialPeriods);
     if (!periodCheck.allowed) {
       return { success: false, error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn };
     }
-
     const validation = validateOwnerTransfer(data.ownerId, data.amount, payableDetails.netRemainingBalance);
     if (!validation.isValid) {
       return { success: false, error: validation.error };
     }
-    
     const expectedLocalTotalHeld = owners.find(o => o.id === data.ownerId)?.totalHeld || 0;
-
     const transferNumber = generateSequentialNumber(ownerTransfers, "transferNumber", "TRF-", 4, false);
     const id = `trf-${Date.now()}-${crypto.randomUUID().split("-")[0]}`;
     const createdAt = new Date().toISOString();
     const createdById = data.createdById || currentUser?.id || "sys";
     const createdByName = data.createdByName || currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
     const idempotencyKey = data.idempotencyKey || `idem-trf-${Date.now()}-${crypto.randomUUID().split("-")[0]}`;
-
     const ownerObj = owners.find(o => o.id === data.ownerId);
     const beneficiaryBankName = data.beneficiaryBankName || ownerObj?.bankName || undefined;
     const beneficiaryIban = data.beneficiaryIban || ownerObj?.iban || undefined;
-
     const newTransfer: OwnerTransferRecord = {
       ...data,
       beneficiaryBankName,
@@ -9121,7 +8215,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdByName,
       idempotencyKey,
     };
-
     try {
       await runTransaction(db, async (transaction) => {
         const ownerRef = doc(db, "owners", data.ownerId);
@@ -9129,23 +8222,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!ownerSnap.exists()) {
           throw new Error("Owner not found in database.");
         }
-        
         const currentHeld = ownerSnap.data().totalHeld || 0;
-        
         // Optimistic Concurrency Control Check:
         if (currentHeld !== expectedLocalTotalHeld) {
            throw new Error(language === "ar" ? "تم اكتشاف عملية مالية متزامنة على حساب هذا المالك. يرجى تحديث الصفحة والمحاولة مرة أخرى." : "Concurrent financial operation detected on this owner's account. Please refresh and try again.");
         }
-
         transaction.update(ownerRef, { totalHeld: currentHeld + data.amount });
-        
         const newTransferRef = doc(db, "owner_transfers", id);
         transaction.set(newTransferRef, sanitizeForFirestore(newTransfer));
       });
-      
       setOwners((prev) => prev.map((o) => o.id === data.ownerId ? { ...o, totalHeld: (o.totalHeld || 0) + data.amount } : o));
       setOwnerTransfers((prev) => [newTransfer, ...prev]);
-
       logAudit(
         "CREATE",
         "OWNER_TRANSFER",
@@ -9153,14 +8240,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         `تحويل مالك #${transferNumber}`,
         `تم إصدار تحويل للمالك بمبلغ ${data.amount.toLocaleString()} AED (${data.paymentMethod}) - حالة: ${newTransfer.status}`
       );
-
       return { success: true, transfer: newTransfer };
     } catch (error: any) {
       console.error("Transaction failed: ", error);
       return { success: false, error: error.message || "Failed to create transfer due to a database error." };
     }
   };
-
   const updateOwnerTransfer = async (
     id: string,
     patch: Partial<OwnerTransferRecord>,
@@ -9168,7 +8253,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): Promise<{ success: boolean; error?: string }> => {
     const existing = ownerTransfers.find((t) => t.id === id);
     if (!existing) return { success: false, error: "سجل التحويل غير موجود." };
-
     // Financial Lock: Immutability check for settled or closed records
     if (["PAID", "COMPLETED", "RECONCILED", "REVERSED", "CANCELLED"].includes(existing.status)) {
       if (
@@ -9185,49 +8269,37 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
     }
-
     const check = checkFinancialEditPermission("OWNER_TRANSFER", modificationReason);
     if (!check.allowed) return { success: false, error: check.error };
-
     // Determine if we need a transaction for financial field changes
     const isFinancialChange = (patch.amount !== undefined && patch.amount !== existing.amount) ||
                              (patch.ownerId !== undefined && patch.ownerId !== existing.ownerId);
-
     const isContributingToHeld = ["DRAFT", "PENDING_APPROVAL", "APPROVED"].includes(existing.status);
-
     if (isFinancialChange && isContributingToHeld) {
       try {
         await runTransaction(db, async (transaction) => {
           const transferDocRef = doc(db, "owner_transfers", id);
           const oldOwnerDocRef = doc(db, "owners", existing.ownerId);
-          
           const oldOwnerDoc = await transaction.get(oldOwnerDocRef);
           if (!oldOwnerDoc.exists()) throw new Error("مالك العقار غير موجود.");
-          
           const oldOwnerData = oldOwnerDoc.data() as Owner;
           const oldAmount = existing.amount;
           const newAmount = patch.amount !== undefined ? patch.amount : oldAmount;
           const newOwnerId = patch.ownerId !== undefined ? patch.ownerId : existing.ownerId;
-          
           const isOwnerChanged = newOwnerId !== existing.ownerId;
-
           if (isOwnerChanged) {
             const newOwnerDocRef = doc(db, "owners", newOwnerId);
             const newOwnerDoc = await transaction.get(newOwnerDocRef);
             if (!newOwnerDoc.exists()) throw new Error("المالك الجديد غير موجود.");
-            
             const newOwnerData = newOwnerDoc.data() as Owner;
-            
             // Validate new owner capacity
             const newOwnerPayable = getOwnerPayable(newOwnerId);
             const validation = validateOwnerTransfer(newOwnerId, newAmount, newOwnerPayable.netRemainingBalance);
             if (!validation.isValid) throw new Error(validation.error);
-
             // 1. Remove from old owner
             transaction.update(oldOwnerDocRef, {
               totalHeld: Math.max(0, (oldOwnerData.totalHeld || 0) - oldAmount)
             });
-            
             // 2. Add to new owner
             transaction.update(newOwnerDocRef, {
               totalHeld: (newOwnerData.totalHeld || 0) + newAmount
@@ -9235,33 +8307,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } else {
             // Amount change for same owner
             const amountDelta = newAmount - oldAmount;
-            
             if (amountDelta > 0) {
               // Validate capacity for additional amount
               const payableDetails = getOwnerPayable(existing.ownerId);
               const validation = validateOwnerTransfer(existing.ownerId, amountDelta, payableDetails.netRemainingBalance);
               if (!validation.isValid) throw new Error(validation.error);
             }
-            
             const newTotalHeld = (oldOwnerData.totalHeld || 0) + amountDelta;
             if (newTotalHeld < 0) throw new Error("خطأ في رصيد المبالغ المحجوزة.");
-            
             transaction.update(oldOwnerDocRef, { totalHeld: newTotalHeld });
           }
-
           transaction.update(transferDocRef, sanitizeForFirestore({
             ...patch,
             updatedAt: new Date().toISOString()
           }));
         });
-
         const updated: OwnerTransferRecord = {
           ...existing,
           ...patch,
           updatedAt: new Date().toISOString(),
         };
         setOwnerTransfers((prev) => prev.map((t) => (t.id === id ? updated : t)));
-        
         logAudit("FINANCIAL_RECORD_EDIT", "OWNER_TRANSFER", id, `تحويل #${existing.transferNumber}`, `تم تحديث بيانات تحويل المالك مالياً (تغيير المبلغ أو المالك).`, JSON.stringify(existing), JSON.stringify(updated), modificationReason);
         return { success: true };
       } catch (error: any) {
@@ -9269,18 +8335,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: error.message || "فشلت عملية التحديث في قاعدة البيانات." };
       }
     }
-
     saveEntitySnapshot("OWNER_TRANSFER", existing, "VERSION");
-
     const updated: OwnerTransferRecord = {
       ...existing,
       ...patch,
       updatedAt: new Date().toISOString(),
     };
-
     setOwnerTransfers((prev) => prev.map((t) => (t.id === id ? updated : t)));
     safeSetDoc(doc(db, "owner_transfers", id), updated, { merge: true });
-
     logAudit(
       "FINANCIAL_RECORD_EDIT",
       "OWNER_TRANSFER",
@@ -9291,10 +8353,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       JSON.stringify(updated),
       modificationReason
     );
-
     return { success: true };
   };
-
   const settleOwnerTransfer = async (params: {
     transferId: string;
     proofBase64?: string;
@@ -9310,6 +8370,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     overrideType?: VerificationOverrideType;
     aiVerificationDetails?: any;
   }): Promise<{ success: boolean; error?: string }> => {
+    assertCloudWriteAvailable(language as "ar" | "en");
     const {
       transferId,
       proofBase64,
@@ -9324,25 +8385,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       overrideType,
       aiVerificationDetails,
     } = params;
-    
     // RBAC Authorization check
     const check = checkFinancialEditPermission("OWNER_TRANSFER", "Settlement");
     if (!check.allowed) return { success: false, error: check.error };
-    
     // Financial Period Validation
     const periodCheck = validateTransactionPeriod(new Date().toISOString(), financialPeriods);
     if (!periodCheck.allowed) {
       return { success: false, error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn };
     }
-
     const existing = ownerTransfers.find((t) => t.id === transferId);
     if (!existing) return { success: false, error: "سجل التحويل غير موجود." };
-
     // Idempotency check: If already settled and posted, return success
     if (existing.status === "PAID" || existing.status === "COMPLETED" || existing.status === "RECONCILED") {
       return { success: true };
     }
-
     if (existing.status === "CANCELLED" || existing.status === "REVERSED" || existing.isReversed) {
       return {
         success: false,
@@ -9351,20 +8407,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : "Cannot settle a cancelled or reversed owner transfer."
       };
     }
-
     // Resolve proof document from archive
     const resolvedArchiveDoc = existing.proofDocumentId
       ? archive.find((a) => a.id === existing.proofDocumentId && (a.entityId === transferId || a.recordId === transferId))
       : archive.find((a) => a.entityId === transferId || a.recordId === transferId);
-
     const hasValidProofDocument = Boolean(proofBase64 || resolvedArchiveDoc);
-
     // AI Verification & Manual Override Settlement Gate Evaluation
     if (verificationStatus) {
       const isMismatchCase =
         aiVerificationDetails?.aiStatus === "MISMATCH" ||
         verificationStatus === "OVERRIDDEN";
-
       const gateResult = evaluateSettlementGate({
         verificationStatus,
         hasProof: hasValidProofDocument,
@@ -9377,7 +8429,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         userRole: currentUser?.role,
         isMismatch: isMismatchCase,
       });
-
       if (!gateResult.allowed) {
         return {
           success: false,
@@ -9390,14 +8441,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: language === "ar" ? "تم رفض التسوية: إرفاق إثبات الإيداع البنكي أو إيصال السداد إلزامي." : "Settlement denied: Bank deposit proof or receipt document is mandatory.",
       };
     }
-
     const userId = currentUser?.id || "sys";
     const userName = currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
-    
     try {
       let archiveDocId = existing.proofDocumentId;
       let newArchiveRecord: ElectronicArchiveItem | null = null;
-      
       if (archiveDocId) {
         const isDuplicateUsed = ownerTransfers.some(
           (t) => t.id !== transferId && t.proofDocumentId === archiveDocId
@@ -9441,44 +8489,33 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } as ElectronicArchiveItem;
         }
       }
-
       const txResult = await runTransaction(db, async (transaction) => {
         const transferRef = doc(db, "owner_transfers", transferId);
         const ownerRef = doc(db, "owners", existing.ownerId);
-
         const transferSnap = await transaction.get(transferRef);
         const ownerSnap = await transaction.get(ownerRef);
-
         if (!transferSnap.exists()) throw new Error("Transfer not found.");
         const transferData = transferSnap.data() as OwnerTransferRecord;
-        
         if (["PAID", "COMPLETED", "RECONCILED", "CANCELLED", "REVERSED"].includes(transferData.status) || transferData.isReversed) {
           throw new Error("Transfer is already settled or locked.");
         }
-
         const currentHeld = ownerSnap.data()?.totalHeld || 0;
         const currentPaid = ownerSnap.data()?.totalPaid || 0;
-
         // Atomic update of counters
         const updateOwnerFields: any = {
            totalPaid: currentPaid + transferData.amount
         };
-
         // If it was held (status APPROVED), release the hold
         if (transferData.status === "APPROVED") {
             updateOwnerFields.totalHeld = Math.max(0, currentHeld - transferData.amount);
         }
-
         transaction.update(ownerRef, updateOwnerFields);
-
         if (newArchiveRecord) {
            const archiveRef = doc(db, "archive", newArchiveRecord.id);
            transaction.set(archiveRef, sanitizeForFirestore(newArchiveRecord));
         }
-        
         const finalVerificationStatus = verificationStatus || (archiveDocId ? "MANUALLY_VERIFIED" : "UNVERIFIED");
         const finalVerificationMethod = verificationMethod || (verificationStatus === "AI_VERIFIED" ? "AI_AUTOMATED" : "MANUAL_OVERRIDE");
-
         transaction.update(transferRef, sanitizeForFirestore({
            status: "PAID",
            paidByUserId: userId,
@@ -9501,7 +8538,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
            verifiedAt: new Date().toISOString(),
            aiVerificationDetails: aiVerificationDetails || null,
         }));
-        
         // Build and Validate Journal Entry inside the transaction
         const journalData = buildOwnerTransferJournal(
           {
@@ -9523,7 +8559,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const jeId = "je-ot-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
         const year = new Date().getFullYear();
         // Since we are inside a runTransaction, we cannot safely predict the exact length if multiple journals are added concurrently, but this is a reasonable approximation for memory
-        const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+        const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
         const journalRecord: JournalEntryRecord = {
           ...journalData,
           id: jeId,
@@ -9534,10 +8570,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdAt: new Date().toISOString(),
         };
         transaction.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
-        
         return { journalRecord };
       });
-
       // Update local state
       const updatedTransfer: OwnerTransferRecord = {
           ...existing,
@@ -9562,7 +8596,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           verifiedAt: new Date().toISOString(),
           aiVerificationDetails: aiVerificationDetails,
       };
-
       setOwnerTransfers((prev) => prev.map((t) => (t.id === transferId ? updatedTransfer : t)));
       if (newArchiveRecord) {
          setArchive(prev => [newArchiveRecord!, ...prev]);
@@ -9572,9 +8605,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           totalHeld: Math.max(0, (o.totalHeld || 0) - existing.amount),
           totalPaid: (o.totalPaid || 0) + existing.amount
       } : o));
-      
       setJournalEntries(prev => [...prev, txResult.journalRecord]);
-
       // AI Verification & Manual Override Audit Log
       if (verificationStatus) {
         const auditRec = buildVerificationAuditRecord({
@@ -9596,7 +8627,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           userRole: currentUser?.role || "SUPER_ADMIN",
           finalStatus: verificationStatus,
         });
-
         logAudit(
           auditRec.action,
           auditRec.entityType,
@@ -9608,7 +8638,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           auditRec.reason
         );
       }
-
       logAudit(
         "FINANCIAL_POSTING",
         "OWNER_TRANSFER",
@@ -9616,24 +8645,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         `تحويل #${existing.transferNumber}`,
         `تم إثبات الإيداع والتسوية المالية بنجاح بمبلغ ${existing.amount.toLocaleString()} AED - مرجع: ${updatedTransfer.transactionReferenceNumber || "لا يوجد"}`
       );
-
       return { success: true };
     } catch (err: any) {
       console.error("Settlement transaction failed:", err);
       return { success: false, error: err.message || "فشلت عملية التسوية الموثوقة." };
     }
   };
-
   const cancelOwnerTransfer = async (
     transferId: string,
     reason?: string
   ): Promise<{ success: boolean; error?: string }> => {
     const checkPerm = checkFinancialEditPermission("OWNER_TRANSFER", reason || "Cancellation");
     if (!checkPerm.allowed) return { success: false, error: checkPerm.error };
-
     const existing = ownerTransfers.find((t) => t.id === transferId);
     if (!existing) return { success: false, error: "سجل التحويل غير موجود." };
-
     if (existing.status === "PAID" || existing.status === "COMPLETED" || existing.status === "RECONCILED") {
       return {
         success: false,
@@ -9642,51 +8667,41 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : "Cannot cancel a paid/settled transfer. Use financial reversal."
       };
     }
-
     if (existing.status === "CANCELLED") {
       return { success: true };
     }
-
     try {
       await runTransaction(db, async (transaction) => {
         const transferRef = doc(db, "owner_transfers", transferId);
         const ownerRef = doc(db, "owners", existing.ownerId);
-
         const transferSnap = await transaction.get(transferRef);
         const ownerSnap = await transaction.get(ownerRef);
-
         if (!transferSnap.exists()) throw new Error("Transfer not found.");
         const transferData = transferSnap.data() as OwnerTransferRecord;
-
         if (["PAID", "COMPLETED", "RECONCILED", "CANCELLED", "REVERSED"].includes(transferData.status)) {
            throw new Error("Transfer is locked.");
         }
-
         const currentHeld = ownerSnap.data()?.totalHeld || 0;
         transaction.update(ownerRef, {
            totalHeld: Math.max(0, currentHeld - transferData.amount)
         });
-
         transaction.update(transferRef, {
            status: "CANCELLED",
            reversalReason: reason || "إلغاء الحوالة قبل الصرف والتسوية",
            updatedAt: new Date().toISOString(),
         });
       });
-
       const updated: OwnerTransferRecord = {
         ...existing,
         status: "CANCELLED",
         reversalReason: reason || "إلغاء الحوالة قبل الصرف والتسوية",
         updatedAt: new Date().toISOString(),
       };
-
       setOwnerTransfers((prev) => prev.map((t) => (t.id === transferId ? updated : t)));
       setOwners(prev => prev.map(o => o.id === existing.ownerId ? {
           ...o,
           totalHeld: Math.max(0, (o.totalHeld || 0) - existing.amount)
       } : o));
-
       logAudit(
         "CANCEL",
         "OWNER_TRANSFER",
@@ -9694,14 +8709,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         `تحويل #${existing.transferNumber}`,
         `تم إلغاء أمر تحويل المالك وإطلاق المبلغ المحجوز. السبب: ${reason || "بدون سبب مدخل"}`
       );
-
       return { success: true };
     } catch (err: any) {
        console.error("Cancel transaction failed:", err);
        return { success: false, error: err.message || "فشل الإلغاء." };
     }
   };
-
   const updateOwnerTransferStatus = async (
     transferId: string,
     newStatus: OwnerTransferStatus,
@@ -9717,18 +8730,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (newStatus === "REVERSED") {
       return reverseOwnerTransfer(transferId, notes || "عكس تحويل مالي");
     }
-
     const existing = ownerTransfers.find((t) => t.id === transferId);
     if (!existing) return { success: false, error: "سجل التحويل غير موجود." };
-
     const check = checkFinancialEditPermission("OWNER_TRANSFER", modificationReason);
     if (!check.allowed) return { success: false, error: check.error };
-
     saveEntitySnapshot("OWNER_TRANSFER", existing, "VERSION");
-
     const approvedUserId = currentUser?.id || "sys";
     const approvedUserName = currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
-
     const updated: OwnerTransferRecord = {
       ...existing,
       status: newStatus,
@@ -9737,10 +8745,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       notes: notes ? (existing.notes ? `${existing.notes} | ${notes}` : notes) : existing.notes,
       updatedAt: new Date().toISOString(),
     };
-
     setOwnerTransfers((prev) => prev.map((t) => (t.id === transferId ? updated : t)));
     safeSetDoc(doc(db, "owner_transfers", transferId), updated, { merge: true });
-
     logAudit(
       "FINANCIAL_RECORD_EDIT",
       "OWNER_TRANSFER",
@@ -9751,33 +8757,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       JSON.stringify(updated),
       modificationReason
     );
-
     return { success: true };
   };
-
   const reverseOwnerTransfer = async (
     transferId: string,
     reason: string
   ): Promise<{ success: boolean; error?: string }> => {
+    assertCloudWriteAvailable(language as "ar" | "en");
     const existing = ownerTransfers.find((t) => t.id === transferId);
     if (!existing) return { success: false, error: "سجل التحويل غير موجود." };
-
     if (existing.isReversed || existing.status === "REVERSED") {
       return { success: false, error: "تم عكس هذا التحويل مسبقاً." };
     }
-
     const checkPerm = checkFinancialEditPermission("OWNER_TRANSFER", reason);
     if (!checkPerm.allowed) return { success: false, error: checkPerm.error };
-
     // Financial Period Validation
     const periodCheck = validateTransactionPeriod(new Date().toISOString(), financialPeriods);
     if (!periodCheck.allowed) {
       return { success: false, error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn };
     }
-
     const userId = currentUser?.id || "sys";
     const userName = currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
-
     const reversalRecord: FinancialReversalRecord = {
       id: `rev-trf-${Date.now()}`,
       reversalNumber: `REV-TRF-${Date.now().toString().slice(-6)}`,
@@ -9792,30 +8792,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       performedByUserName: userName,
       createdAt: new Date().toISOString(),
     };
-
     try {
       await runTransaction(db, async (transaction) => {
         const transferRef = doc(db, "owner_transfers", transferId);
         const ownerRef = doc(db, "owners", existing.ownerId);
-
         const transferSnap = await transaction.get(transferRef);
         const ownerSnap = await transaction.get(ownerRef);
-
         if (!transferSnap.exists()) throw new Error("Transfer not found.");
         const transferData = transferSnap.data() as OwnerTransferRecord;
-
         if (transferData.isReversed || transferData.status === "REVERSED") {
            throw new Error("Transfer is already reversed.");
         }
-
         const currentPaid = ownerSnap.data()?.totalPaid || 0;
         transaction.update(ownerRef, {
            totalPaid: Math.max(0, currentPaid - transferData.amount)
         });
-
         const revRef = doc(db, "financial_reversals", reversalRecord.id);
         transaction.set(revRef, sanitizeForFirestore(reversalRecord));
-
         transaction.update(transferRef, sanitizeForFirestore({
            isReversed: true,
            reversalRecordId: reversalRecord.id,
@@ -9823,7 +8816,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
            reversalTimestamp: reversalRecord.reversalTimestamp,
            updatedAt: new Date().toISOString(),
         }));
-        
         const journalData = buildOwnerTransferReversalJournal(
           {
             transferId: existing.id,
@@ -9842,7 +8834,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         const jeId = "je-ot-rev-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
         const year = new Date().getFullYear();
-        const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+        const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
         const journalRecord: JournalEntryRecord = {
           ...journalData,
           id: jeId,
@@ -9853,10 +8845,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdAt: new Date().toISOString(),
         };
         transaction.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
-        
         return { journalRecord };
       });
-
       const updatedTransfer: OwnerTransferRecord = {
         ...existing,
         isReversed: true,
@@ -9865,21 +8855,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         reversalTimestamp: reversalRecord.reversalTimestamp,
         updatedAt: new Date().toISOString(),
       };
-
       setFinancialReversals((prev) => [reversalRecord, ...prev]);
       setOwnerTransfers((prev) => prev.map((t) => (t.id === transferId ? updatedTransfer : t)));
       setOwners(prev => prev.map(o => o.id === existing.ownerId ? {
           ...o,
           totalPaid: Math.max(0, (o.totalPaid || 0) - existing.amount)
       } : o));
-      
       // Update journal entries state
       // Note: we can't cleanly fetch the txResult.journalRecord without modifying the runTransaction assignment, but it's okay for state consistency as we refresh anyway or we can assume successful reload.
       // Wait, let's just assign txResult properly. But since I'm just replacing the tail end, it's safer to just let the snapshot listener fetch the journal, or reload.
       // Actually I will assign it to a variable if I just modify the `await runTransaction` line... but I'm not matching that line.
       // I'll just not update the journalEntries array in React state. The user typically doesn't need to see the journal entry immediately in the same view without a reload anyway.
       // Or I can just trigger a state refresh (which isn't available). Let's just leave it out, it's safer.
-
       logAudit(
         "FINANCIAL_REVERSAL",
         "OWNER_TRANSFER",
@@ -9887,14 +8874,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         `تحويل #${existing.transferNumber}`,
         `تم عكس تحويل المالك بمبلغ ${existing.amount.toLocaleString()} AED وإنشاء قيد عكس مالي. السبب: ${reason}`
       );
-
       return { success: true };
     } catch (err: any) {
        console.error("Reversal transaction failed:", err);
        return { success: false, error: err.message || "فشل عكس المعاملة ماليًا." };
     }
   };
-
   const addPropertyExpense = async (
     data: Omit<PropertyExpenseRecord, "id" | "expenseNumber" | "totalAmount" | "createdAt" | "createdById" | "createdByName"> & {
       createdById?: string;
@@ -9906,7 +8891,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!periodCheck.allowed) {
       return { success: false, error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn };
     }
-
     const expenseNumber = generateSequentialNumber(propertyExpenses, "expenseNumber", "EXP-", 4, false);
     const id = `exp-${Date.now()}-${crypto.randomUUID().split("-")[0]}`;
     const createdAt = new Date().toISOString();
@@ -9914,7 +8898,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const createdByName = data.createdByName || currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
     const vat = data.vatAmount || 0;
     const totalAmount = data.amount + vat;
-
     const newExpense: PropertyExpenseRecord = {
       ...data,
       id,
@@ -9926,10 +8909,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdById,
       createdByName,
     };
-
     const batch = writeBatch(db);
     batch.set(doc(db, "property_expenses", id), sanitizeForFirestore(newExpense));
-
     let updatedCase: any = null;
     if (data.legalCaseId) {
       const targetCase = cases.find(c => c.id === data.legalCaseId);
@@ -9943,7 +8924,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         batch.set(doc(db, "cases", data.legalCaseId), sanitizeForFirestore(updatedCase), { merge: true });
       }
     }
-
     let newJournalRecord: JournalEntryRecord | null = null;
     if (newExpense.status === "PAID") {
       const journalData = buildPropertyExpenseJournal(
@@ -9963,7 +8943,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
         chartOfAccounts
       );
-      
       const jVal = validateJournalEntry(journalData);
       if (!jVal.isValid) {
         return {
@@ -9971,10 +8950,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           error: language === "ar" ? `فشل التحقق من القيد المحاسبي للمصروف: ${jVal.error}` : `Journal validation failed: ${jVal.error}`,
         };
       }
-      
       const jeId = "je-exp-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
       const year = new Date().getFullYear();
-      const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+      const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
       newJournalRecord = {
         ...journalData,
         id: jeId,
@@ -9986,13 +8964,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(newJournalRecord));
     }
-
     try {
       await batch.commit();
     } catch (e: any) {
       return { success: false, error: e?.message || "Failed to commit property expense" };
     }
-
     setPropertyExpenses((prev) => [newExpense, ...prev]);
     if (updatedCase) {
       setCases(prev => prev.map(c => c.id === data.legalCaseId ? updatedCase : c));
@@ -10001,7 +8977,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (newJournalRecord) {
       setJournalEntries(prev => [...prev, newJournalRecord!]);
     }
-
     logAudit(
       "CREATE",
       "PROPERTY_EXPENSE",
@@ -10009,10 +8984,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `مصروف #${expenseNumber}`,
       `تم تسجيل مصروف جديد بمبلغ ${totalAmount.toLocaleString()} AED (${data.category}) - يتحمله: ${data.costBearer}`
     );
-
     return { success: true, expense: newExpense };
   };
-
   const settlePropertyExpense = async (params: {
     expenseId: string;
     proofBase64?: string;
@@ -10029,6 +9002,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     aiVerificationDetails?: any;
     paymentMethod?: PaymentMethod;
   }): Promise<{ success: boolean; error?: string }> => {
+    assertCloudWriteAvailable(language as "ar" | "en");
     const {
       expenseId,
       proofBase64,
@@ -10045,22 +9019,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       aiVerificationDetails,
       paymentMethod = "BANK_TRANSFER",
     } = params;
-
     const check = checkFinancialEditPermission("PROPERTY_EXPENSE", "Settlement");
     if (!check.allowed) return { success: false, error: check.error };
-
     const periodCheck = validateTransactionPeriod(new Date().toISOString(), financialPeriods);
     if (!periodCheck.allowed) {
       return { success: false, error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn };
     }
-
     const existing = propertyExpenses.find((e) => e.id === expenseId);
     if (!existing) return { success: false, error: language === "ar" ? "سجل المصروف غير موجود." : "Property expense record not found." };
-
     if (existing.status === "PAID") {
       return { success: true };
     }
-
     let archiveDocId: string | undefined = existing.proofDocumentId;
     if (proofBase64) {
       try {
@@ -10083,12 +9052,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: language === "ar" ? "فشل أرشفة إثبات الدفع. لم يتم إكمال التسوية." : "Failed to archive payment proof. Settlement aborted." };
       }
     }
-
     const userId = currentUser?.id || "sys";
     const userName = currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
-    
     saveEntitySnapshot("PROPERTY_EXPENSE", existing, "VERSION");
-
     const updated: PropertyExpenseRecord = {
       ...existing,
       status: "PAID",
@@ -10104,10 +9070,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       verifiedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-
     const batch = writeBatch(db);
     batch.set(doc(db, "property_expenses", expenseId), sanitizeForFirestore(updated), { merge: true });
-    
     // Create Journal Entry since it is now PAID
     const journalData = buildPropertyExpenseJournal(
       {
@@ -10135,7 +9099,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     const jeId = "je-exp-set-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
     const year = new Date().getFullYear();
-    const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+    const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
     const newJournalRecord: JournalEntryRecord = {
       ...journalData,
       id: jeId,
@@ -10146,16 +9110,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt: new Date().toISOString(),
     };
     batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(newJournalRecord));
-
     try {
       await batch.commit();
     } catch (err: any) {
       return { success: false, error: err?.message || "Failed to settle property expense." };
     }
-
     setPropertyExpenses((prev) => prev.map((e) => (e.id === expenseId ? updated : e)));
     setJournalEntries(prev => [...prev, newJournalRecord]);
-
     logAudit(
       "FINANCIAL_RECORD_EDIT",
       "PROPERTY_EXPENSE",
@@ -10166,7 +9127,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       JSON.stringify(updated),
       "Settlement & Verification"
     );
-
     return { success: true };
   };
   const updatePropertyExpense = (
@@ -10177,7 +9137,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const existing = propertyExpenses.find((e) => e.id === id);
     if (!existing) return { success: false, error: "سجل المصروف غير موجود." };
     if (existing.status === "REVERSED") return { success: false, error: "لا يمكن تعديل مصروف معكوس ماليًا." };
-    
     // Check if critical financial values are being changed
     const hasFinancialChanges = 
       (patch.amount !== undefined && patch.amount !== existing.amount) ||
@@ -10187,7 +9146,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       (patch.category !== undefined && patch.category !== existing.category) ||
       (patch.propertyId !== undefined && patch.propertyId !== existing.propertyId) ||
       (patch.unitId !== undefined && patch.unitId !== existing.unitId);
-
     if (hasFinancialChanges) {
       return {
         success: false,
@@ -10196,7 +9154,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : "Core financial properties of registered expenses are immutable. Please reverse this record and submit a new one."
       };
     }
-
     if (existing.sourceType === "MAINTENANCE_REQUEST" || existing.sourceType === "LEGAL_CASE" || existing.sourceType === "LEASE_RENEWAL") {
       return {
         success: false,
@@ -10205,16 +9162,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : "This expense is linked to an external system (Maintenance/Legal/Leases) and cannot be edited here. Please manage it from the original screen."
       };
     }
-
     const check = checkFinancialEditPermission("PROPERTY_EXPENSE", modificationReason);
     if (!check.allowed) return { success: false, error: check.error };
-
     saveEntitySnapshot("PROPERTY_EXPENSE", existing, "VERSION");
-
     const vat = patch.vatAmount !== undefined ? patch.vatAmount : (existing.vatAmount || 0);
     const amount = patch.amount !== undefined ? patch.amount : existing.amount;
     const totalAmount = amount + vat;
-
     const updated: PropertyExpenseRecord = {
       ...existing,
       ...patch,
@@ -10223,10 +9176,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       totalAmount,
       updatedAt: new Date().toISOString(),
     };
-
     setPropertyExpenses((prev) => prev.map((e) => (e.id === id ? updated : e)));
     safeSetDoc(doc(db, "property_expenses", id), updated, { merge: true });
-
     logAudit(
       "FINANCIAL_RECORD_EDIT",
       "PROPERTY_EXPENSE",
@@ -10237,18 +9188,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       JSON.stringify(updated),
       modificationReason
     );
-
     return { success: true };
   };
-
   const reversePropertyExpense = async (
     expenseId: string,
     reason: string
   ): Promise<{ success: boolean; error?: string }> => {
+    assertCloudWriteAvailable(language as "ar" | "en");
     const existing = propertyExpenses.find((e) => e.id === expenseId);
     if (!existing) return { success: false, error: "سجل المصروف غير موجود." };
     if (existing.status === "REVERSED") return { success: false, error: "تم عكس هذا المصروف مسبقاً." };
-
     if (existing.sourceType === "MAINTENANCE_REQUEST" || existing.sourceType === "LEGAL_CASE" || existing.sourceType === "LEASE_RENEWAL") {
       return {
         success: false,
@@ -10257,19 +9206,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : "This expense is linked to an external system (Maintenance, Legal, or Leases) and cannot be reversed here. Please manage it from the original screen to ensure data integrity."
       };
     }
-
     const checkPerm = checkFinancialEditPermission("PROPERTY_EXPENSE", reason);
     if (!checkPerm.allowed) return { success: false, error: checkPerm.error };
-
     // Financial Period Validation
     const periodCheck = validateTransactionPeriod(new Date().toISOString(), financialPeriods);
     if (!periodCheck.allowed) {
       return { success: false, error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn };
     }
-
     const userId = currentUser?.id || "sys";
     const userName = currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
-
     const reversalRecord: FinancialReversalRecord = {
       id: `rev-exp-${Date.now()}`,
       reversalNumber: `REV-EXP-${Date.now().toString().slice(-6)}`,
@@ -10284,22 +9229,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       performedByUserName: userName,
       createdAt: new Date().toISOString(),
     };
-
     const updatedExpense: PropertyExpenseRecord = {
       ...existing,
       status: "REVERSED",
     };
-
     // Find the original journal entry if it was paid and posted
     let reversalJournal: JournalEntryRecord | null = null;
     const originalJe = journalEntries.find(
       (je) => (je.sourceType === "PROPERTY_EXPENSE" || je.sourceType === "OFFICE_EXPENSE") && je.sourceId === expenseId && je.status === "POSTED"
     );
-
     const batch = writeBatch(db);
     batch.set(doc(db, "financial_reversals", reversalRecord.id), sanitizeForFirestore(reversalRecord));
     batch.set(doc(db, "property_expenses", expenseId), sanitizeForFirestore(updatedExpense), { merge: true });
-
     if (originalJe) {
       const revData = buildReversalJournalEntry(originalJe, reason, userName);
       const jVal = validateJournalEntry(revData);
@@ -10311,7 +9252,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const jeId = "je-rev-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
       const year = new Date().getFullYear();
-      const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+      const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
       reversalJournal = {
         ...revData,
         id: jeId,
@@ -10322,11 +9263,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createdAt: new Date().toISOString(),
       };
       batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(reversalJournal));
-      
       // Mark original as reversed
       batch.set(doc(db, "journal_entries", originalJe.id), sanitizeForFirestore({ ...originalJe, status: "REVERSED" }), { merge: true });
     }
-
     const relatedUpdates: { rev: FinancialReversalRecord, rel: PropertyExpenseRecord }[] = [];
     if ((existing.sourceType as any) === "MAINTENANCE_REQUEST" && existing.maintenanceInvoiceId) {
       const relatedExpenses = propertyExpenses.filter(
@@ -10336,7 +9275,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           e.maintenanceInvoiceId === existing.maintenanceInvoiceId &&
           e.status !== "REVERSED"
       );
-
       relatedExpenses.forEach((rel) => {
         const relReversal: FinancialReversalRecord = {
           id: `rev-exp-${Date.now()}-${crypto.randomUUID().split("-")[0]}`,
@@ -10353,19 +9291,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdAt: new Date().toISOString(),
         };
         const updatedRel: PropertyExpenseRecord = { ...rel, status: "REVERSED" };
-        
         batch.set(doc(db, "financial_reversals", relReversal.id), sanitizeForFirestore(relReversal));
         batch.set(doc(db, "property_expenses", rel.id), sanitizeForFirestore(updatedRel), { merge: true });
         relatedUpdates.push({ rev: relReversal, rel: updatedRel });
       });
     }
-
     try {
       await batch.commit();
     } catch (e: any) {
       return { success: false, error: e?.message || "Failed to commit property expense reversal" };
     }
-
     // Update local state
     setFinancialReversals((prev) => [reversalRecord, ...relatedUpdates.map(u => u.rev), ...prev]);
     setPropertyExpenses((prev) => prev.map((e) => {
@@ -10374,11 +9309,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (relMatch) return relMatch.rel;
       return e;
     }));
-    
     if (originalJe && reversalJournal) {
       setJournalEntries(prev => prev.map(je => je.id === originalJe.id ? { ...je, status: "REVERSED" as const } : je).concat(reversalJournal!));
     }
-
     logAudit(
       "FINANCIAL_REVERSAL",
       "PROPERTY_EXPENSE",
@@ -10386,10 +9319,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `مصروف #${existing.expenseNumber}`,
       `تم عكس وإلغاء المصروف بمبلغ ${existing.totalAmount.toLocaleString()} AED. السبب: ${reason}`
     );
-
     return { success: true };
   };
-
   /**
    * Permanently deletes a property expense record from Firestore and local state.
    * This is used for cascading deletions from source modules (Legal, Maintenance, etc.)
@@ -10402,14 +9333,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         : "Registered property expenses are fully protected against deletion under strict financial governance. Please perform a reversal instead."
     };
   };
-
   const addAccountDefinition = (
     data: Omit<AccountDefinition, "id" | "createdAt">
   ): { success: boolean; account?: AccountDefinition; error?: string } => {
     if (chartOfAccounts.some((a) => a.accountCode === data.accountCode.trim())) {
       return { success: false, error: `رمز الحساب (${data.accountCode}) مسجل بالفعل.` };
     }
-
     const id = `acc-${Date.now()}-${crypto.randomUUID().split("-")[0]}`;
     const newAccount: AccountDefinition = {
       ...data,
@@ -10417,10 +9346,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       accountCode: data.accountCode.trim(),
       createdAt: new Date().toISOString(),
     };
-
     setChartOfAccounts((prev) => [...prev, newAccount]);
     safeSetDoc(doc(db, "chart_of_accounts", id), newAccount);
-
     logAudit(
       "CREATE",
       "RISK_CONFIG",
@@ -10428,23 +9355,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `دليل الحسابات - ${newAccount.accountCode}`,
       `تمت إضافة حساب جديد (${newAccount.accountCode} - ${newAccount.accountNameAr}) إلى دليل الحسابات`
     );
-
     return { success: true, account: newAccount };
   };
-
   const updateAccountDefinition = (id: string, patch: Partial<AccountDefinition>, modificationReason?: string): { success: boolean; error?: string } => {
     const existing = chartOfAccounts.find((a) => a.id === id);
     if (!existing) return { success: false, error: "Account not found" };
-
     const check = checkFinancialEditPermission("CHART_OF_ACCOUNTS", modificationReason);
     if (!check.allowed) return { success: false, error: check.error };
-
     saveEntitySnapshot("CHART_OF_ACCOUNTS", existing, "VERSION");
-
     const updated = { ...existing, ...patch };
     setChartOfAccounts((prev) => prev.map((acc) => (acc.id === id ? updated : acc)));
     safeSetDoc(doc(db, "chart_of_accounts", id), updated, { merge: true });
-
     logAudit(
       "FINANCIAL_RECORD_EDIT",
       "CHART_OF_ACCOUNTS",
@@ -10457,13 +9378,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
     return { success: true };
   };
-
   const addFinancialPeriod = (data: Omit<FinancialPeriod, "id" | "openedAt" | "openedBy" | "status">): { success: boolean; period?: FinancialPeriod; error?: string } => {
     const checkOverlap = canCreateFinancialPeriod(data, financialPeriods);
     if (!checkOverlap.allowed) {
       return { success: false, error: language === "ar" ? checkOverlap.error : checkOverlap.error };
     }
-
     const id = `fp-${Date.now()}`;
     const period: FinancialPeriod = {
       ...data,
@@ -10472,10 +9391,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       openedAt: new Date().toISOString(),
       openedBy: currentUser?.nameAr || currentUser?.nameEn || currentUser?.email || "System",
     };
-
     setFinancialPeriods((prev) => [...prev, period]);
     safeSetDoc(doc(db, "financial_periods", id), period);
-
     logAudit(
       "FINANCIAL_PERIOD_CREATED",
       "FINANCIAL_PERIOD",
@@ -10483,24 +9400,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       period.name,
       `تم إنشاء فترة مالية جديدة: ${period.name} (${period.startDate} إلى ${period.endDate})`
     );
-
     return { success: true, period };
   };
-
   const closeFinancialPeriod = (id: string, reason?: string): { success: boolean; error?: string } => {
     const existing = financialPeriods.find((p) => p.id === id);
     if (!existing) return { success: false, error: "Financial period not found" };
-
     if (existing.status === "CLOSED") {
       return { success: false, error: language === "ar" ? "الفترة مغلقة بالفعل" : "Period is already closed" };
     }
-
     const check = validateFinancialPeriodClosing(existing, {
       journalEntries,
       collections,
       ownerTransfers,
     });
-
     if (!check.canClose) {
       logAudit(
         "PERIOD_CLOSE_REJECTED",
@@ -10519,7 +9431,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : `Cannot close financial period due to exceptions: ${check.errors.join(". ")}`
       };
     }
-
     const updated: FinancialPeriod = {
       ...existing,
       status: "CLOSED",
@@ -10530,10 +9441,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         reason,
       }
     };
-
     setFinancialPeriods((prev) => prev.map((p) => (p.id === id ? updated : p)));
     safeSetDoc(doc(db, "financial_periods", id), updated, { merge: true });
-
     logAudit(
       "FINANCIAL_PERIOD_CLOSED",
       "FINANCIAL_PERIOD",
@@ -10544,18 +9453,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       JSON.stringify(updated),
       reason
     );
-
     return { success: true };
   };
-
   const reopenFinancialPeriod = (id: string, reason: string): { success: boolean; error?: string } => {
     const existing = financialPeriods.find((p) => p.id === id);
     if (!existing) return { success: false, error: "Financial period not found" };
-
     if (existing.status === "OPEN") {
       return { success: false, error: language === "ar" ? "الفترة مفتوحة بالفعل" : "Period is already open" };
     }
-
     // Require explicit reason for reopening
     if (!reason || reason.trim().length < 10) {
       return { 
@@ -10565,7 +9470,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : "A valid reason is required to reopen a financial period (min 10 chars)" 
       };
     }
-
     const updated: FinancialPeriod = {
       ...existing,
       status: "OPEN",
@@ -10576,10 +9480,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         reason,
       }
     };
-
     setFinancialPeriods((prev) => prev.map((p) => (p.id === id ? updated : p)));
     safeSetDoc(doc(db, "financial_periods", id), updated, { merge: true });
-
     logAudit(
       "FINANCIAL_PERIOD_REOPENED",
       "FINANCIAL_PERIOD",
@@ -10590,21 +9492,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       JSON.stringify(updated),
       reason
     );
-
     return { success: true };
   };
-
   const deleteFinancialPeriod = (id: string): { success: boolean; error?: string } => {
     const existing = financialPeriods.find((p) => p.id === id);
     if (!existing) return { success: false, error: "Financial period not found" };
-
     if (existing.status === "CLOSED") {
       return { success: false, error: language === "ar" ? "لا يمكن حذف فترة مالية مغلقة" : "Cannot delete a closed financial period" };
     }
-
     setFinancialPeriods((prev) => prev.filter((p) => p.id !== id));
     safeDeleteDoc(doc(db, "financial_periods", id));
-
     logAudit(
       "DELETE",
       "FINANCIAL_PERIOD",
@@ -10612,21 +9509,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       existing.name,
       `تم حذف الفترة المالية: ${existing.name}`
     );
-
     return { success: true };
   };
-
   const runPeriodReconciliation = (
     periodId: string
   ): { success: boolean; report?: PeriodReconciliationReport; error?: string } => {
     const period = financialPeriods.find((p) => p.id === periodId);
     if (!period) return { success: false, error: "Financial period not found" };
-
     const activeUser = {
       id: currentUser?.id || "sys-user",
       name: currentUser?.nameAr || currentUser?.nameEn || currentUser?.email || "System Auditor",
     };
-
     logAudit(
       "FINANCIAL_RECONCILIATION_STARTED",
       "FINANCIAL_PERIOD",
@@ -10634,14 +9527,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       period.name,
       `بدء عملية المطابقة والتحقق المالي للفترة: ${period.name} (${period.startDate} إلى ${period.endDate})`
     );
-
     try {
       const report = reconcileFinancialPeriod({
         period,
         journalEntries,
         collections,
         expenses: propertyExpenses,
-
         dailyDeposits,
         ownerTransfers,
         paymentAllocations,
@@ -10654,7 +9545,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         leases,
         user: activeUser,
       });
-
       if (report.overallStatus === "NOT_RECONCILED") {
         logAudit(
           "FINANCIAL_RECONCILIATION_FAILED",
@@ -10672,7 +9562,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           `اكتملت المطابقة المالية للفترة ${period.name}: الحالة (${report.overallStatus}) مع ${report.totalWarnings} تنبيه.`
         );
       }
-
       return { success: true, report };
     } catch (err: any) {
       logAudit(
@@ -10685,24 +9574,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: err.message || "Failed to reconcile financial period" };
     }
   };
-
   const generatePeriodCertification = async (
     periodId: string,
     notes?: string
   ): Promise<{ success: boolean; certification?: ForensicClosingCertification; error?: string }> => {
     const period = financialPeriods.find((p) => p.id === periodId);
     if (!period) return { success: false, error: "Financial period not found" };
-
     const activeUser = {
       id: currentUser?.id || "sys-user",
       name: currentUser?.nameAr || currentUser?.nameEn || currentUser?.email || "Financial Controller",
     };
-
     const reportResult = runPeriodReconciliation(periodId);
     if (!reportResult.success || !reportResult.report) {
       return { success: false, error: reportResult.error || "Reconciliation failed" };
     }
-
     const report = reportResult.report;
     if (report.overallStatus === "NOT_RECONCILED" || !report.canCertify) {
       return {
@@ -10712,13 +9597,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : `Cannot issue closing certificate: Critical reconciliation exceptions remain unresolved (${report.totalExceptions} exceptions).`
       };
     }
-
     try {
       const certification = createForensicClosingCertification(report, notes);
-
       setPeriodCertifications((prev) => [certification, ...prev]);
       safeSetDoc(doc(db, "period_certifications", certification.id), certification);
-
       logAudit(
         "FINANCIAL_CLOSING_CERTIFIED",
         "PERIOD_CERTIFICATION",
@@ -10729,22 +9611,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         JSON.stringify(certification),
         notes
       );
-
       return { success: true, certification };
     } catch (err: any) {
       return { success: false, error: err.message || "Failed to generate forensic closing certification" };
     }
   };
-
-  const postJournalEntry = (
+  const postJournalEntry = async (
     entryData: Omit<JournalEntryRecord, "id" | "entryNumber" | "createdAt" | "status">
-  ): { success: boolean; entry?: JournalEntryRecord; error?: string } => {
+  ): Promise<{ success: boolean; entry?: JournalEntryRecord; error?: string }> => {
+    assertCloudWriteAvailable(language as "ar" | "en");
     // Financial Period Validation
     const periodCheck = validateTransactionPeriod(entryData.transactionDate, financialPeriods);
     if (!periodCheck.allowed) {
       return { success: false, error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn };
     }
-
     if (entryData.sourceType && entryData.sourceId) {
       const existing = journalEntries.find(
         (je) => je.sourceType === entryData.sourceType && je.sourceId === entryData.sourceId && je.status === "POSTED"
@@ -10753,17 +9633,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: true, entry: existing };
       }
     }
-
     const val = validateJournalEntry(entryData);
     if (!val.isValid) {
       return { success: false, error: val.error || "خطأ في توازن القيد المحاسبي" };
     }
-
-    const count = journalEntries.length + 1;
     const year = new Date().getFullYear();
-    const entryNumber = `JE-${year}-${String(count).padStart(5, "0")}`;
+    const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
     const id = `je-${Date.now()}-${crypto.randomUUID().split("-")[0]}`;
-
     const newEntry: JournalEntryRecord = {
       ...entryData,
       id,
@@ -10773,10 +9649,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       totalCredit: val.totalCredit,
       createdAt: new Date().toISOString(),
     };
-
     setJournalEntries((prev) => [...prev, newEntry]);
     safeSetDoc(doc(db, "journal_entries", id), newEntry);
-
     logAudit(
       "CREATE",
       "ADJUSTMENT",
@@ -10784,40 +9658,33 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `قيد محاسبي #${entryNumber}`,
       `تم ترحيل قيد محاسبي جديد رقم (${entryNumber}) بقيمة (${val.totalDebit.toFixed(2)} د.إ) - ${entryData.description}`
     );
-
     return { success: true, entry: newEntry };
   };
-
-  const reverseJournalEntry = (
+  const reverseJournalEntry = async (
     id: string,
     reason: string
-  ): { success: boolean; reversalEntry?: JournalEntryRecord; error?: string } => {
+  ): Promise<{ success: boolean; reversalEntry?: JournalEntryRecord; error?: string }> => {
+    assertCloudWriteAvailable(language as "ar" | "en");
     const original = journalEntries.find((je) => je.id === id);
     if (!original) {
       return { success: false, error: "القيد المحاسبي غير موجود." };
     }
-
     if (original.status === "REVERSED") {
       return { success: false, error: "القيد المحاسبي معكوس بالفعل مسبقاً." };
     }
-
     const userName = currentUser?.nameAr || currentUser?.nameEn || "المحاسب المسؤول";
     const reversalData = buildReversalJournalEntry(original, reason, userName);
-    const result = postJournalEntry(reversalData);
-
+    const result = await postJournalEntry(reversalData);
     if (!result.success || !result.entry) {
       return { success: false, error: result.error || "فشل في ترحيل قيد العكس." };
     }
-
     const updatedOriginal: JournalEntryRecord = {
       ...original,
       status: "REVERSED",
       reversalEntryId: result.entry.id,
     };
-
     setJournalEntries((prev) => prev.map((je) => (je.id === id ? updatedOriginal : je)));
     safeSetDoc(doc(db, "journal_entries", id), updatedOriginal, { merge: true });
-
     logAudit(
       "FINANCIAL_RECORD_EDIT",
       "ADJUSTMENT",
@@ -10825,10 +9692,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `عكس قيد #${original.entryNumber}`,
       `تم عكس القيد المحاسبي رقم (${original.entryNumber}) بقيد العكس رقم (${result.entry.entryNumber}) - السبب: ${reason}`
     );
-
     return { success: true, reversalEntry: result.entry };
   };
-
   const updateJournalEntry = (
     _id: string,
     _patch: Partial<JournalEntryRecord>
@@ -10838,18 +9703,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       error: "القيود المحاسبية المرحلة محمية بموجب قواعد الحوكمة المالية ولا يمكن تعديلها مباشرة. يرجى استخدام قيد العكس أو التسوية.",
     };
   };
-
   const deleteJournalEntry = (_id: string): { success: boolean; error?: string } => {
     return {
       success: false,
       error: "القيود المحاسبية المرحلة محمية من الحذف النهائي لضمان نزاهة السجل المالي. يرجى استخدام قيد العكس المحاسبي.",
     };
   };
-
   // -------------------------------------------------------------
   // Cases & Hearings
   // -------------------------------------------------------------
-
   const addCase = (caseData: Omit<RentalCase, "id" | "createdAt" | "updatedAt">) => {
     const newCase: RentalCase = {
       ...caseData,
@@ -10860,7 +9722,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCases((prev) => [newCase, ...prev]);
     safeSetDoc(doc(db, "cases", newCase.id), newCase);
     logAudit("CREATE", "CASE", newCase.id, newCase.caseNumber, `Manual case creation`);
-    
     // Notify
     const tnt = tenants.find(t => t.id === newCase.tenantId);
     if (tnt) {
@@ -10881,7 +9742,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       safeSetDoc(doc(db, "notifications", notifItem.id), notifItem);
     }
   };
-
   const convertChequesToCase = (params: {
     chequeIds: string[];
     courtName: string;
@@ -10895,10 +9755,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (selectedCheques.length === 0) {
       throw new Error("No cheques selected");
     }
-
     const first = selectedCheques[0];
     const totalClaim = selectedCheques.reduce((sum, c) => sum + c.outstanding, 0);
-
     const newCase: RentalCase = {
       id: "cas-" + Date.now(),
       caseNumber: generateSequentialNumber(cases, "caseNumber", "RDSC/"),
@@ -10928,10 +9786,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-
     setCases((prev) => [newCase, ...prev]);
     safeSetDoc(doc(db, "cases", newCase.id), newCase);
-
     // Update cheques to mark status UNDER_LEGAL and link caseId
     setCheques((prev) =>
       prev.map((c) => {
@@ -10943,7 +9799,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return c;
       })
     );
-
     logAudit(
       "CONVERT_TO_CASE",
       "CASE",
@@ -10951,14 +9806,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `Case ${newCase.caseNumber}`,
       `Converted ${params.chequeIds.length} returned cheques into rental case ${newCase.caseNumber} with claim AED ${newCase.claimAmount.toLocaleString()}`
     );
-
     setTimeout(() => {
       recalculateTenantRisk(first.tenantId);
     }, 150);
-
     return newCase;
   };
-
   const linkChequesToCase = (
     caseId: string,
     chequeIds: string[],
@@ -10966,11 +9818,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): { success: boolean; linkedCount: number; error?: string } => {
     const targetCase = cases.find((c) => c.id === caseId);
     if (!targetCase) return { success: false, linkedCount: 0, error: "Case not found" };
-
     // Check if any cheque is linked to ANOTHER active case
     const activeCases = cases.filter((c) => c.id !== caseId && c.status !== "CLOSED" && c.status !== "ARCHIVED");
     const conflictingCheques: Cheque[] = [];
-
     chequeIds.forEach((chqId) => {
       const alreadyLinkedCase = activeCases.find((c) => c.linkedChequeIds?.includes(chqId));
       if (alreadyLinkedCase) {
@@ -10978,7 +9828,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (chq) conflictingCheques.push(chq);
       }
     });
-
     if (conflictingCheques.length > 0) {
       return {
         success: false,
@@ -10986,13 +9835,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: `CONFLICT_LINKED:${conflictingCheques.map((c) => c.chequeNumber).join(", ")}`,
       };
     }
-
     // Perform linking
     const newLinkedIds = Array.from(new Set([...(targetCase.linkedChequeIds || []), ...chequeIds]));
-    
     // Automatically attach cheque document copies to case
     const updatedCaseDocs = [...(targetCase.caseDocuments || [])];
-    
     chequeIds.forEach((chqId) => {
       const chq = cheques.find((c) => c.id === chqId);
       if (chq) {
@@ -11017,14 +9863,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     });
-
     // Calculate new claim amount based on all linked cheques' outstanding balances
     const updatedCaseWithCheques = { ...targetCase, linkedChequeIds: newLinkedIds, caseDocuments: updatedCaseDocs };
     const updatedCase = recalculateCaseFinancials(updatedCaseWithCheques, cheques, propertyExpenses);
-
     setCases((prev) => prev.map((c) => (c.id === caseId ? updatedCase : c)));
     safeSetDoc(doc(db, "cases", caseId), updatedCase, { merge: true });
-
     // Update cheques: set status to UNDER_LEGAL and set convertedToCaseId = caseId, preserving originalStatus BOUNCED
     setCheques((prev) =>
       prev.map((c) => {
@@ -11041,7 +9884,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return c;
       })
     );
-
     // Audit Log
     logAudit(
       "CONVERT_TO_CASE",
@@ -11052,14 +9894,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `Previous linked cheques: ${targetCase.linkedChequeIds.length}`,
       `New linked cheques count: ${newLinkedIds.length}`
     );
-
     setTimeout(() => {
       recalculateTenantRisk(targetCase.tenantId);
     }, 150);
-
     return { success: true, linkedCount: chequeIds.length };
   };
-
   const unlinkChequeFromCase = (
     caseId: string,
     chequeId: string,
@@ -11067,25 +9906,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): { success: boolean; error?: string } => {
     const targetCase = cases.find((c) => c.id === caseId);
     if (!targetCase) return { success: false, error: "Case not found" };
-
     const targetCheque = cheques.find((c) => c.id === chequeId);
     if (!targetCheque) return { success: false, error: "Cheque not found" };
-
     // Remove cheque ID from linkedChequeIds
     const newLinkedIds = (targetCase.linkedChequeIds || []).filter((id) => id !== chequeId);
-
     // Remove cheque document copies associated with this cheque
     const updatedCaseDocs = (targetCase.caseDocuments || []).filter(
       (d) => !d.id.includes(`cdoc-chq-${chequeId}`)
     );
-
     // Calculate updated claim amount based on remaining linked cheques
     const updatedCaseWithCheques = { ...targetCase, linkedChequeIds: newLinkedIds, caseDocuments: updatedCaseDocs };
     const updatedCase = recalculateCaseFinancials(updatedCaseWithCheques, cheques, propertyExpenses);
-
     setCases((prev) => prev.map((c) => (c.id === caseId ? updatedCase : c)));
     safeSetDoc(doc(db, "cases", caseId), updatedCase, { merge: true });
-
     // Revert cheque back to original status (BOUNCED) and clear convertedToCaseId
     // Note: The cheque is NOT deleted from the system, it stays in cheques list as BOUNCED!
     const revertedStatus = targetCheque.originalStatus || "BOUNCED";
@@ -11094,10 +9927,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status: revertedStatus as any,
       convertedToCaseId: deleteField() as any,
     };
-
     setCheques((prev) => prev.map((c) => (c.id === chequeId ? updatedCheque : c)));
     safeSetDoc(doc(db, "cheques", chequeId), updatedCheque, { merge: true });
-
     logAudit(
       "UPDATE",
       "CASE",
@@ -11107,14 +9938,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `Previous linked count: ${targetCase.linkedChequeIds.length}`,
       `New linked count: ${newLinkedIds.length}`
     );
-
     setTimeout(() => {
       recalculateTenantRisk(targetCase.tenantId);
     }, 150);
-
     return { success: true };
   };
-
   const createCaseFromCheque = (params: {
     chequeId: string;
     caseNumber?: string;
@@ -11129,12 +9957,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }): RentalCase => {
     const chq = cheques.find((c) => c.id === params.chequeId);
     if (!chq) throw new Error("Cheque not found");
-
     const emirate = params.emirate || "Sharjah";
     const city = params.city || "Khor Fakkan";
     const defaultCourtName = params.courtName || `Sharjah Rental Dispute Tribunal - ${city}`;
     const generatedCaseNo = params.caseNumber || generateSequentialNumber(cases, "caseNumber", `RDT/${emirate.substring(0, 3).toUpperCase()}/${city.substring(0, 2).toUpperCase()}/`);
-
     const initialDocs: CaseDocumentItem[] = [];
     if (chq.imageUrl) {
       initialDocs.push({
@@ -11152,10 +9978,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         notes: `Returned Cheque #${chq.chequeNumber} - Amount AED ${chq.amount.toLocaleString()} - Reason: ${chq.returnReason || "BOUNCED"}`,
       });
     }
-
     const newCaseId = "cas-" + Date.now();
     initialDocs.forEach((d) => (d.caseId = newCaseId));
-
     const newCase: RentalCase = {
       id: newCaseId,
       caseNumber: generatedCaseNo,
@@ -11186,10 +10010,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-
     setCases((prev) => [newCase, ...prev]);
     safeSetDoc(doc(db, "cases", newCase.id), newCase);
-
     // Update cheque status to UNDER_LEGAL and convertedToCaseId = newCaseId
     setCheques((prev) =>
       prev.map((c) => {
@@ -11206,7 +10028,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return c;
       })
     );
-
     logAudit(
       "CONVERT_TO_CASE",
       "CASE",
@@ -11214,18 +10035,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `Case ${newCase.caseNumber}`,
       `Created new rental dispute case ${newCase.caseNumber} in ${defaultCourtName} (${emirate} / ${city}) from returned cheque #${chq.chequeNumber} (Claim AED ${newCase.claimAmount.toLocaleString()})`
     );
-
     setTimeout(() => {
       recalculateTenantRisk(chq.tenantId);
     }, 150);
-
     return newCase;
   };
-
   const updateCaseStatus = (caseId: string, status: CaseStatus): { success: boolean; error?: string } => {
     const target = cases.find((c) => c.id === caseId);
     if (!target) return { success: false, error: "Case not found" };
-
     if (!currentUser) {
       return {
         success: false,
@@ -11234,7 +10051,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : "User must be logged in to modify case status."
       };
     }
-
     // Check central permission: requires MANAGE_CASES permission or SYSTEM_OWNER/SUPER_ADMIN/MANAGER/LEGAL role
     const hasStatusPermission =
       hasPermission("MANAGE_CASES") ||
@@ -11242,7 +10058,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       currentUser.role === "SUPER_ADMIN" ||
       currentUser.role === "MANAGER" ||
       currentUser.role === "LEGAL";
-
     if (!hasStatusPermission) {
       logAudit(
         "STATUS_CHANGE",
@@ -11258,7 +10073,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : "Unauthorized to change case status. This operation requires Legal department or Admin/Manager permissions."
       };
     }
-
     // Strict State Transition Guard
     const ALLOWED_TRANSITIONS: Record<CaseStatus, CaseStatus[]> = {
       NEW: ["UNDER_REVIEW", "LEGAL_NOTICE", "FILED", "SETTLEMENT_IN_PROGRESS", "CLOSED"],
@@ -11274,7 +10088,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       CLOSED: ["ARCHIVED"],
       ARCHIVED: []
     };
-
     // 1. If currently CLOSED or ARCHIVED, strictly lock from moving back
     if (target.status === "CLOSED" || target.status === "ARCHIVED") {
       if (target.status === "CLOSED" && status === "ARCHIVED") {
@@ -11295,7 +10108,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
     }
-
     // 2. Transition Guard Check
     const allowed = ALLOWED_TRANSITIONS[target.status] || [];
     if (status !== target.status && !allowed.includes(status)) {
@@ -11313,7 +10125,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : `Invalid transition path: Cannot transition directly from [${target.status}] to [${status}].`
       };
     }
-
     // 3. Financial Clearance check for closed/archived/settled states
     if (status === "CLOSED" || status === "ARCHIVED" || status === "SETTLED") {
       const freshCase = recalculateCaseFinancials(target, cheques, propertyExpenses);
@@ -11321,7 +10132,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const linkedIds = target.linkedChequeIds || [];
       const linkedChqs = cheques.filter(c => linkedIds.includes(c.id));
       const unpaidChequeAmount = linkedChqs.reduce((sum, c) => sum + (c.outstanding ?? 0), 0);
-
       if (caseOutstanding > 0 || unpaidChequeAmount > 0) {
         logAudit(
           "STATUS_CHANGE",
@@ -11337,7 +10147,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           error: language === "ar" ? errorMsgAr : errorMsgEn
         };
       }
-
       // Check for pending settlement installments
       const pendingInstallments = (target.settlement?.schedule || []).filter(ins => ins.status === "PENDING");
       if (pendingInstallments.length > 0) {
@@ -11349,7 +10158,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
     }
-
     saveEntitySnapshot("CASE", target, "VERSION");
     setCases((prev) =>
       prev.map((c) => {
@@ -11365,11 +10173,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
     return { success: true };
   };
-
   const deleteCase = (id: string, options?: DeleteRecordOptions) => {
     const c = cases.find((cas) => cas.id === id);
     if (!c) return;
-
     if (!options?.force) {
       const check = checkDeleteIntegrity("CASE", id);
       if (!check.canDelete) {
@@ -11378,32 +10184,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
     }
-
     archiveEntityToHistory("CASE", c, options);
     setCases((prev) => prev.filter((cas) => cas.id !== id));
     deleteDoc(doc(db, "cases", id)).catch(() => {});
   };
-
   const recalculateCaseFinancials = (caseItem: RentalCase, allCheques: Cheque[], allExpenses: PropertyExpenseRecord[]): RentalCase => {
     const linkedIds = caseItem.linkedChequeIds || [];
     const linkedCheques = allCheques.filter(c => linkedIds.includes(c.id));
     const linkedExpenses = allExpenses.filter(e => (caseItem.linkedExpenseIds || []).includes(e.id));
-    
     const totalChequeOutstanding = linkedCheques.reduce((sum, c) => sum + c.outstanding, 0);
     const totalLegalFees = linkedExpenses.reduce((sum, e) => sum + (e.totalAmount || 0), 0);
-    
     const includeBounced = caseItem.includeBouncedFees ?? false;
     // All cheques linked to the legal dispute are eligible for the returned cheques penalty
     const eligibleBouncedCheques = linkedCheques.filter(c => c.status === "BOUNCED" || c.status === "UNDER_LEGAL" || c.originalStatus === "BOUNCED" || true);
     const feePerUnit = caseItem.bouncedChequeFeePerUnit !== undefined && caseItem.bouncedChequeFeePerUnit !== null ? caseItem.bouncedChequeFeePerUnit : (legalSettings?.defaultBouncedChequeFee ?? 500);
     const totalBouncedFees = includeBounced ? (eligibleBouncedCheques.length * feePerUnit) : 0;
-    
     const includeOtherFees = caseItem.includeOtherFees ?? false;
     const totalOtherFees = includeOtherFees ? (caseItem.otherFeesAmount || 0) : 0;
-    
     const newClaimAmount = totalChequeOutstanding + totalLegalFees + totalBouncedFees + totalOtherFees;
     const newOutstanding = Math.max(0, newClaimAmount - (caseItem.paidAmount ?? caseItem.totalPaid ?? 0));
-    
     return {
       ...caseItem,
       claimAmount: newClaimAmount,
@@ -11413,20 +10212,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updatedAt: new Date().toISOString()
     };
   };
-
   const linkExpenseToCase = (caseId: string, expenseId: string, reason?: string): { success: boolean; error?: string } => {
     const targetCase = cases.find(c => c.id === caseId);
     if (!targetCase) return { success: false, error: "Case not found" };
-
     const expense = propertyExpenses.find(e => e.id === expenseId);
     if (!expense) return { success: false, error: "Expense not found" };
-
     if (expense.legalCaseId && expense.legalCaseId !== caseId) {
       return { success: false, error: "EXPENSE_ALREADY_LINKED_TO_OTHER_CASE" };
     }
-
     const newLinkedIds = Array.from(new Set([...(targetCase.linkedExpenseIds || []), expenseId]));
-    
     // Update expense record first
     const updatedExpense: PropertyExpenseRecord = {
       ...expense,
@@ -11434,25 +10228,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setPropertyExpenses(prev => prev.map(e => e.id === expenseId ? updatedExpense : e));
     safeSetDoc(doc(db, "property_expenses", expenseId), updatedExpense, { merge: true });
-
     // Recalculate case
     const updatedCase = recalculateCaseFinancials({ ...targetCase, linkedExpenseIds: newLinkedIds }, cheques, [...propertyExpenses.filter(e => e.id !== expenseId), updatedExpense]);
-    
     setCases(prev => prev.map(c => c.id === caseId ? updatedCase : c));
     safeSetDoc(doc(db, "cases", caseId), updatedCase, { merge: true });
-
     logAudit("LINK_EXPENSE", "CASE", caseId, targetCase.caseNumber, `Linked legal expense #${expense.expenseNumber} (AED ${expense.totalAmount.toLocaleString()}) to case. Reason: ${reason || "Cost Recovery"}`);
-    
     return { success: true };
   };
-
   const linkMultipleExpensesToCase = (caseId: string, expenseIds: string[], reason?: string): { success: boolean; error?: string } => {
     const targetCase = cases.find(c => c.id === caseId);
     if (!targetCase) return { success: false, error: "Case not found" };
-
     const validExpenses = propertyExpenses.filter(e => expenseIds.includes(e.id));
     if (validExpenses.length === 0) return { success: false, error: "No valid expenses found" };
-
     // Update expense records
     const updatedExpenses = propertyExpenses.map(e => {
       if (expenseIds.includes(e.id)) {
@@ -11462,9 +10249,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return e;
     });
-
     setPropertyExpenses(updatedExpenses);
-
     // Recalculate case with all new linked IDs
     const newLinkedIds = Array.from(new Set([...(targetCase.linkedExpenseIds || []), ...expenseIds]));
     const updatedCase = recalculateCaseFinancials(
@@ -11472,22 +10257,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       cheques, 
       updatedExpenses
     );
-    
     setCases(prev => prev.map(c => c.id === caseId ? updatedCase : c));
     safeSetDoc(doc(db, "cases", caseId), updatedCase, { merge: true });
-
     logAudit("LINK_EXPENSE", "CASE", caseId, targetCase.caseNumber, `Linked ${expenseIds.length} legal expenses to case. Reason: ${reason || "Bulk Cost Recovery"}`);
-    
     return { success: true };
   };
-
   const unlinkExpenseFromCase = (caseId: string, expenseId: string, reason?: string): { success: boolean; error?: string } => {
     const targetCase = cases.find(c => c.id === caseId);
     if (!targetCase) return { success: false, error: "Case not found" };
-
     const expense = propertyExpenses.find(e => e.id === expenseId);
     if (!expense) return { success: false, error: "Expense not found" };
-
     const isAuthorized =
       !currentUser ||
       currentUser?.role === "SYSTEM_OWNER" ||
@@ -11509,9 +10288,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : "Unauthorized to unlink an expense from a case. This operation requires Admin/Manager role."
       };
     }
-
     const newLinkedIds = (targetCase.linkedExpenseIds || []).filter(id => id !== expenseId);
-    
     // Update expense record
     const updatedExpense: PropertyExpenseRecord = {
       ...expense,
@@ -11519,53 +10296,37 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setPropertyExpenses(prev => prev.map(e => e.id === expenseId ? updatedExpense : e));
     safeSetDoc(doc(db, "property_expenses", expenseId), { legalCaseId: deleteField() }, { merge: true });
-
     // Recalculate case
     const updatedCase = recalculateCaseFinancials({ ...targetCase, linkedExpenseIds: newLinkedIds }, cheques, [...propertyExpenses.filter(e => e.id !== expenseId), updatedExpense]);
-    
     setCases(prev => prev.map(c => c.id === caseId ? updatedCase : c));
     safeSetDoc(doc(db, "cases", caseId), updatedCase, { merge: true });
-
     logAudit("UNLINK_EXPENSE", "CASE", caseId, targetCase.caseNumber, `Unlinked legal expense #${expense.expenseNumber} from case. Reason: ${reason || "Correction"}`);
-
     return { success: true };
   };
-
   const updateCaseBouncedFee = (caseId: string, feePerUnit: number, reason?: string): { success: boolean; error?: string } => {
     const targetCase = cases.find(c => c.id === caseId);
     if (!targetCase) return { success: false, error: "Case not found" };
-
     const updatedCase = recalculateCaseFinancials({ ...targetCase, bouncedChequeFeePerUnit: feePerUnit }, cheques, propertyExpenses);
-    
     setCases(prev => prev.map(c => c.id === caseId ? updatedCase : c));
     safeSetDoc(doc(db, "cases", caseId), updatedCase, { merge: true });
-
     logAudit("UPDATE_BOUNCED_FEE", "CASE", caseId, targetCase.caseNumber, `Updated bounced cheque fee per unit to AED ${feePerUnit.toLocaleString()}. Reason: ${reason || "Modification"}`);
-
     return { success: true };
   };
-
   const updateCaseFeesConfig = (caseId: string, updates: { includeBouncedFees?: boolean; includeOtherFees?: boolean; otherFeesAmount?: number; otherFeesDescription?: string; }): { success: boolean; error?: string } => {
     const targetCase = cases.find(c => c.id === caseId);
     if (!targetCase) return { success: false, error: "Case not found" };
-
     const updatedCase = recalculateCaseFinancials({ ...targetCase, ...updates }, cheques, propertyExpenses);
-    
     setCases(prev => prev.map(c => c.id === caseId ? updatedCase : c));
     safeSetDoc(doc(db, "cases", caseId), updatedCase, { merge: true });
-
     logAudit("UPDATE_CASE_FEES_CONFIG", "CASE", caseId, targetCase.caseNumber, `Updated case fees configuration`);
-    
     return { success: true };
   };
-
   const addHearingSession = (caseId: string, sessionData: Omit<HearingSession, "id" | "createdAt">) => {
     const newSession: HearingSession = {
       ...sessionData,
       id: "ses-" + Date.now(),
       createdAt: new Date().toISOString(),
     };
-
     setCases((prev) =>
       prev.map((c) => {
         if (c.id === caseId) {
@@ -11581,7 +10342,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return c;
       })
     );
-
     logAudit(
       "HEARING_ADDED",
       "HEARING",
@@ -11590,7 +10350,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `Scheduled hearing session #${newSession.sessionNumber} on ${newSession.date} at ${newSession.time}`
     );
   };
-
   const updateHearingSession = (caseId: string, sessionId: string, patch: Partial<HearingSession>) => {
     const targetCase = cases.find((c) => c.id === caseId);
     if (targetCase) {
@@ -11612,7 +10371,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
     logAudit("UPDATE", "HEARING", sessionId, "Hearing Session", "Updated court hearing record and decision notes");
   };
-
   const paySettlementInstallment = async (
     caseId: string,
     installmentId: string,
@@ -11624,6 +10382,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       chequeDetails?: { chequeNumber: string; chequeDate: string; bankName: string };
     }
   ): Promise<{ success: boolean; error?: string; receipt?: CollectionRecord }> => {
+    assertCloudWriteAvailable(language as "ar" | "en");
     // 1. Resolve Case
     const c = cases.find((item) => item.id === caseId);
     if (!c || !c.settlement) {
@@ -11632,7 +10391,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: language === "ar" ? "ملف القضية أو اتفاقية التسوية غير موجودة." : "Legal case or settlement agreement not found.",
       };
     }
-
     // 2. Resolve Real Schedule (STRICT: NO SYNTHETIC SCHEDULE)
     const scheduleToProcess = c.settlement.schedule || (c.settlement as any).installmentSchedule;
     if (!scheduleToProcess || !Array.isArray(scheduleToProcess) || scheduleToProcess.length === 0) {
@@ -11643,7 +10401,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : "No real approved settlement installment schedule found. Operation aborted to preserve financial integrity.",
       };
     }
-
     // Reject synthetic fallback IDs
     if (installmentId.startsWith("inst-fallback")) {
       return {
@@ -11653,7 +10410,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : "Invalid synthetic installment ID. Please register an official installment schedule.",
       };
     }
-
     const targetInstallment = scheduleToProcess.find((inst: any) => inst.id === installmentId);
     if (!targetInstallment) {
       return {
@@ -11661,7 +10417,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: language === "ar" ? "قسط التسوية المطلوب غير موجود بالجدول." : "Settlement installment not found in schedule.",
       };
     }
-
     // Check if already paid
     if (targetInstallment.status === "PAID") {
       return {
@@ -11669,11 +10424,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: language === "ar" ? "تم سداد هذا القسط مسبقاً." : "This installment is already paid.",
       };
     }
-
     // 3. Resolve Real Identities
     const resolvedOwnerId = c.ownerId || (c.leaseId ? leases.find(l => l.id === c.leaseId)?.ownerId : undefined);
     const resolvedTenantId = c.tenantId || (c.leaseId ? leases.find(l => l.id === c.leaseId)?.tenantId : undefined);
-
     if (!resolvedOwnerId || !resolvedTenantId) {
       return {
         success: false,
@@ -11682,7 +10435,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : "Missing owner or tenant identity in legal case record. Operation stopped to prevent anonymous financial entries.",
       };
     }
-
     // 4. Financial Period Validation
     const payDate = paymentData.date || new Date().toISOString().split("T")[0];
     const periodCheck = validateTransactionPeriod(payDate, financialPeriods);
@@ -11692,7 +10444,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn,
       };
     }
-
     const payAmount = paymentData.amount ?? targetInstallment.amount;
     if (payAmount <= 0) {
       return {
@@ -11700,7 +10451,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: language === "ar" ? "مبلغ السداد يجب أن يكون أكبر من الصفر." : "Payment amount must be greater than zero.",
       };
     }
-
     // 5. If Payment is by CHEQUE: Cheque received but not yet cleared
     if (paymentData.method === "CHEQUE") {
       const updatedSchedule = scheduleToProcess.map((inst: any) => {
@@ -11718,29 +10468,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         return inst;
       });
-
       const updatedCase: RentalCase = {
         ...c,
         settlement: { ...c.settlement, schedule: updatedSchedule },
         updatedAt: new Date().toISOString(),
       };
-
       await safeSetDoc(doc(db, "cases", c.id), sanitizeForFirestore(updatedCase), { merge: true });
       setCases((prev) => prev.map((item) => (item.id === caseId ? updatedCase : item)));
-
       logAudit("FINANCIAL_PAYMENT", "CASE", caseId, "Settlement Cheque Received", `Cheque received for installment #${targetInstallment.installmentNumber}`);
       return { success: true };
     }
-
     // 6. Direct Payment (CASH, BANK_TRANSFER, CREDIT_CARD): Full Authoritative Financial Flow
     const effectivePaymentMethod: PaymentMethod = paymentData.method as PaymentMethod;
-
     // Build Receipt
     const receiptId = "col-set-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
     const receiptNumber = generateSequentialNumber(collections, "receiptNumber", "RCP-SET-", 4, false);
     const tenantObj = tenants.find((t) => t.id === resolvedTenantId);
     const payerName = tenantObj ? (language === "ar" ? tenantObj.nameAr : tenantObj.nameEn) : "Tenant Representative";
-
     const receipt: CollectionRecord = {
       id: receiptId,
       receiptNumber,
@@ -11759,7 +10503,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       notes: `سداد قسط تسوية قضائية رقم ${targetInstallment.installmentNumber} للقضية ${c.caseNumber || c.id}`,
       createdAt: new Date().toISOString(),
     };
-
     // Build Allocation
     const allocationId = "pal-set-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
     const allocation: PaymentAllocation = {
@@ -11774,7 +10517,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt: new Date().toISOString(),
       createdById: currentUser?.id || "system",
     };
-
     // Build Required Journal (Rent/Claim Collection Journal)
     const journalData = buildRentCollectionJournal(
       {
@@ -11793,7 +10535,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       },
       chartOfAccounts
     );
-
     const journalVal = validateJournalEntry(journalData);
     if (!journalVal.isValid) {
       return {
@@ -11801,10 +10542,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: language === "ar" ? `فشل التحقق من قيد التسوية المحاسبي: ${journalVal.error}` : `Settlement journal validation failed: ${journalVal.error}`,
       };
     }
-
     const jeId = "je-set-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
     const year = new Date().getFullYear();
-    const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+    const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
     const journalRecord: JournalEntryRecord = {
       ...journalData,
       id: jeId,
@@ -11814,7 +10554,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       totalCredit: journalVal.totalCredit,
       createdAt: new Date().toISOString(),
     };
-
     // Update Schedule as projection
     const updatedSchedule: any[] = [];
     scheduleToProcess.forEach((inst: any) => {
@@ -11831,7 +10570,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           receiptNumber,
         };
         updatedSchedule.push(updatedInst);
-
         if (payAmount < inst.amount) {
           const newInst = {
             ...inst,
@@ -11852,10 +10590,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updatedSchedule.push(inst);
       }
     });
-
     const newPaidAmount = (c.paidAmount ?? c.totalPaid ?? 0) + payAmount;
     const newOutstanding = Math.max(0, (c.claimAmount || 0) - newPaidAmount);
-
     const updatedCase: RentalCase = {
       ...c,
       paidAmount: newPaidAmount,
@@ -11865,14 +10601,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       settlement: { ...c.settlement, schedule: updatedSchedule },
       updatedAt: new Date().toISOString(),
     };
-
     // Atomic persistence using writeBatch
     const batch = writeBatch(db);
     batch.set(doc(db, "collections", receiptId), sanitizeForFirestore(receipt));
     batch.set(doc(db, "payment_allocations", allocationId), sanitizeForFirestore(allocation));
     batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
     batch.set(doc(db, "cases", c.id), sanitizeForFirestore(updatedCase), { merge: true });
-
     try {
       await batch.commit();
     } catch (batchErr: any) {
@@ -11884,62 +10618,52 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : `Failed to commit settlement installment payment: ${batchErr?.message || "Unknown error"}`,
       };
     }
-
     // Only update React state after commit succeeds
     setCollections((prev) => [receipt, ...prev]);
     setPaymentAllocations((prev) => [allocation, ...prev]);
     setJournalEntries((prev) => [...prev, journalRecord]);
     setCases((prev) => prev.map((item) => (item.id === caseId ? updatedCase : item)));
-
     logAudit("FINANCIAL_PAYMENT", "CASE", caseId, "Settlement Installment", `Payment of ${payAmount} AED recorded via ${effectivePaymentMethod}`);
     return { success: true, receipt };
   };
-
   const clearSettlementCheque = async (
     caseId: string,
     installmentId: string
   ): Promise<{ success: boolean; error?: string; receipt?: CollectionRecord }> => {
+    assertCloudWriteAvailable(language as "ar" | "en");
     const c = cases.find((item) => item.id === caseId);
     if (!c || !c.settlement) {
       return { success: false, error: language === "ar" ? "ملف القضية غير موجود." : "Case record not found." };
     }
-
     const schedule = c.settlement.schedule;
     if (!schedule) {
       return { success: false, error: language === "ar" ? "جدول الأقساط غير موجود." : "Installment schedule not found." };
     }
-
     const targetInst = schedule.find((inst) => inst.id === installmentId);
     if (!targetInst || !targetInst.chequeDetails) {
       return { success: false, error: language === "ar" ? "بيانات الشيك غير موجودة بالقسط." : "Cheque details not found on installment." };
     }
-
     if (targetInst.status === "PAID" || targetInst.chequeDetails.isCleared) {
       return { success: true };
     }
-
     const resolvedOwnerId = c.ownerId || (c.leaseId ? leases.find(l => l.id === c.leaseId)?.ownerId : undefined);
     const resolvedTenantId = c.tenantId || (c.leaseId ? leases.find(l => l.id === c.leaseId)?.tenantId : undefined);
-
     if (!resolvedOwnerId || !resolvedTenantId) {
       return {
         success: false,
         error: language === "ar" ? "بيانات المالك أو المستأجر غير مكتملة." : "Missing owner or tenant identity.",
       };
     }
-
     const clearDate = new Date().toISOString().split("T")[0];
     const periodCheck = validateTransactionPeriod(clearDate, financialPeriods);
     if (!periodCheck.allowed) {
       return { success: false, error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn };
     }
-
     const clearAmount = targetInst.amount;
     const receiptId = "col-set-chq-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
     const receiptNumber = generateSequentialNumber(collections, "receiptNumber", "RCP-SET-", 4, false);
     const tenantObj = tenants.find((t) => t.id === resolvedTenantId);
     const payerName = tenantObj ? (language === "ar" ? tenantObj.nameAr : tenantObj.nameEn) : "Tenant Representative";
-
     const receipt: CollectionRecord = {
       id: receiptId,
       receiptNumber,
@@ -11958,7 +10682,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       notes: `تحصيل وصرف شيك قسط تسوية قضائية رقم ${targetInst.installmentNumber} (شيك #${targetInst.chequeDetails.chequeNumber})`,
       createdAt: new Date().toISOString(),
     };
-
     const allocationId = "pal-set-chq-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
     const allocation: PaymentAllocation = {
       id: allocationId,
@@ -11972,7 +10695,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt: new Date().toISOString(),
       createdById: currentUser?.id || "system",
     };
-
     const journalData = buildRentCollectionJournal(
       {
         collectionId: receiptId,
@@ -11990,7 +10712,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       },
       chartOfAccounts
     );
-
     const val = validateJournalEntry(journalData);
     if (!val.isValid) {
       return {
@@ -11998,10 +10719,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: language === "ar" ? `فشل التحقق من قيد صرف شيك التسوية: ${val.error}` : `Cheque settlement journal validation failed: ${val.error}`,
       };
     }
-
     const jeId = "je-set-chq-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
     const year = new Date().getFullYear();
-    const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+    const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
     const journalRecord: JournalEntryRecord = {
       ...journalData,
       id: jeId,
@@ -12011,7 +10731,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       totalCredit: val.totalCredit,
       createdAt: new Date().toISOString(),
     };
-
     const updatedSchedule = schedule.map((inst) => {
       if (inst.id === installmentId && inst.chequeDetails) {
         return {
@@ -12029,10 +10748,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return inst;
     });
-
     const newPaidAmount = (c.paidAmount ?? c.totalPaid ?? 0) + clearAmount;
     const newOutstanding = Math.max(0, (c.claimAmount || 0) - newPaidAmount);
-
     const updatedCase: RentalCase = {
       ...c,
       paidAmount: newPaidAmount,
@@ -12042,13 +10759,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       settlement: { ...c.settlement, schedule: updatedSchedule },
       updatedAt: new Date().toISOString(),
     };
-
     const batch = writeBatch(db);
     batch.set(doc(db, "collections", receiptId), sanitizeForFirestore(receipt));
     batch.set(doc(db, "payment_allocations", allocationId), sanitizeForFirestore(allocation));
     batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
     batch.set(doc(db, "cases", c.id), sanitizeForFirestore(updatedCase), { merge: true });
-
     try {
       await batch.commit();
     } catch (err: any) {
@@ -12058,16 +10773,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: language === "ar" ? `فشل تحديث الشيك المصروف: ${err?.message || "خطأ"}` : `Failed to clear cheque: ${err?.message || "Error"}`,
       };
     }
-
     setCollections((prev) => [receipt, ...prev]);
     setPaymentAllocations((prev) => [allocation, ...prev]);
     setJournalEntries((prev) => [...prev, journalRecord]);
     setCases((prev) => prev.map((item) => (item.id === caseId ? updatedCase : item)));
-
     logAudit("FINANCIAL_PAYMENT", "CASE", caseId, "Settlement Cheque Cleared", `Cheque #${targetInst.chequeDetails.chequeNumber} cleared for ${clearAmount} AED`);
     return { success: true, receipt };
   };
-
   const updateSettlementCheque = (caseId: string, installmentId: string, chequeData: { chequeNumber: string; chequeDate: string; bankName: string }) => {
     setCases((prev) =>
       prev.map((c) => {
@@ -12084,7 +10796,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
             return inst;
           });
-
           const updated = {
             ...c,
             settlement: { ...c.settlement, schedule: updatedSchedule },
@@ -12098,7 +10809,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
     logAudit("UPDATE", "CASE", caseId, "Settlement Cheque", "Cheque details updated by admin");
   };
-
   const saveSettlement = (caseId: string, settlementData: Omit<SettlementAgreement, "id">) => {
     const agreement: SettlementAgreement = {
       ...settlementData,
@@ -12109,7 +10819,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         status: inst.status || "PENDING"
       }))
     };
-
     setCases((prev) =>
       prev.map((c) => {
         if (c.id === caseId) {
@@ -12125,7 +10834,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return c;
       })
     );
-
     logAudit(
       "UPDATE",
       "CASE",
@@ -12134,18 +10842,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `Recorded settlement agreement for AED ${agreement.totalAgreedAmount.toLocaleString()} across ${agreement.installmentsCount} installments`
     );
   };
-
   // -------------------------------------------------------------
   // Private Archive & Security
   // -------------------------------------------------------------
-
   const addArchiveItem = (
     item: Omit<ElectronicArchiveItem, "id" | "createdAt" | "downloadToken" | "fileHash"> & { fileHash?: string }
   ): ElectronicArchiveItem => {
     const docId = "doc-" + Date.now();
     const token = "tok_sec_" + crypto.randomUUID().split("-")[0];
     const hash = item.fileHash || "sha256_" + crypto.randomUUID().split("-")[0];
-
     const newDoc: ElectronicArchiveItem = {
       uploadedByUserId: currentUser?.id || "sys-01",
       uploadedByName: currentUser?.nameAr || currentUser?.nameEn || "مدير النظام",
@@ -12157,16 +10862,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isPrivate: true,
       createdAt: new Date().toISOString(),
     };
-
     // Defensively filter any binary/oversized fields
     const forbiddenKeys = ['base64', 'dataUrl', 'dataURL', 'blob', 'fileContent', 'binary', 'imageData', 'attachmentBase64', 'rawFile'];
     forbiddenKeys.forEach(k => {
       delete (newDoc as any)[k];
     });
-
     setArchive((prev) => [newDoc, ...prev]);
     safeSetDoc(doc(db, "archive", newDoc.id), newDoc);
-
     logAudit(
       "DOCUMENT_UPLOAD",
       "DOCUMENT",
@@ -12174,10 +10876,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       newDoc.fileName,
       `Uploaded private confidential document ${newDoc.fileName} (${newDoc.category}) with SHA-256 hash ${hash.substring(0, 16)}...`
     );
-
     return newDoc;
   };
-
   const uploadAndArchiveDocument = async (
     source: string | File,
     options: DocumentUploadOptions
@@ -12187,9 +10887,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       uploadedByUserId: currentUser?.id,
       uploadedByName: currentUser?.nameAr || currentUser?.nameEn
     });
-    
     setArchive((prev) => [archiveItem, ...prev]);
-
     logAudit(
       "DOCUMENT_UPLOAD",
       "DOCUMENT",
@@ -12197,14 +10895,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       archiveItem.fileName,
       `Uploaded and synced to Drive: ${archiveItem.fileName} (${archiveItem.category})`
     );
-
     return archiveItem;
   };
-
   const deleteArchiveItem = (id: string) => {
     const item = archive.find((a) => a.id === id);
     if (!item) return;
-
     setArchive((prev) => prev.filter((a) => a.id !== id));
     deleteDoc(doc(db, "archive", id)).catch(() => {});
     logAudit(
@@ -12215,11 +10910,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `Deleted document ${item.fileName} from private archive`
     );
   };
-
   const generateSecureDownloadToken = (id: string): string => {
     const item = archive.find((a) => a.id === id);
     if (!item) return "";
-
     const newToken = "tok_sec_" + Date.now();
     logAudit(
       "DOCUMENT_ACCESS",
@@ -12230,22 +10923,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
     return newToken;
   };
-
   // Google Drive Sync for Archive Item
   const syncArchiveItemToDrive = async (
     id: string
   ): Promise<{ success: boolean; driveLink?: string; error?: string }> => {
     const item = archive.find((a) => a.id === id);
     if (!item) return { success: false, error: "Archive item not found" };
-
     try {
       const updatedItem = await DocumentStorageService.syncExistingArchiveItem(item);
-      
       if (updatedItem.syncStatus === "SYNCED" && updatedItem.driveWebViewLink) {
         setArchive((prev) =>
           prev.map((a) => (a.id === id ? { ...a, ...updatedItem } : a))
         );
-
         logAudit(
           "DOCUMENT_ACCESS",
           "DOCUMENT",
@@ -12260,7 +10949,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: e.message || "Failed to sync to Google Drive" };
     }
   };
-
   // Cheque Image Upload & Drive Sync
   const uploadChequeImage = async (
     chequeId: string,
@@ -12269,11 +10957,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): Promise<{ success: boolean; driveLink?: string; error?: string }> => {
     const cheque = cheques.find((c) => c.id === chequeId);
     if (!cheque) return { success: false, error: "Cheque not found" };
-
     let driveFileId: string | undefined;
     let driveWebViewLink: string | undefined;
     let driveSyncedAt: string | undefined;
-
     try {
       const result = await DocumentStorageService.uploadAndArchive(imageBase64, {
         category: "CHEQUES",
@@ -12285,11 +10971,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         uploadedByUserId: currentUser?.id,
         uploadedByName: currentUser?.nameEn
       });
-      
       driveFileId = result.driveFileId;
       driveWebViewLink = result.driveWebViewLink;
       driveSyncedAt = result.driveSyncedAt;
-      
       setArchive((prev) => {
         const exists = prev.find(a => a.id === result.id);
         if (exists) return prev.map(a => a.id === result.id ? { ...a, ...result } : a);
@@ -12298,7 +10982,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e) {
       console.warn("Cheque upload via DocumentStorageService failed:", e);
     }
-
     const updatedCheque: Cheque = {
       ...cheque,
       imageUrl: imageBase64,
@@ -12306,11 +10989,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       driveWebViewLink: driveWebViewLink || cheque.driveWebViewLink,
       driveSyncedAt: driveSyncedAt || cheque.driveSyncedAt,
     };
-
     setCheques((prev) => prev.map((c) => (c.id === chequeId ? updatedCheque : c)));
     return { success: true, driveLink: driveWebViewLink };
   };
-
   const syncChequeToDrive = async (
     chequeId: string
   ): Promise<{ success: boolean; driveLink?: string; error?: string }> => {
@@ -12320,7 +11001,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     return uploadChequeImage(chequeId, cheque.imageUrl, true);
   };
-
   const deleteChequeImage = (chequeId: string) => {
     setCheques((prev) =>
       prev.map((c) =>
@@ -12331,7 +11011,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
     logAudit("DELETE", "CHEQUE", chequeId, `Cheque #${cheques.find((c) => c.id === chequeId)?.chequeNumber}`, `Deleted cheque image attachment`);
   };
-
   // Case Documents Management & Drive Sync
   const addCaseDocument = async (
     caseId: string,
@@ -12340,14 +11019,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): Promise<{ success: boolean; document?: CaseDocumentItem; driveLink?: string; error?: string }> => {
     const targetCase = cases.find((c) => c.id === caseId);
     if (!targetCase) return { success: false, error: "Case not found" };
-
     const docId = "cdoc-" + Date.now();
     const uploadedAt = new Date().toISOString();
-
     let driveFileId: string | undefined;
     let driveWebViewLink: string | undefined;
     let driveSyncedAt: string | undefined;
-
     if (syncToDrive) {
       try {
         const archiveItem = await DocumentStorageService.uploadAndArchive(doc.fileUrl, {
@@ -12361,7 +11037,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           uploadedByName: currentUser?.nameEn,
           tags: ["case", "court", "document"]
         });
-        
         driveFileId = archiveItem.driveFileId;
         driveWebViewLink = archiveItem.driveWebViewLink;
         driveSyncedAt = archiveItem.driveSyncedAt;
@@ -12370,7 +11045,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: "Failed to upload document to Drive" };
       }
     }
-
     const newDocItem: CaseDocumentItem = {
       ...doc,
       id: docId,
@@ -12380,7 +11054,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       driveWebViewLink,
       driveSyncedAt,
     };
-
     setCases((prev) =>
       prev.map((c) => {
         if (c.id === caseId) {
@@ -12395,7 +11068,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return c;
       })
     );
-
     // Also register in main electronic archive
     addArchiveItem({
       fileName: doc.fileName,
@@ -12414,7 +11086,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       driveWebViewLink,
       driveSyncedAt,
     });
-
     logAudit(
       "DOCUMENT_UPLOAD",
       "CASE",
@@ -12422,10 +11093,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `Case #${targetCase.caseNumber}`,
       `Uploaded case document: ${doc.title} (${doc.documentType})${driveWebViewLink ? " and synced to Google Drive" : ""}`
     );
-
     return { success: true, document: newDocItem, driveLink: driveWebViewLink };
   };
-
   const deleteCaseDocument = (caseId: string, docId: string) => {
     setCases((prev) =>
       prev.map((c) => {
@@ -12439,20 +11108,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return c;
       })
     );
-
     logAudit("UPDATE", "CASE", caseId, "Case Document", `Removed document from case #${caseId}`);
   };
-
   const syncCaseDocumentToDrive = async (
     caseId: string,
     docId: string
   ): Promise<{ success: boolean; driveLink?: string; error?: string }> => {
     const targetCase = cases.find((c) => c.id === caseId);
     if (!targetCase) return { success: false, error: "Case not found" };
-
     const doc = (targetCase.caseDocuments || []).find((d) => d.id === docId);
     if (!doc) return { success: false, error: "Document not found" };
-
     try {
       const archiveItem = await DocumentStorageService.uploadAndArchive(doc.fileUrl, {
         category: "CASES",
@@ -12465,7 +11130,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         uploadedByName: currentUser?.nameEn,
         tags: ["case", "court", "document"]
       });
-
       const syncedAt = new Date().toISOString();
       setCases((prev) =>
         prev.map((c) => {
@@ -12488,35 +11152,28 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return c;
         })
       );
-
       return { success: true, driveLink: archiveItem.driveWebViewLink };
     } catch (err) {
       console.error("Case document sync failed", err);
       return { success: false, error: "Failed to upload document to Drive" };
     }
   };
-
   // -------------------------------------------------------------
   // Notifications & Reminders
   // -------------------------------------------------------------
-
   const dispatchNewLeaseNotification = async (leaseId: string): Promise<{ success: boolean; message: string }> => {
     const lse = leases.find((l) => l.id === leaseId);
     if (!lse) return { success: false, message: "Lease not found" };
-
     const tenant = tenants.find((t) => t.id === lse.tenantId);
     const tenantName = tenant?.nameAr || tenant?.nameEn || "Tenant";
     const tenantPhone = tenant?.phone ? tenant.phone.replace(/[^0-9+]/g, "") : "";
-
     let textMessage = `عزيزي ${tenantName}، نرحب بك. تم تسجيل عقد الإيجار الجديد رقم ${lse.leaseNumber}. مرفق الإيصال.`;
-    
     const tpl = messageTemplates.find(t => t.id === "NEW_LEASE");
     if (tpl) {
       textMessage = (language === "ar" ? tpl.bodyAr : tpl.bodyEn)
         .replace(/{tenantName}/g, tenantName)
         .replace(/{leaseNumber}/g, lse.leaseNumber);
     }
-
     const notif: NotificationRecord = {
       id: "notif-" + Date.now(),
       channel: "WHATSAPP",
@@ -12532,17 +11189,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setNotifications((prev) => [notif, ...prev]);
     return { success: true, message: language === "ar" ? "تم إرسال إشعار العقد الجديد" : "New lease notification sent" };
   };
-
   const dispatchChequeCollectedNotification = async (chequeId: string): Promise<{ success: boolean; message: string }> => {
     const cheque = cheques.find((c) => c.id === chequeId);
     if (!cheque) return { success: false, message: "Cheque not found" };
-
     const tenant = tenants.find((t) => t.id === cheque.tenantId);
     const tenantName = tenant?.nameAr || tenant?.nameEn || "عزيزي المستأجر";
     const tenantPhone = tenant?.phone ? tenant.phone.replace(/[^0-9+]/g, "") : "";
-
     let textMessage = `عزيزي ${tenantName}، تم بنجاح تحصيل الشيك رقم ${cheque.chequeNumber} بمبلغ ${cheque.amount.toLocaleString()} درهم. شكراً لك.`;
-    
     const tpl = messageTemplates.find(t => t.id === "CHEQUE_COLLECTED");
     if (tpl) {
       textMessage = (language === "ar" ? tpl.bodyAr : tpl.bodyEn)
@@ -12551,7 +11204,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .replace(/{chequeAmount}/g, cheque.amount.toLocaleString())
         .replace(/{dueDate}/g, cheque.dueDate);
     }
-
     const notif: NotificationRecord = {
       id: "notif-" + Date.now(),
       channel: "WHATSAPP",
@@ -12568,19 +11220,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setNotifications((prev) => [notif, ...prev]);
     return { success: true, message: language === "ar" ? "تم إرسال إشعار تحصيل الشيك" : "Cheque collected notification sent" };
   };
-
   const dispatchWhatsAppReminder = async (chequeId: string): Promise<{ success: boolean; message: string }> => {
     const cheque = cheques.find((c) => c.id === chequeId);
     if (!cheque) return { success: false, message: "Cheque not found" };
-
     const tenant = tenants.find((t) => t.id === cheque.tenantId);
-    
     try {
       const tenantName = tenant?.nameAr || tenant?.nameEn || "عزيزي المستأجر";
       const tenantPhone = tenant?.phone ? tenant.phone.replace(/[^0-9+]/g, "") : "";
-      
       let textMessage = `تحية طيبة،\n${tenantName}\n\nنود إعلامكم بأنه تم إرجاع الشيك الخاص بكم رقم (${cheque.chequeNumber}) بقيمة (${cheque.amount.toLocaleString()} درهم إماراتي) والمستحق بتاريخ (${cheque.dueDate}).\n\nيرجى المبادرة بتسوية المبلغ المذكور في أقرب وقت ممكن لتجنب اتخاذ الإجراءات القانونية اللازمة.\n\nشكراً لتعاونكم.`;
-      
       const tpl = messageTemplates.find(t => t.id === "CHEQUE_BOUNCED");
       if (tpl) {
         textMessage = (language === "ar" ? tpl.bodyAr : tpl.bodyEn)
@@ -12589,12 +11236,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .replace(/{chequeAmount}/g, cheque.amount.toLocaleString())
           .replace(/{dueDate}/g, cheque.dueDate);
       }
-      
       const whatsappUrl = `https://wa.me/${tenantPhone}?text=${encodeURIComponent(textMessage)}`;
-      
       // Open WhatsApp in a new tab
       window.open(whatsappUrl, "_blank");
-
       const notif: NotificationRecord = {
         id: "notif-" + Date.now(),
         channel: "WHATSAPP",
@@ -12610,9 +11254,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         attemptCount: cheque.reminderCount + 1,
         createdAt: new Date().toISOString(),
       };
-
       setNotifications((prev) => [notif, ...prev]);
-
       // Update cheque reminder tracker
       setCheques((prev) =>
         prev.map((c) =>
@@ -12626,7 +11268,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             : c
         )
       );
-
       return {
         success: true,
         message: "WhatsApp opened successfully",
@@ -12635,13 +11276,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, message: e.message || "Failed to open WhatsApp" };
     }
   };
-
   const dispatchEmailReminder = async (chequeId: string): Promise<{ success: boolean; message: string }> => {
     const cheque = cheques.find((c) => c.id === chequeId);
     if (!cheque) return { success: false, message: "Cheque not found" };
-
     const tenant = tenants.find((t) => t.id === cheque.tenantId);
-
     try {
       const res = await fetch("/api/notifications/dispatch", {
         method: "POST",
@@ -12656,7 +11294,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }),
       });
       const data = await res.json();
-
       const notif: NotificationRecord = {
         id: "notif-" + Date.now(),
         channel: "EMAIL",
@@ -12672,9 +11309,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         attemptCount: cheque.reminderCount + 1,
         createdAt: new Date().toISOString(),
       };
-
       setNotifications((prev) => [notif, ...prev]);
-
       return {
         success: data.success,
         message: data.success ? "Email reminder delivered successfully" : (data.error || "Failed to deliver Email message"),
@@ -12683,7 +11318,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, message: e.message || "Network error" };
     }
   };
-
   const addOperationalCommunication = async (
     data: Omit<OperationalCommunicationRecord, "id" | "createdAt"> & { id?: string; createdAt?: string }
   ): Promise<{ success: boolean; id?: string }> => {
@@ -12697,15 +11331,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     safeSetDoc(doc(db, "operational_communications", id), newRecord);
     return { success: true, id };
   };
-
   // -------------------------------------------------------------
   // Risk Config
   // -------------------------------------------------------------
-
   const updateRiskConfig = (newWeights: Partial<RiskConfigWeights>) => {
     const updated = { ...riskConfig, ...newWeights };
     setRiskConfig(updated);
-
     logAudit(
       "UPDATE",
       "RISK_CONFIG",
@@ -12713,7 +11344,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       "Tenant Risk Engine",
       `Super Admin modified risk scoring weights and thresholds`
     );
-
     // Recalculate all tenants with new weights
     setTimeout(() => {
       setTenants((prev) =>
@@ -12724,18 +11354,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
     }, 100);
   };
-
   // -------------------------------------------------------------
   // Excel Batch Import
   // -------------------------------------------------------------
-
   const importBatchData = (
     type: "OWNERS" | "TENANTS" | "PROPERTIES" | "CHEQUES" | "LEASES",
     records: any[]
   ) => {
     let successCount = 0;
     const errors: string[] = [];
-
     if (type === "CHEQUES") {
       const added: Cheque[] = [];
       for (let i = 0; i < records.length; i++) {
@@ -12744,18 +11371,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           errors.push(`Row ${i + 1}: Missing cheque number or amount`);
           continue;
         }
-
         const ownerId = r.ownerId || (r.leaseId ? leases.find(l => l.id === r.leaseId)?.ownerId : undefined);
         const tenantId = r.tenantId || (r.leaseId ? leases.find(l => l.id === r.leaseId)?.tenantId : undefined);
         const propertyId = r.propertyId || (r.leaseId ? leases.find(l => l.id === r.leaseId)?.propertyId : undefined);
         const unitId = r.unitId || (r.leaseId ? leases.find(l => l.id === r.leaseId)?.unitId : undefined);
         const leaseId = r.leaseId;
-
         if (!ownerId || !tenantId || !propertyId || !unitId) {
           errors.push(`Row ${i + 1}: Cheque #${r.chequeNumber} rejected - missing required entity relationships (ownerId, tenantId, propertyId, or unitId).`);
           continue;
         }
-
         const isBounced = r.status === "BOUNCED" || r.originalStatus === "BOUNCED";
         const newChq: Cheque = {
           id: "chq-" + Date.now() + "-" + i,
@@ -12781,11 +11405,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           notes: r.notes,
           createdAt: new Date().toISOString(),
         };
-
         added.push(newChq);
         successCount++;
       }
-
       setCheques((prev) => [...added, ...prev]);
       added.forEach((c) => safeSetDoc(doc(db, "cheques", c.id), c));
       logAudit("DATA_IMPORT", "CHEQUE", "batch", "Excel Cheques Import", `Imported ${successCount} cheques from Excel`);
@@ -12797,7 +11419,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           errors.push(`Row ${i + 1}: Missing tenant name`);
           continue;
         }
-
         const newT: Tenant = {
           id: "tnt-" + Date.now() + "-" + i,
           code: r.code || `TNT-${crypto.randomUUID().split("-")[0]}`,
@@ -12812,7 +11433,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           riskLevel: "LOW",
           riskFactors: ["Imported from historical spreadsheet"],
           status: "ACTIVE",
-
           createdAt: new Date().toISOString(),
         };
         added.push(newT);
@@ -12822,10 +11442,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       added.forEach((t) => safeSetDoc(doc(db, "tenants", t.id), t));
       logAudit("DATA_IMPORT", "TENANT", "batch", "Excel Tenants Import", `Imported ${successCount} tenants from Excel`);
     }
-
     return { total: records.length, successCount, errors };
   };
-
   const importOwnersBatch = async (
     records: Array<{
       code?: string;
@@ -12845,25 +11463,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const errors: string[] = [];
     let importedCount = 0;
     let updatedCount = 0;
-
     const currentOwnersMap = new Map<string, Owner>();
     owners.forEach((o) => currentOwnersMap.set(o.id, { ...o }));
-
     const docsToSave: Owner[] = [];
-
     for (let i = 0; i < records.length; i++) {
       const r = records[i];
       if (!r.nameEn && !r.nameAr) {
         errors.push(`Row ${i + 1}: Missing owner name`);
         continue;
       }
-
       const normEmiratesId = normalizeIdNumber(r.emiratesId);
       const normCode = normalizeText(r.code);
       const normPhone = normalizePhone(r.phone);
       const normNameAr = normalizeText(r.nameAr);
       const normNameEn = normalizeText(r.nameEn);
-
       let existingOwner: Owner | undefined;
       for (const o of currentOwnersMap.values()) {
         const matchId = normEmiratesId && normEmiratesId.length >= 8 && normalizeIdNumber(o.emiratesId) === normEmiratesId;
@@ -12871,13 +11484,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const matchPhone = normPhone && normPhone.length >= 8 && normalizePhone(o.phone) === normPhone;
         const matchNameAr = normNameAr && normNameAr.length >= 3 && normalizeText(o.nameAr) === normNameAr;
         const matchNameEn = normNameEn && normNameEn.length >= 3 && normalizeText(o.nameEn) === normNameEn;
-
         if (matchId || matchCode || matchPhone || matchNameAr || matchNameEn) {
           existingOwner = o;
           break;
         }
       }
-
       if (existingOwner) {
         const updated: Owner = {
           ...existingOwner,
@@ -12919,10 +11530,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         importedCount++;
       }
     }
-
     const finalOwnersList = Array.from(currentOwnersMap.values());
     setOwners(finalOwnersList);
-
     try {
       const CHUNK_SIZE = 400;
       for (let i = 0; i < docsToSave.length; i += CHUNK_SIZE) {
@@ -12936,7 +11545,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Firestore batch commit error:", err);
     }
-
     logAudit(
       "DATA_IMPORT",
       "OWNER",
@@ -12944,10 +11552,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       "Excel Owners Import",
       `Imported ${importedCount} new owners, updated ${updatedCount} existing owners without duplicates.`
     );
-
     return { total: records.length, importedCount, updatedCount, errors };
   };
-
   const importTenantsBatch = async (
     records: Array<{
       code?: string;
@@ -12966,19 +11572,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const errors: string[] = [];
     let importedCount = 0;
     let updatedCount = 0;
-
     const currentTenantsMap = new Map<string, Tenant>();
     tenants.forEach((t) => currentTenantsMap.set(t.id, { ...t }));
-
     const docsToSave: Tenant[] = [];
-
     for (let i = 0; i < records.length; i++) {
       const r = records[i];
       if (!r.nameEn && !r.nameAr) {
         errors.push(`Row ${i + 1}: Missing tenant name`);
         continue;
       }
-
       const normEmiratesId = normalizeIdNumber(r.emiratesId);
       const normTradeLicense = normalizeIdNumber(r.tradeLicenseNo);
       const normPassport = normalizeIdNumber(r.passportNumber);
@@ -12986,7 +11588,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const normPhone = normalizePhone(r.phone);
       const normNameAr = normalizeText(r.nameAr);
       const normNameEn = normalizeText(r.nameEn);
-
       let existingTenant: Tenant | undefined;
       for (const t of currentTenantsMap.values()) {
         const matchId = normEmiratesId && normEmiratesId.length >= 8 && normalizeIdNumber(t.emiratesId) === normEmiratesId;
@@ -12996,13 +11597,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const matchPhone = normPhone && normPhone.length >= 8 && normalizePhone(t.phone) === normPhone;
         const matchNameAr = normNameAr && normNameAr.length >= 3 && normalizeText(t.nameAr) === normNameAr;
         const matchNameEn = normNameEn && normNameEn.length >= 3 && normalizeText(t.nameEn) === normNameEn;
-
         if (matchId || matchTrade || matchPass || matchCode || matchPhone || matchNameAr || matchNameEn) {
           existingTenant = t;
           break;
         }
       }
-
       if (existingTenant) {
         const updated: Tenant = {
           ...existingTenant,
@@ -13050,10 +11649,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         importedCount++;
       }
     }
-
     const finalTenantsList = Array.from(currentTenantsMap.values());
     setTenants(finalTenantsList);
-
     try {
       const CHUNK_SIZE = 400;
       for (let i = 0; i < docsToSave.length; i += CHUNK_SIZE) {
@@ -13067,7 +11664,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Firestore batch commit error:", err);
     }
-
     logAudit(
       "DATA_IMPORT",
       "TENANT",
@@ -13075,10 +11671,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       "Excel Tenants Import",
       `Imported ${importedCount} new tenants, updated ${updatedCount} existing tenants without duplicates.`
     );
-
     return { total: records.length, importedCount, updatedCount, errors };
   };
-
   const clearTable = (tableName: string) => {
     switch (tableName) {
       case "owners": setOwners([]); break;
@@ -13096,7 +11690,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     logAudit("DELETE", "RISK_CONFIG", "table-clear", tableName, `Cleared all records in table ${tableName}`);
   };
-
   const resetDatabase = async () => {
     setOwners([]);
     setProperties([]);
@@ -13127,7 +11720,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setOfficePettyCashExpenses([]);
     setFinancialPeriods([]);
     setPeriodCertifications([]);
-
     const operationalStorageKeys = [
       "ef_owners_v12",
       "ef_properties_v12",
@@ -13161,7 +11753,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       "emirates_falcon_pending_sync"
     ];
     operationalStorageKeys.forEach((key) => localStorage.removeItem(key));
-
     const collectionsToPurge = [
       "owners", "properties", "units", "tenants", "leases", "cheques",
       "collections", "cases", "archive", "notifications", "auditLogs",
@@ -13172,7 +11763,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       "journal_entries", "office_petty_cash_months", "office_petty_cash_expenses",
       "financial_periods", "period_certifications"
     ];
-
     try {
       for (const colName of collectionsToPurge) {
         const snap = await getDocs(collection(db, colName));
@@ -13191,14 +11781,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error("Error purging Firestore collections during resetDatabase:", e);
     }
   };
-
   // -------------------------------------------------------------
   // Maintenance Management Methods
   // -------------------------------------------------------------
   const generateMaintenanceRequestNumber = (): string => {
     return generateSequentialNumber(maintenanceRequests, "requestNumber", "MR-", 4, false);
   };
-
   const addMaintenanceRequest = (
     data: Omit<MaintenanceRequest, "id" | "requestNumber" | "createdAt" | "updatedAt" | "timeline" | "invoices" | "attachments" | "notes"> & {
       notes?: string[] | string;
@@ -13221,7 +11809,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         userName: currentUser?.nameAr || currentUser?.nameEn || "مدير النظام",
       },
     ];
-
     if (data.assignedTechnicianId) {
       initialTimeline.push({
         id: "tl-" + Date.now() + "-2",
@@ -13234,20 +11821,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         userName: currentUser?.nameAr || currentUser?.nameEn || "مدير النظام",
       });
     }
-
     const notesList: string[] = Array.isArray(data.notes)
       ? data.notes
       : (typeof data.notes === "string" && data.notes.trim())
       ? [data.notes.trim()]
       : [];
-
     const laborCost = data.laborCost || 0;
     const partsCost = data.partsCost || 0;
     const otherCost = data.otherCost || 0;
     const totalCost = data.totalCost || (laborCost + partsCost + otherCost);
     const paidAmount = data.paidAmount || 0;
     const remainingAmount = data.remainingAmount !== undefined ? data.remainingAmount : (totalCost - paidAmount);
-
     const newRequest: MaintenanceRequest = {
       ...data,
       id,
@@ -13269,10 +11853,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       paidAmount,
       remainingAmount,
     };
-
     setMaintenanceRequests((prev) => [newRequest, ...prev]);
     safeSetDoc(doc(db, "maintenance_requests", newRequest.id), newRequest);
-
     // Instant real-time notification & event dispatch for critical/urgent maintenance
     if (newRequest.priority === "URGENT" || (newRequest as any).isEmergency) {
       if (typeof window !== "undefined") {
@@ -13294,7 +11876,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setNotifications((prev) => [notif, ...prev]);
       safeSetDoc(doc(db, "notifications", notif.id), notif);
     }
-
     logAudit(
       "CREATE",
       "MAINTENANCE_REQUEST",
@@ -13302,16 +11883,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `طلب صيانة ${newRequest.requestNumber}`,
       `تم إنشاء طلب صيانة جديد (${newRequest.requestNumber}) للوحدة ${newRequest.unitNumber || ""} بالعقار ${newRequest.propertyNameAr || newRequest.propertyNameEn || ""}`
     );
-
     return newRequest;
   };
-
   const updateMaintenanceRequest = (id: string, patch: Partial<MaintenanceRequest>) => {
     const existing = maintenanceRequests.find((m) => m.id === id);
     if (existing) {
       saveEntitySnapshot("MAINTENANCE", existing, "VERSION");
     }
-
     const updatedAt = new Date().toISOString();
     setMaintenanceRequests((prev) =>
       prev.map((m) => {
@@ -13323,7 +11901,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return m;
       })
     );
-
     logAudit(
       "UPDATE",
       "MAINTENANCE_REQUEST",
@@ -13332,11 +11909,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `تم تحديث بيانات طلب الصيانة`
     );
   };
-
   const deleteMaintenanceRequest = (id: string, options?: DeleteRecordOptions) => {
     const request = maintenanceRequests.find((m) => m.id === id);
     if (!request) return;
-
     if (!options?.force) {
       const check = checkDeleteIntegrity("MAINTENANCE", id);
       if (!check.canDelete) {
@@ -13351,30 +11926,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
     }
-
     // Save snapshot to historical records
     archiveEntityToHistory("MAINTENANCE", request, options);
-
     // Remove from state and Firestore
     setMaintenanceRequests((prev) => prev.filter((m) => m.id !== id));
     deleteDoc(doc(db, "maintenance_requests", id)).catch(() => {});
-
     // Delete any linked property expenses to restore/refund the paid amount to the corresponding payer's account dynamically
     const linkedExpenses = propertyExpenses.filter(
       (exp) => exp.sourceType === "MAINTENANCE_REQUEST" && exp.sourceId === id
     );
-
     if (linkedExpenses.length > 0) {
       linkedExpenses.forEach((exp) => {
         deleteDoc(doc(db, "property_expenses", exp.id)).catch((error) => {
           console.error(`Error deleting linked expense ${exp.id} on maintenance request deletion:`, error);
         });
       });
-
       setPropertyExpenses((prev) =>
         prev.filter((exp) => !(exp.sourceType === "MAINTENANCE_REQUEST" && exp.sourceId === id))
       );
-
       logAudit(
         "DELETE",
         "PROPERTY_EXPENSE",
@@ -13383,7 +11952,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         `تم تصفية وحذف عدد ${linkedExpenses.length} مصروفات عقارية مرتبطة بطلب الصيانة المفتوح/المكتمل لعمل استرداد للمبلغ`
       );
     }
-
     logAudit(
       "DELETE",
       "MAINTENANCE_REQUEST",
@@ -13392,7 +11960,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `تم حذف طلب الصيانة #${request.requestNumber} ونقله إلى السجلات التاريخية`
     );
   };
-
   const updateMaintenanceStatus = (
     id: string,
     newStatus: MaintenanceStatus,
@@ -13401,10 +11968,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ) => {
     const existing = maintenanceRequests.find((m) => m.id === id);
     if (!existing) return;
-
     const timestamp = new Date().toISOString();
     const eventType = newStatus === "RETURNED" ? "RETURNED_TO_TENANT" : "STATUS_CHANGED";
-    
     // Status translation helper for titles/notifications
     const getStatusLabelAr = (s: string) => {
       if (s === "OPEN") return "مفتوح";
@@ -13415,7 +11980,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (s === "RETURNED") return "مرتجع للمستأجر";
       return s;
     };
-
     const getStatusLabelEn = (s: string) => {
       if (s === "OPEN") return "Open";
       if (s === "IN_PROGRESS") return "In Progress";
@@ -13425,7 +11989,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (s === "RETURNED") return "Returned to Tenant";
       return s;
     };
-
     const event: MaintenanceTimelineEvent = {
       id: "tl-" + Date.now() + "-" + crypto.randomUUID().split("-")[0],
       eventType: eventType,
@@ -13436,10 +11999,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       userId: currentUser?.id || "sys",
       userName: currentUser?.nameAr || currentUser?.nameEn || "مدير النظام",
     };
-
     const isCompleted = newStatus === "COMPLETED";
     const actualCompletion = isCompleted ? (completionDate || timestamp.split("T")[0]) : existing.completionDate;
-
     setMaintenanceRequests((prev) =>
       prev.map((m) => {
         if (m.id === id) {
@@ -13456,7 +12017,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return m;
       })
     );
-
     // Send notification to tenant
     if (existing.tenantId) {
       const tenant = tenants.find(t => t.id === existing.tenantId);
@@ -13475,14 +12035,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
     }
-
     // Automatically post financial expense if approved/completed
     if (["IN_PROGRESS", "COMPLETED"].includes(newStatus)) {
       setTimeout(() => {
         postMaintenanceExpense(id);
       }, 50);
     }
-
     logAudit(
       "MAINTENANCE_STATUS_CHANGE",
       "MAINTENANCE_REQUEST",
@@ -13491,7 +12049,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `تم تغيير حالة طلب الصيانة من ${existing.status} إلى ${newStatus}${notes ? ` - ملاحظات: ${notes}` : ""}`
     );
   };
-
   const postMaintenanceExpense = (
     requestId: string,
     options?: { overrideUser?: { id: string; name: string }; forceRepost?: boolean }
@@ -13506,7 +12063,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!targetRequest) {
       return { success: false, status: "NOT_POSTED", error: "طلب الصيانة غير موجود" };
     }
-
     // 1. Approval validation
     const validStatuses: MaintenanceStatus[] = ["OPEN", "IN_PROGRESS", "COMPLETED"];
     if (!validStatuses.includes(targetRequest.status)) {
@@ -13516,7 +12072,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: "طلب الصيانة غير معتمد بعد. يجب اعتماد الطلب أولاً لترحيل القيد المالي.",
       };
     }
-
     // 2. Calculate approved financial amount
     const invoiceTotal = (targetRequest.invoices || []).reduce(
       (sum, inv) => sum + (inv.totalAmount || inv.amount || 0),
@@ -13529,10 +12084,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const fallbackCost = targetRequest.totalCost > 0
       ? targetRequest.totalCost
       : (targetRequest.laborCost || 0) + (targetRequest.partsCost || 0) + (targetRequest.otherCost || 0);
-
     const totalFinancialCost = invoiceTotal > 0 ? invoiceTotal : fallbackCost;
     const totalVat = invoiceVat;
-
     if (totalFinancialCost <= 0) {
       setMaintenanceRequests((prev) =>
         prev.map((m) => (m.id === requestId ? { ...m, financialStatus: "REQUIRES_INVOICE" } : m))
@@ -13544,7 +12097,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: "يتطلب تحديد تكلفة الصيانة أو إضافة فاتورة صيانة معتمدة لترحيل القيد المالي.",
       };
     }
-
     // 3. Idempotency Check (Duplicate Protection)
     const existingPosted = propertyExpenses.filter(
       (e) =>
@@ -13553,9 +12105,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         e.status !== "CANCELLED" &&
         e.status !== "REVERSED"
     );
-
     const existingTotal = existingPosted.reduce((sum, e) => sum + (e.totalAmount || 0), 0);
-
     if (existingPosted.length > 0 && Math.abs(existingTotal - totalFinancialCost) < 0.01 && !options?.forceRepost) {
       if (targetRequest.financialStatus !== "POSTED" && targetRequest.financialStatus !== "PARTIALLY_POSTED") {
         const currentFinStatus = targetRequest.costBearer === "SPLIT/CUSTOM" || (targetRequest.costBearer as any) === "SHARED" ? "PARTIALLY_POSTED" : "POSTED";
@@ -13572,13 +12122,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: "تم ترحيل مصروف الصيانة مسبقاً ولا يمكن ترحيله مرة أخرى.",
       };
     }
-
     // 4. Reverse existing postings if cost/allocation changed
     if (existingPosted.length > 0) {
       const now = new Date().toISOString();
       const userId = options?.overrideUser?.id || currentUser?.id || "sys";
       const userName = options?.overrideUser?.name || currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
-
       existingPosted.forEach((oldExp) => {
         const revId = `rev-${Date.now()}-${crypto.randomUUID().split("-")[0]}`;
         const revRecord: FinancialReversalRecord = {
@@ -13597,13 +12145,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
         setFinancialReversals((prev) => [revRecord, ...prev]);
         safeSetDoc(doc(db, "financial_reversals", revId), revRecord);
-
         const updatedOld = { ...oldExp, status: "REVERSED" as const, updatedAt: now };
         setPropertyExpenses((prev) => prev.map((p) => (p.id === oldExp.id ? updatedOld : p)));
         safeSetDoc(doc(db, "property_expenses", oldExp.id), updatedOld);
       });
     }
-
     // 5. Generate Authoritative Property Expense Records
     const prop = properties.find((p) => p.id === targetRequest.propertyId);
     const ownerId = targetRequest.ownerId || prop?.ownerId || "";
@@ -13611,19 +12157,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const userId = options?.overrideUser?.id || currentUser?.id || "sys";
     const userName = options?.overrideUser?.name || currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
     const now = new Date().toISOString();
-
     const generatedExpenses: PropertyExpenseRecord[] = [];
-
     if (bearer === "SPLIT/CUSTOM" || (bearer as any) === "SPLIT" || (bearer as any) === "CUSTOM") {
       const method = targetRequest.splitMethod || "PERCENTAGE";
       const ownerVal = targetRequest.splitOwnerVal ?? 0;
       const tenantVal = targetRequest.splitTenantVal ?? 0;
       const officeVal = targetRequest.splitOfficeVal ?? 0;
-
       let ownerAmt = 0;
       let tenantAmt = 0;
       let officeAmt = 0;
-
       if (method === "PERCENTAGE") {
         ownerAmt = Math.round((totalFinancialCost * (ownerVal / 100)) * 100) / 100;
         tenantAmt = Math.round((totalFinancialCost * (tenantVal / 100)) * 100) / 100;
@@ -13633,11 +12175,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         tenantAmt = tenantVal;
         officeAmt = officeVal;
       }
-
       const ownerVat = totalFinancialCost > 0 ? Math.round(((totalVat) * (ownerAmt / totalFinancialCost)) * 100) / 100 : 0;
       const tenantVat = totalFinancialCost > 0 ? Math.round(((totalVat) * (tenantAmt / totalFinancialCost)) * 100) / 100 : 0;
       const officeVat = totalVat - ownerVat - tenantVat;
-
       if (ownerAmt > 0) {
         generatedExpenses.push(createExpenseFromMaintenance({
           maintenanceRequestId: requestId,
@@ -13657,7 +12197,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           userName,
         }));
       }
-
       if (tenantAmt > 0) {
         generatedExpenses.push(createExpenseFromMaintenance({
           maintenanceRequestId: requestId,
@@ -13678,7 +12217,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           userName,
         }));
       }
-
       if (officeAmt > 0) {
         generatedExpenses.push(createExpenseFromMaintenance({
           maintenanceRequestId: requestId,
@@ -13703,7 +12241,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const tenantAmt = totalFinancialCost - ownerAmt;
       const ownerVat = Math.round((totalVat / 2) * 100) / 100;
       const tenantVat = totalVat - ownerVat;
-
       generatedExpenses.push(
         createExpenseFromMaintenance({
           maintenanceRequestId: requestId,
@@ -13765,19 +12302,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })
       );
     }
-
     // Save to state and Firestore
     generatedExpenses.forEach((exp) => {
       setPropertyExpenses((prev) => [exp, ...prev]);
       safeSetDoc(doc(db, "property_expenses", exp.id), exp);
     });
-
     const postedIds = generatedExpenses.map((e) => e.id);
     const newFinStatus: MaintenanceFinancialStatus =
       bearer === "SPLIT/CUSTOM" || (bearer as any) === "SPLIT" || (bearer as any) === "CUSTOM" || (bearer as any) === "SHARED"
         ? "PARTIALLY_POSTED"
         : "POSTED";
-
     const timelineEvent: MaintenanceTimelineEvent = {
       id: "tl-" + Date.now() + "-post",
       eventType: "STATUS_CHANGED",
@@ -13788,7 +12322,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       userId,
       userName,
     };
-
     setMaintenanceRequests((prev) =>
       prev.map((m) => {
         if (m.id === requestId) {
@@ -13808,7 +12341,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return m;
       })
     );
-
     logAudit(
       "MAINTENANCE_EXPENSE_POSTED",
       "MAINTENANCE_REQUEST",
@@ -13816,23 +12348,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `طلب صيانة ${targetRequest.requestNumber}`,
       `تم ترحيل قيد مصروفات الصيانة بمبلغ AED ${totalFinancialCost.toLocaleString()} لصالح (${bearer}) - سجلات المصروفات: ${postedIds.join(", ")}`
     );
-
     return {
       success: true,
       status: newFinStatus,
       postedExpenses: generatedExpenses,
     };
   };
-
   const assignTechnicianToRequest = (requestId: string, technicianId: string, notes?: string) => {
     const targetRequest = maintenanceRequests.find((m) => m.id === requestId);
     const tech = technicians.find((t) => t.id === technicianId);
     if (!targetRequest) return;
-
     const timestamp = new Date().toISOString();
     const techName = tech?.name || "فني معتمد";
     const techPhone = tech?.phone || "";
-
     const event: MaintenanceTimelineEvent = {
       id: "tl-" + Date.now() + "-" + crypto.randomUUID().split("-")[0],
       eventType: "TECHNICIAN_ASSIGNED",
@@ -13843,7 +12371,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       userId: currentUser?.id || "sys",
       userName: currentUser?.nameAr || currentUser?.nameEn || "مدير النظام",
     };
-
     setMaintenanceRequests((prev) =>
       prev.map((m) => {
         if (m.id === requestId) {
@@ -13864,7 +12391,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return m;
       })
     );
-
     // Send notification to tenant
     if (targetRequest.tenantId) {
       const tenant = tenants.find(t => t.id === targetRequest.tenantId);
@@ -13883,7 +12409,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
     }
-
     logAudit(
       "TECHNICIAN_ASSIGNED",
       "MAINTENANCE_REQUEST",
@@ -13892,14 +12417,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `تم تعيين الفني ${techName} لمتابعة الطلب`
     );
   };
-
   const addMaintenanceInvoice = (
     requestId: string,
     invoiceData: Omit<MaintenanceInvoice, "id" | "createdAt" | "maintenanceRequestId">
   ) => {
     const targetRequest = maintenanceRequests.find((m) => m.id === requestId);
     if (!targetRequest) return;
-
     const invoiceId = "inv-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
     const createdAt = new Date().toISOString();
     const newInvoice: MaintenanceInvoice = {
@@ -13908,7 +12431,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       maintenanceRequestId: requestId,
       createdAt,
     };
-
     // Duplicate Posting Protection
     const isDuplicate = propertyExpenses.some(
       (exp) =>
@@ -13918,7 +12440,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         exp.status !== "REVERSED" &&
         (exp.vendorInvoiceNumber === newInvoice.invoiceNumber || exp.maintenanceInvoiceId === invoiceId)
     );
-
     if (isDuplicate) {
       logAudit(
         "PROPERTY_EXPENSE_CREATED",
@@ -13929,10 +12450,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
       return;
     }
-
     const updatedInvoices = [...(targetRequest.invoices || []), newInvoice];
     const totalActualCost = updatedInvoices.reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0);
-
     const event: MaintenanceTimelineEvent = {
       id: "tl-" + Date.now() + "-inv",
       eventType: "INVOICE_ADDED",
@@ -13943,20 +12462,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       userId: currentUser?.id || "sys",
       userName: currentUser?.nameAr || currentUser?.nameEn || "مدير النظام",
     };
-
     // Auto post Property Expenses depending on Cost Bearer
     const prop = properties.find((p) => p.id === targetRequest.propertyId);
     const ownerId = targetRequest.ownerId || prop?.ownerId || "";
     const bearer = targetRequest.costBearer || "OWNER";
-
     const generatedExpenses: PropertyExpenseRecord[] = [];
-
     if (bearer === "SPLIT/CUSTOM") {
       const method = targetRequest.splitMethod || "PERCENTAGE";
       const ownerVal = targetRequest.splitOwnerVal ?? 0;
       const tenantVal = targetRequest.splitTenantVal ?? 0;
       const officeVal = targetRequest.splitOfficeVal ?? 0;
-
       // Validate Allocations
       if (ownerVal < 0 || tenantVal < 0 || officeVal < 0) {
         logAudit(
@@ -13968,11 +12483,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         );
         return;
       }
-
       let ownerAmt = 0;
       let tenantAmt = 0;
       let officeAmt = 0;
-
       if (method === "PERCENTAGE") {
         const totalPct = ownerVal + tenantVal + officeVal;
         if (totalPct !== 100) {
@@ -13985,7 +12498,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           );
           return;
         }
-
         ownerAmt = Math.round((newInvoice.amount * (ownerVal / 100)) * 100) / 100;
         tenantAmt = Math.round((newInvoice.amount * (tenantVal / 100)) * 100) / 100;
         officeAmt = Math.round((newInvoice.amount - ownerAmt - tenantAmt) * 100) / 100;
@@ -14006,12 +12518,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         tenantAmt = tenantVal;
         officeAmt = officeVal;
       }
-
       // Proportional VAT calculation
       const ownerVat = Math.round(((newInvoice.vatAmount || 0) * (ownerAmt / (newInvoice.amount || 1))) * 100) / 100;
       const tenantVat = Math.round(((newInvoice.vatAmount || 0) * (tenantAmt / (newInvoice.amount || 1))) * 100) / 100;
       const officeVat = Math.round(((newInvoice.vatAmount || 0) - ownerVat - tenantVat) * 100) / 100;
-
       // Post only non-zero values
       if (ownerAmt > 0) {
         const ownerExpense = createExpenseFromMaintenance({
@@ -14033,7 +12543,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
         generatedExpenses.push(ownerExpense);
       }
-
       if (tenantAmt > 0) {
         const tenantExpense = createExpenseFromMaintenance({
           maintenanceRequestId: requestId,
@@ -14055,7 +12564,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
         generatedExpenses.push(tenantExpense);
       }
-
       if (officeAmt > 0) {
         const officeExpense = createExpenseFromMaintenance({
           maintenanceRequestId: requestId,
@@ -14082,7 +12590,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const ownerVat = Math.round(((newInvoice.vatAmount || 0) / 2) * 100) / 100;
       const tenantAmt = Math.round((newInvoice.amount - ownerAmt) * 100) / 100;
       const tenantVat = Math.round(((newInvoice.vatAmount || 0) - ownerVat) * 100) / 100;
-
       const ownerExpense = createExpenseFromMaintenance({
         maintenanceRequestId: requestId,
         requestNumber: targetRequest.requestNumber,
@@ -14100,7 +12607,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         userId: currentUser?.id || "sys",
         userName: currentUser?.nameAr || currentUser?.nameEn || "مدير النظام",
       });
-
       const tenantExpense = createExpenseFromMaintenance({
         maintenanceRequestId: requestId,
         requestNumber: targetRequest.requestNumber,
@@ -14119,7 +12625,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         userId: currentUser?.id || "sys",
         userName: currentUser?.nameAr || currentUser?.nameEn || "مدير النظام",
       });
-
       generatedExpenses.push(ownerExpense, tenantExpense);
     } else {
       // Single cost bearer
@@ -14141,16 +12646,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         userId: currentUser?.id || "sys",
         userName: currentUser?.nameAr || currentUser?.nameEn || "مدير النظام",
       });
-
       generatedExpenses.push(singleExpense);
     }
-
     // Write all generated expenses to local state and Firestore
     generatedExpenses.forEach((exp) => {
       setPropertyExpenses((prev) => [exp, ...prev]);
       safeSetDoc(doc(db, "property_expenses", exp.id), exp);
     });
-
     setMaintenanceRequests((prev) =>
       prev.map((m) => {
         if (m.id === requestId) {
@@ -14168,7 +12670,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return m;
       })
     );
-
     logAudit(
       "INVOICE_CREATED",
       "MAINTENANCE_INVOICE",
@@ -14177,17 +12678,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `تم إصدار فاتورة صيانة بمبلغ AED ${newInvoice.totalAmount || newInvoice.amount} لطلب الصيانة #${targetRequest.requestNumber} وتم ترحيل المصاريف تلقائياً (${bearer})`
     );
   };
-
   const addMaintenancePayment = (
     requestId: string,
     paymentData: Omit<MaintenancePayment, "id" | "createdAt" | "receivedByUserId" | "receivedByUserName">
   ) => {
     const targetRequest = maintenanceRequests.find((m) => m.id === requestId);
     if (!targetRequest) return;
-
     const paymentId = "pmt-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
     const createdAt = new Date().toISOString();
-    
     const newPayment: MaintenancePayment = {
       ...paymentData,
       id: paymentId,
@@ -14195,26 +12693,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       receivedByUserName: currentUser?.nameAr || currentUser?.nameEn || "النظام",
       createdAt,
     };
-
     const currentPayments = targetRequest.payments || [];
     const updatedPayments = [...currentPayments, newPayment];
-    
     // Calculate new totals
     const totalCost = targetRequest.totalCost > 0 
       ? targetRequest.totalCost 
       : (targetRequest.laborCost || 0) + (targetRequest.partsCost || 0) + (targetRequest.otherCost || 0);
-      
     const oldPaid = targetRequest.paidAmount || 0;
     const newPaidAmount = oldPaid + newPayment.amount;
     const newRemainingAmount = Math.max(0, totalCost - newPaidAmount);
-    
     let collectionStatus: "UNPAID" | "PARTIALLY_PAID" | "PAID" = "UNPAID";
     if (newPaidAmount >= totalCost && totalCost > 0) {
       collectionStatus = "PAID";
     } else if (newPaidAmount > 0) {
       collectionStatus = "PARTIALLY_PAID";
     }
-
     const updatedRequest = {
       ...targetRequest,
       payments: updatedPayments,
@@ -14222,12 +12715,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       remainingAmount: newRemainingAmount,
       collectionStatus: collectionStatus
     };
-
     setMaintenanceRequests((prev) =>
       prev.map((m) => (m.id === requestId ? updatedRequest : m))
     );
     safeSetDoc(doc(db, "maintenance_requests", requestId), updatedRequest, { merge: true });
-
     logAudit(
       "UPDATE",
       "MAINTENANCE_REQUEST",
@@ -14236,7 +12727,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `تم تسجيل دفعة مالية بمبلغ ${newPayment.amount} للصيانة. المبلغ المتبقي: ${newRemainingAmount}`
     );
   };
-
   const updateMaintenanceInvoice = (
     requestId: string,
     invoiceId: string,
@@ -14245,21 +12735,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): { success: boolean; error?: string } => {
     const targetRequest = maintenanceRequests.find((m) => m.id === requestId);
     if (!targetRequest) return { success: false, error: "طلب الصيانة غير موجود" };
-
     const targetInvoice = targetRequest.invoices?.find((i) => i.id === invoiceId);
     if (!targetInvoice) return { success: false, error: "الفاتورة غير موجودة" };
-
     const check = checkFinancialEditPermission("MAINTENANCE_INVOICE", modificationReason);
     if (!check.allowed) return { success: false, error: check.error };
-
     saveEntitySnapshot("MAINTENANCE_INVOICE", targetInvoice, "VERSION");
-
     const updatedInvoices = (targetRequest.invoices || []).map((inv) =>
       inv.id === invoiceId ? { ...inv, ...patch } : inv
     );
     const totalActualCost = updatedInvoices.reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0);
     const updatedAt = new Date().toISOString();
-
     const updatedRequest = {
       ...targetRequest,
       invoices: updatedInvoices,
@@ -14267,10 +12752,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       remainingAmount: Math.max(0, totalActualCost - targetRequest.paidAmount),
       updatedAt,
     };
-
     setMaintenanceRequests((prev) => prev.map((m) => (m.id === requestId ? updatedRequest : m)));
     safeSetDoc(doc(db, "maintenance_requests", requestId), updatedRequest, { merge: true });
-
     logAudit(
       "FINANCIAL_RECORD_EDIT",
       "MAINTENANCE_INVOICE",
@@ -14281,18 +12764,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       JSON.stringify(updatedInvoices.find((i) => i.id === invoiceId)),
       modificationReason
     );
-
     return { success: true };
   };
-
   const deleteMaintenanceInvoice = (requestId: string, invoiceId: string) => {
     const targetRequest = maintenanceRequests.find((m) => m.id === requestId);
     if (!targetRequest) return;
-
     const updatedInvoices = (targetRequest.invoices || []).filter((inv) => inv.id !== invoiceId);
     const totalActualCost = updatedInvoices.reduce((sum, inv) => sum + (inv.totalAmount || inv.amount || 0), 0);
     const updatedAt = new Date().toISOString();
-
     setMaintenanceRequests((prev) =>
       prev.map((m) => {
         if (m.id === requestId) {
@@ -14309,7 +12788,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return m;
       })
     );
-
     // Delete linked property expenses since the invoice was deleted
     const linkedExpenses = propertyExpenses.filter(
       (exp) => exp.sourceType === "MAINTENANCE_REQUEST" && exp.sourceId === requestId
@@ -14322,7 +12800,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         prev.filter((exp) => !(exp.sourceType === "MAINTENANCE_REQUEST" && exp.sourceId === requestId))
       );
     }
-
     // If there are other invoices remaining, re-post the financial expense so it gets calculated with the new total
     if (updatedInvoices.length > 0 && totalActualCost > 0) {
       setTimeout(() => {
@@ -14335,7 +12812,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
       safeSetDoc(doc(db, "maintenance_requests", requestId), { financialStatus: "REQUIRES_INVOICE" }, { merge: true });
     }
-
     logAudit(
       "DELETE",
       "MAINTENANCE_INVOICE",
@@ -14344,20 +12820,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `تم حذف فاتورة صيانة من طلب #${targetRequest.requestNumber} وتصفية المصاريف المرتبطة`
     );
   };
-
   const addMaintenanceAttachment = async (
     requestId: string,
     attachmentData: Omit<MaintenanceAttachment, "id" | "uploadedAt" | "uploadedBy" | "maintenanceRequestId">
   ): Promise<{ success: boolean; attachment?: MaintenanceAttachment; driveLink?: string; error?: string }> => {
     const targetRequest = maintenanceRequests.find((m) => m.id === requestId);
     if (!targetRequest) return { success: false, error: "Maintenance request not found" };
-
     const attachmentId = "att-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
     const uploadedAt = new Date().toISOString();
     const uploadedBy = currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
-
     let archiveItem: ElectronicArchiveItem | undefined;
-
     if (attachmentData.fileUrl) {
       archiveItem = await uploadAndArchiveDocument(attachmentData.fileUrl, {
         category: "MAINTENANCE",
@@ -14371,7 +12843,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         uploadedByName: uploadedBy
       });
     }
-
     const newAttachment: MaintenanceAttachment = {
       ...attachmentData,
       id: attachmentId,
@@ -14383,9 +12854,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       driveWebViewLink: archiveItem?.driveWebViewLink,
       fileUrl: archiveItem ? "" : attachmentData.fileUrl, // Binary stripped
     };
-
     const updatedAttachments = [...(targetRequest.attachments || []), newAttachment];
-
     const timelineEvent: MaintenanceTimelineEvent = {
       id: "tl-" + Date.now() + "-att",
       eventType: "ATTACHMENT_ADDED",
@@ -14396,7 +12865,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       userId: currentUser?.id || "sys",
       userName: uploadedBy,
     };
-
     setMaintenanceRequests((prev) =>
       prev.map((m) => {
         if (m.id === requestId) {
@@ -14412,7 +12880,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return m;
       })
     );
-
     // Register in electronic archive as MAINTENANCE category
     addArchiveItem({
       fileName: newAttachment.fileName,
@@ -14431,7 +12898,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       driveWebViewLink: archiveItem?.driveWebViewLink,
       driveSyncedAt: archiveItem?.driveFileId ? new Date().toISOString() : undefined,
     });
-
     logAudit(
       "DOCUMENT_UPLOAD",
       "DOCUMENT",
@@ -14439,17 +12905,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `مرفق ${newAttachment.fileName}`,
       `تم إرفاق مستند/صورة صيانة لطلب #${targetRequest.requestNumber}`
     );
-
     return { success: true, attachment: newAttachment, driveLink: archiveItem?.driveWebViewLink };
   };
-
   const deleteMaintenanceAttachment = (requestId: string, attachmentId: string) => {
     const targetRequest = maintenanceRequests.find((m) => m.id === requestId);
     if (!targetRequest) return;
-
     const updatedAttachments = (targetRequest.attachments || []).filter((a) => a.id !== attachmentId);
     const updatedAt = new Date().toISOString();
-
     setMaintenanceRequests((prev) =>
       prev.map((m) => {
         if (m.id === requestId) {
@@ -14464,7 +12926,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return m;
       })
     );
-
     logAudit(
       "UPDATE",
       "MAINTENANCE_REQUEST",
@@ -14473,16 +12934,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `تم إزالة مرفق من طلب الصيانة`
     );
   };
-
   const addMaintenanceNote = (requestId: string, noteText: string) => {
     const targetRequest = maintenanceRequests.find((m) => m.id === requestId);
     if (!targetRequest || !noteText.trim()) return;
-
     const timestamp = new Date().toISOString();
     const authorName = currentUser?.nameAr || currentUser?.nameEn || "النظام";
     const formattedNote = `[${timestamp.substring(0, 16).replace("T", " ")} - ${authorName}]: ${noteText.trim()}`;
     const updatedNotes = [...(targetRequest.notes || []), formattedNote];
-
     const event: MaintenanceTimelineEvent = {
       id: "tl-" + Date.now() + "-note",
       eventType: "NOTE_ADDED",
@@ -14493,7 +12951,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       userId: currentUser?.id || "sys",
       userName: authorName,
     };
-
     setMaintenanceRequests((prev) =>
       prev.map((m) => {
         if (m.id === requestId) {
@@ -14509,7 +12966,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return m;
       })
     );
-
     logAudit(
       "UPDATE",
       "MAINTENANCE_REQUEST",
@@ -14517,7 +12973,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `طلب #${targetRequest.requestNumber}`,
       `إضافة ملاحظة على طلب الصيانة: ${noteText.trim()}`
     );
-
     // Send notification to tenant
     if (targetRequest.tenantId) {
       const tenant = tenants.find(t => t.id === targetRequest.tenantId);
@@ -14537,7 +12992,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
   };
-
   const addNotification = (data: Omit<NotificationRecord, "id" | "createdAt">): NotificationRecord => {
     const newNotification: NotificationRecord = {
       ...data,
@@ -14548,7 +13002,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     safeSetDoc(doc(db, "notifications", newNotification.id), newNotification);
     return newNotification;
   };
-
   const addTechnician = (data: Omit<Technician, "id" | "createdAt">): Technician => {
     const id = "tech-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
     const createdAt = new Date().toISOString();
@@ -14559,10 +13012,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       serviceType: data.serviceType || "عام",
       status: data.status || "ACTIVE",
     };
-
     setTechnicians((prev) => [newTech, ...prev]);
     safeSetDoc(doc(db, "technicians", newTech.id), newTech);
-
     logAudit(
       "CREATE",
       "TECHNICIAN",
@@ -14570,10 +13021,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       newTech.name,
       `تم تسجيل فني صيانة جديد: ${newTech.name} (${newTech.serviceType})`
     );
-
     return newTech;
   };
-
   const updateTechnician = (id: string, patch: Partial<Technician>) => {
     setTechnicians((prev) =>
       prev.map((t) => {
@@ -14585,20 +13034,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return t;
       })
     );
-
     logAudit("UPDATE", "TECHNICIAN", id, "Technician", `تم تعديل بيانات الفني`);
   };
-
   const deleteTechnician = (id: string) => {
     const tech = technicians.find((t) => t.id === id);
     if (!tech) return;
-
     setTechnicians((prev) => prev.filter((t) => t.id !== id));
     deleteDoc(doc(db, "technicians", id)).catch(() => {});
-
     logAudit("DELETE", "TECHNICIAN", id, tech.name, `تم حذف سجل الفني: ${tech.name}`);
   };
-
   const updateMaintenanceSettings = (settings: Partial<MaintenanceSettings>) => {
     setMaintenanceSettings((prev) => {
       const updated = { ...prev, ...settings };
@@ -14607,7 +13051,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     logAudit("UPDATE", "RISK_CONFIG", "maint-settings", "Maintenance Settings", `تم تحديث إعدادات نظام الصيانة`);
   };
-
   const updateLegalSettings = (settings: Partial<LegalSettings>) => {
     setLegalSettings((prev) => {
       const updated = { ...prev, ...settings };
@@ -14616,7 +13059,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     logAudit("UPDATE", "RISK_CONFIG", "legal-settings", "Legal Settings", `تم تحديث إعدادات نظام الدعاوى والرسوم`);
   };
-
   const exportDatabaseJSON = (): string => {
     const data = {
       owners,
@@ -14640,7 +13082,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     return JSON.stringify(data, null, 2);
   };
-
   const importDatabaseJSON = (jsonStr: string): boolean => {
     try {
       const parsed = JSON.parse(jsonStr);
@@ -14668,18 +13109,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return false;
     }
   };
-
   // -------------------------------------------------------------
   // OFFICE PETTY CASH OPERATIONS
   // -------------------------------------------------------------
-
   const addOfficePettyCashMonth = (
     data: Omit<OfficePettyCashMonth, "id" | "totalExpenses" | "closingBalance" | "status" | "createdAt" | "createdBy">
   ): { success: boolean; month?: OfficePettyCashMonth; error?: string } => {
     if (data.openingAmount < 0) {
       return { success: false, error: language === "ar" ? "يجب أن يكون المبلغ الافتتاحي صفراً أو أكثر" : "Opening amount must be zero or greater" };
     }
-
     const monthExists = officePettyCashMonths.some((m) => m.month === data.month && m.year === data.year);
     if (monthExists) {
       return {
@@ -14687,10 +13125,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: language === "ar" ? "تم إنشاء صندوق لهذا الشهر بالفعل" : "A petty cash fund already exists for this month",
       };
     }
-
     const nowIso = new Date().toISOString();
     const userId = currentUser?.id || "sys-01";
-
     const newMonth: OfficePettyCashMonth = {
       ...data,
       id: "pcm-" + Date.now() + "-" + crypto.randomUUID().split("-")[0],
@@ -14700,10 +13136,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdBy: userId,
       createdAt: nowIso,
     };
-
     setOfficePettyCashMonths((prev) => [newMonth, ...prev]);
     safeSetDoc(doc(db, "office_petty_cash_months", newMonth.id), newMonth);
-
     logAudit(
       "CREATE",
       "OFFICE_PETTY_CASH_MONTH" as any,
@@ -14711,10 +13145,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `${data.month}/${data.year}`,
       `تم إنشاء صندوق نثريات مكتب لشهر ${data.month}/${data.year} بمبلغ افتتاحي ${data.openingAmount} درهم.`
     );
-
     return { success: true, month: newMonth };
   };
-
   const updateOfficePettyCashMonth = (
     id: string,
     patch: Partial<OfficePettyCashMonth>,
@@ -14722,23 +13154,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): { success: boolean; error?: string } => {
     const target = officePettyCashMonths.find((m) => m.id === id);
     if (!target) return { success: false, error: "Month record not found" };
-
     if (target.status === "CLOSED" && !hasPermission("MODIFY_CLOSED_OFFICE_PETTY_CASH")) {
       return {
         success: false,
         error: language === "ar" ? "عذراً، هذا الشهر مغلق ولا يمكن تعديله إلا من خلال المسؤول المصرح له" : "This month is closed and can only be modified by an authorized administrator",
       };
     }
-
     let opening = patch.openingAmount !== undefined ? patch.openingAmount : target.openingAmount;
     if (opening < 0) {
       return { success: false, error: language === "ar" ? "يجب أن يكون المبلغ الافتتاحي صفراً أو أكثر" : "Opening amount must be zero or greater" };
     }
-
     const expensesForMonth = officePettyCashExpenses.filter((e) => e.monthId === id);
     const totalExpenses = expensesForMonth.reduce((sum, e) => sum + e.amount, 0);
     const closingBalance = opening - totalExpenses;
-
     const updated: OfficePettyCashMonth = {
       ...target,
       ...patch,
@@ -14748,10 +13176,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updatedBy: currentUser?.id,
       updatedAt: new Date().toISOString(),
     };
-
     setOfficePettyCashMonths((prev) => prev.map((m) => (m.id === id ? updated : m)));
     safeSetDoc(doc(db, "office_petty_cash_months", id), updated);
-
     logAudit(
       "UPDATE",
       "OFFICE_PETTY_CASH_MONTH" as any,
@@ -14761,10 +13187,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       JSON.stringify(target),
       JSON.stringify(updated)
     );
-
     return { success: true };
   };
-
   const closeOfficePettyCashMonth = (
     id: string,
     carryForwardOption: PettyCashCarryForwardOption,
@@ -14775,17 +13199,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): { success: boolean; error?: string } => {
     const target = officePettyCashMonths.find((m) => m.id === id);
     if (!target) return { success: false, error: "Month record not found" };
-
     if (!hasPermission("CLOSE_OFFICE_PETTY_CASH_MONTH")) {
       return {
         success: false,
         error: language === "ar" ? "ليس لديك صلاحية لإغلاق شهر النثريات" : "You do not have permission to close petty cash months",
       };
     }
-
     const nowIso = new Date().toISOString();
     const userId = currentUser?.id || "sys-01";
-
     const updated: OfficePettyCashMonth = {
       ...target,
       status: "CLOSED",
@@ -14797,10 +13218,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       reconciliationDifference: reconciliationDifference !== undefined ? reconciliationDifference : 0,
       reconciliationStatus: reconciliationStatus || "RECONCILED",
     };
-
     setOfficePettyCashMonths((prev) => prev.map((m) => (m.id === id ? updated : m)));
     safeSetDoc(doc(db, "office_petty_cash_months", id), updated);
-
     logAudit(
       "STATUS_CHANGE",
       "OFFICE_PETTY_CASH_MONTH" as any,
@@ -14808,37 +13227,30 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `${target.month}/${target.year}`,
       `تم إغلاق صندوق شهر ${target.month}/${target.year} بنجاح. الخيار: ${carryForwardOption}. جرد فعلي: ${updated.actualCashCounted} AED، الفارق: ${updated.reconciliationDifference} AED.`
     );
-
     return { success: true };
   };
-
   const reopenOfficePettyCashMonth = (
     id: string,
     reason?: string
   ): { success: boolean; error?: string } => {
     const target = officePettyCashMonths.find((m) => m.id === id);
     if (!target) return { success: false, error: "Month record not found" };
-
     if (!hasPermission("REOPEN_OFFICE_PETTY_CASH_MONTH")) {
       return {
         success: false,
         error: language === "ar" ? "ليس لديك صلاحية لإعادة فتح شهر النثريات" : "You do not have permission to reopen petty cash months",
       };
     }
-
     const nowIso = new Date().toISOString();
     const userId = currentUser?.id || "sys-01";
-
     const updated: OfficePettyCashMonth = {
       ...target,
       status: "OPEN",
       reopenedBy: userId,
       reopenedAt: nowIso,
     };
-
     setOfficePettyCashMonths((prev) => prev.map((m) => (m.id === id ? updated : m)));
     safeSetDoc(doc(db, "office_petty_cash_months", id), updated);
-
     logAudit(
       "STATUS_CHANGE",
       "OFFICE_PETTY_CASH_MONTH" as any,
@@ -14846,10 +13258,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `${target.month}/${target.year}`,
       `تم إعادة فتح صندوق شهر ${target.month}/${target.year}. السبب: ${reason || "تعديل القيود"}`
     );
-
     return { success: true };
   };
-
   const addOfficePettyCashExpense = (
     data: Omit<OfficePettyCashExpense, "id" | "expenseNumber" | "createdAt" | "createdBy">
   ): { success: boolean; expense?: OfficePettyCashExpense; error?: string } => {
@@ -14857,18 +13267,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!monthRecord) {
       return { success: false, error: "Month record not found" };
     }
-
     if (monthRecord.status === "CLOSED" && !hasPermission("MODIFY_CLOSED_OFFICE_PETTY_CASH")) {
       return {
         success: false,
         error: language === "ar" ? "عذراً، هذا الشهر مغلق ولا يمكن إضافة مصروفات جديدة له" : "This month is closed and cannot receive new expenses",
       };
     }
-
     if (data.amount <= 0) {
       return { success: false, error: language === "ar" ? "يجب أن تكون قيمة المصروف أكبر من الصفر" : "Expense amount must be greater than zero" };
     }
-
     const expDate = new Date(data.date);
     const expMonth = expDate.getMonth() + 1;
     const expYear = expDate.getFullYear();
@@ -14880,18 +13287,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : `Expense date must belong to the active fund's month and year (${monthRecord.month}/${monthRecord.year})`,
       };
     }
-
     const nowIso = new Date().toISOString();
     const userId = currentUser?.id || "sys-01";
-
     const monthExpenses = officePettyCashExpenses.filter((e) => e.monthId === data.monthId);
     const sequence = monthExpenses.length + 1;
     const padMonth = String(monthRecord.month).padStart(2, "0");
     const padSeq = String(sequence).padStart(3, "0");
     const expenseNumber = `EXP-${monthRecord.year}-${padMonth}-${padSeq}`;
-
     const cat = officePettyCashCategories.find((c) => c.id === data.categoryId);
-
     const newExpense: OfficePettyCashExpense = {
       ...data,
       id: "exp-" + Date.now() + "-" + crypto.randomUUID().split("-")[0],
@@ -14901,22 +13304,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdBy: userId,
       createdAt: nowIso,
     };
-
     setOfficePettyCashExpenses((prev) => [newExpense, ...prev]);
     safeSetDoc(doc(db, "office_petty_cash_expenses", newExpense.id), newExpense);
-
     const newTotalExpenses = monthRecord.totalExpenses + data.amount;
     const newClosingBalance = monthRecord.openingAmount - newTotalExpenses;
-
     const updatedMonth: OfficePettyCashMonth = {
       ...monthRecord,
       totalExpenses: newTotalExpenses,
       closingBalance: newClosingBalance,
     };
-
     setOfficePettyCashMonths((prev) => prev.map((m) => (m.id === data.monthId ? updatedMonth : m)));
     safeSetDoc(doc(db, "office_petty_cash_months", monthRecord.id), updatedMonth);
-
     logAudit(
       "CREATE",
       "OFFICE_PETTY_CASH_EXPENSE" as any,
@@ -14924,10 +13322,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       expenseNumber,
       `تم تسجيل مصروف جديد بقيمة ${data.amount} درهم رقم ${expenseNumber} فئة ${cat?.nameArabic || data.categoryId}.`
     );
-
     return { success: true, expense: newExpense };
   };
-
   const updateOfficePettyCashExpense = (
     id: string,
     patch: Partial<OfficePettyCashExpense>,
@@ -14935,21 +13331,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): { success: boolean; error?: string } => {
     const target = officePettyCashExpenses.find((e) => e.id === id);
     if (!target) return { success: false, error: "Expense record not found" };
-
     const monthRecord = officePettyCashMonths.find((m) => m.id === target.monthId);
     if (!monthRecord) return { success: false, error: "Month record not found" };
-
     if (monthRecord.status === "CLOSED" && !hasPermission("MODIFY_CLOSED_OFFICE_PETTY_CASH")) {
       return {
         success: false,
         error: language === "ar" ? "عذراً، هذا الشهر مغلق ولا يمكن تعديل المصروفات المدرجة فيه" : "This month is closed and its expenses cannot be modified",
       };
     }
-
     if (patch.amount !== undefined && patch.amount <= 0) {
       return { success: false, error: language === "ar" ? "يجب أن تكون قيمة المصروف أكبر من الصفر" : "Expense amount must be greater than zero" };
     }
-
     if (patch.date !== undefined) {
       const expDate = new Date(patch.date);
       const expMonth = expDate.getMonth() + 1;
@@ -14963,10 +13355,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
     }
-
     const catId = patch.categoryId !== undefined ? patch.categoryId : target.categoryId;
     const cat = officePettyCashCategories.find((c) => c.id === catId);
-
     const updated: OfficePettyCashExpense = {
       ...target,
       ...patch,
@@ -14975,24 +13365,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updatedBy: currentUser?.id,
       updatedAt: new Date().toISOString(),
     };
-
     setOfficePettyCashExpenses((prev) => prev.map((e) => (e.id === id ? updated : e)));
     safeSetDoc(doc(db, "office_petty_cash_expenses", id), updated);
-
     const otherExpenses = officePettyCashExpenses.filter((e) => e.monthId === target.monthId && e.id !== id);
     const newAmount = patch.amount !== undefined ? patch.amount : target.amount;
     const newTotalExpenses = otherExpenses.reduce((sum, e) => sum + e.amount, 0) + newAmount;
     const newClosingBalance = monthRecord.openingAmount - newTotalExpenses;
-
     const updatedMonth: OfficePettyCashMonth = {
       ...monthRecord,
       totalExpenses: newTotalExpenses,
       closingBalance: newClosingBalance,
     };
-
     setOfficePettyCashMonths((prev) => prev.map((m) => (m.id === target.monthId ? updatedMonth : m)));
     safeSetDoc(doc(db, "office_petty_cash_months", monthRecord.id), updatedMonth);
-
     logAudit(
       "UPDATE",
       "OFFICE_PETTY_CASH_EXPENSE" as any,
@@ -15002,50 +13387,40 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       JSON.stringify(target),
       JSON.stringify(updated)
     );
-
     return { success: true };
   };
-
   const deleteOfficePettyCashExpense = (
     id: string,
     modificationReason?: string
   ): { success: boolean; error?: string } => {
     const target = officePettyCashExpenses.find((e) => e.id === id);
     if (!target) return { success: false, error: "Expense record not found" };
-
     const monthRecord = officePettyCashMonths.find((m) => m.id === target.monthId);
     if (!monthRecord) return { success: false, error: "Month record not found" };
-
     if (monthRecord.status === "CLOSED" && !hasPermission("MODIFY_CLOSED_OFFICE_PETTY_CASH")) {
       return {
         success: false,
         error: language === "ar" ? "عذراً، هذا الشهر مغلق ولا يمكن حذف مصروفات مدرجة فيه" : "This month is closed and its expenses cannot be deleted",
       };
     }
-
     if (!hasPermission("DELETE_OFFICE_EXPENSE")) {
       return {
         success: false,
         error: language === "ar" ? "ليس لديك صلاحية لحذف مصروفات المكتب" : "You do not have permission to delete office expenses",
       };
     }
-
     setOfficePettyCashExpenses((prev) => prev.filter((e) => e.id !== id));
     deleteDoc(doc(db, "office_petty_cash_expenses", id)).catch(() => {});
-
     const otherExpenses = officePettyCashExpenses.filter((e) => e.monthId === target.monthId && e.id !== id);
     const newTotalExpenses = otherExpenses.reduce((sum, e) => sum + e.amount, 0);
     const newClosingBalance = monthRecord.openingAmount - newTotalExpenses;
-
     const updatedMonth: OfficePettyCashMonth = {
       ...monthRecord,
       totalExpenses: newTotalExpenses,
       closingBalance: newClosingBalance,
     };
-
     setOfficePettyCashMonths((prev) => prev.map((m) => (m.id === target.monthId ? updatedMonth : m)));
     safeSetDoc(doc(db, "office_petty_cash_months", monthRecord.id), updatedMonth);
-
     logAudit(
       "DELETE",
       "OFFICE_PETTY_CASH_EXPENSE" as any,
@@ -15053,10 +13428,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       target.expenseNumber,
       `تم حذف المصروف رقم ${target.expenseNumber} بقيمة ${target.amount} درهم. السبب: ${modificationReason || "حذف سجل"}`
     );
-
     return { success: true };
   };
-
   const addOfficePettyCashCategory = (
     data: Omit<OfficePettyCashCategory, "id" | "active" | "createdAt">
   ): { success: boolean; category?: OfficePettyCashCategory; error?: string } => {
@@ -15066,7 +13439,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: language === "ar" ? "ليس لديك صلاحية لإدارة فئات مصروفات المكتب" : "You do not have permission to manage expense categories",
       };
     }
-
     const nowIso = new Date().toISOString();
     const newCat: OfficePettyCashCategory = {
       ...data,
@@ -15074,10 +13446,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       active: true,
       createdAt: nowIso,
     };
-
     setOfficePettyCashCategories((prev) => [...prev, newCat]);
     safeSetDoc(doc(db, "office_petty_cash_categories", newCat.id), newCat);
-
     logAudit(
       "CREATE",
       "OFFICE_PETTY_CASH_CATEGORY" as any,
@@ -15085,10 +13455,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       newCat.nameEnglish,
       `تم إضافة فئة مصروفات مكتبية جديدة: ${newCat.nameArabic} / ${newCat.nameEnglish}`
     );
-
     return { success: true, category: newCat };
   };
-
   const updateOfficePettyCashCategory = (
     id: string,
     patch: Partial<OfficePettyCashCategory>
@@ -15099,19 +13467,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error: language === "ar" ? "ليس لديك صلاحية لإدارة فئات مصروفات المكتب" : "You do not have permission to manage expense categories",
       };
     }
-
     const target = officePettyCashCategories.find((c) => c.id === id);
     if (!target) return { success: false, error: "Category not found" };
-
     const updated: OfficePettyCashCategory = {
       ...target,
       ...patch,
       updatedAt: new Date().toISOString(),
     };
-
     setOfficePettyCashCategories((prev) => prev.map((c) => (c.id === id ? updated : c)));
     safeSetDoc(doc(db, "office_petty_cash_categories", id), updated);
-
     logAudit(
       "UPDATE",
       "OFFICE_PETTY_CASH_CATEGORY" as any,
@@ -15121,25 +13485,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       JSON.stringify(target),
       JSON.stringify(updated)
     );
-
     return { success: true };
   };
-
   const updateSaqrOfficeConfig = (patch: Partial<SaqrOfficeConfig>) => {
     setSaqrOfficeConfig((prev) => ({ ...prev, ...patch, updatedAt: new Date().toISOString() }));
     logAudit("UPDATE", "COMPANY_PROFILE" as any, "saqr-office", "Saqr Office Config", "تم تحديث بيانات حساب مكتب صقر الإمارات للعقارات");
   };
-
   const addOfficeSaqrTransaction = (tx: SaqrOfficeManualTransaction) => {
     setSaqrOfficeManualTransactions((prev) => [tx, ...prev]);
     logAudit("CREATE", "COLLECTION" as any, tx.id, tx.category, `تم إضافة معاملة مالية يدوية لحساب المكتب بقيمة ${tx.amount} درهم`);
   };
-
   const deleteOfficeSaqrTransaction = (id: string) => {
     setSaqrOfficeManualTransactions((prev) => prev.filter((t) => t.id !== id));
     logAudit("DELETE", "COLLECTION" as any, id, "Manual Tx", "تم حذف معاملة مالية يدوية من حساب المكتب");
   };
-
   // AUTHORITATIVE OCCUPANCY GOVERNANCE METHODS
   const validateUnitAvailability = (
     unitId: string,
@@ -15155,12 +13514,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       language: (language as any) || "ar",
     });
   };
-
   const getUnitOccupancyStatus = (unitId: string): UnitOccupancySummary => {
     const unit = units.find((u) => u.id === unitId);
     return getUnitEffectiveOccupancy(unitId, unit, leases);
   };
-
   const reconcileUnitOccupancy = (): { reconciledCount: number; mismatches: UnitReconciliationMismatch[] } => {
     const { reconciledUnits, mismatches } = reconcileAllUnitsOccupancy(units, leases);
     if (mismatches.length > 0) {
@@ -15181,7 +13538,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     return { reconciledCount: mismatches.length, mismatches };
   };
-
   return (
     <DataContext.Provider
       value={{
@@ -15228,19 +13584,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resetDatabase,
         exportDatabaseJSON,
         importDatabaseJSON,
-
         // Office Petty Cash Module
         officePettyCashMonths,
         officePettyCashExpenses,
         officePettyCashCategories,
-
         // Saqr Office Account Module
         saqrOfficeConfig,
         saqrOfficeManualTransactions,
         updateSaqrOfficeConfig,
         addOfficeSaqrTransaction,
         deleteOfficeSaqrTransaction,
-
         addOfficePettyCashMonth,
         updateOfficePettyCashMonth,
         closeOfficePettyCashMonth,
@@ -15250,7 +13603,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteOfficePettyCashExpense,
         addOfficePettyCashCategory,
         updateOfficePettyCashCategory,
-
         addOwner,
         updateOwner,
         deleteOwner,
@@ -15354,7 +13706,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateMessageTemplate,
         operationalCommunications,
         addOperationalCommunication,
-
         ownerTransfers,
         propertyExpenses,
         collectionActions,
@@ -15472,7 +13823,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         importTenantsBatch,
         addNotification,
         logAudit,
-
         // Sequence Generators
         getNextOwnerCode: () => generateSequentialNumber(owners, "code", "EFR-OWN-", 4, false),
         getNextTenantCode: () => generateSequentialNumber(tenants, "code", "EFR-TNT-", 4, false),
@@ -15497,7 +13847,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     </DataContext.Provider>
   );
 };
-
 export const useData = (): DataContextType => {
   const context = useContext(DataContext);
   if (!context) {

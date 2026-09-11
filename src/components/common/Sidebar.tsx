@@ -28,6 +28,8 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
+import { useCloudConnectivity } from "../../context/CloudConnectivityContext";
+
 import { useLanguage } from "../../context/LanguageContext";
 import { useAuth } from "../../context/AuthContext";
 import { useData } from "../../context/DataContext";
@@ -63,6 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { hasPermission, currentUser, loginMode } = useAuth();
   console.log("Sidebar: currentUser =", currentUser, "loginMode =", loginMode);
   const { cheques, cases, notifications, units, leases, maintenanceRequests } = useData();
+  const cloudState = useCloudConnectivity();
 
   const [expandedSections, setExpandedSections] = React.useState<Record<string, boolean>>({
     navFinancialsHeader: false,
@@ -468,6 +471,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </React.Fragment>
             );
           })}
+        </div>
+
+        <div className="p-4 border-t border-slate-200/60 shrink-0">
+          <div className="flex flex-col gap-1 text-xs">
+            <span className="font-semibold text-slate-700">
+              {language === "ar" ? "حالة اتصال النظام" : "System Connection"}
+            </span>
+            {cloudState === "ONLINE" && (
+              <span className="flex items-center gap-2 text-emerald-600 font-bold">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
+                {language === "ar" ? "متصل بالسحابة" : "Cloud Online"}
+              </span>
+            )}
+            {cloudState === "OFFLINE" && (
+              <span className="flex flex-col text-rose-600 font-bold">
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-rose-500 shadow-sm shadow-rose-500/50"></span>
+                  {language === "ar" ? "غير متصل بالسحابة" : "Cloud Offline"}
+                </span>
+                <span className="text-[10px] text-slate-500 mt-1">
+                  {language === "ar" ? "وضع القراءة فقط" : "Read-Only Mode"}
+                </span>
+              </span>
+            )}
+            {cloudState === "RECONNECTING" && (
+              <span className="flex items-center gap-2 text-amber-600 font-bold">
+                <span className="w-2 h-2 rounded-full bg-amber-500 shadow-sm shadow-amber-500/50 animate-pulse"></span>
+                {language === "ar" ? "جارٍ إعادة الاتصال..." : "Reconnecting..."}
+              </span>
+            )}
+          </div>
         </div>
       </aside>
     </>
