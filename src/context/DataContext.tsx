@@ -343,10 +343,10 @@ export interface DataContextType {
   }) => Promise<{ success: boolean; error?: string }>;
   cancelOwnerTransfer: (transferId: string, reason?: string) => Promise<{ success: boolean; error?: string }>;
   reverseOwnerTransfer: (transferId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
-  addPropertyExpense: (data: Omit<PropertyExpenseRecord, "id" | "expenseNumber" | "totalAmount" | "createdAt" | "createdById" | "createdByName"> & { createdById?: string; createdByName?: string }) => { success: boolean; expense?: PropertyExpenseRecord; error?: string };
+  addPropertyExpense: (data: Omit<PropertyExpenseRecord, "id" | "expenseNumber" | "totalAmount" | "createdAt" | "createdById" | "createdByName"> & { createdById?: string; createdByName?: string }) => Promise<{ success: boolean; expense?: PropertyExpenseRecord; error?: string }>;
   settlePropertyExpense: (params: any) => Promise<{ success: boolean; error?: string }>;
   updatePropertyExpense: (id: string, patch: Partial<PropertyExpenseRecord>, modificationReason?: string) => { success: boolean; error?: string };
-  reversePropertyExpense: (expenseId: string, reason: string) => { success: boolean; error?: string };
+  reversePropertyExpense: (expenseId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
   deletePropertyExpense: (expenseId: string) => Promise<{ success: boolean; error?: string }>;
   addAccountDefinition: (data: Omit<AccountDefinition, "id" | "createdAt">) => { success: boolean; account?: AccountDefinition; error?: string };
   updateAccountDefinition: (id: string, patch: Partial<AccountDefinition>, modificationReason?: string) => { success: boolean; error?: string };
@@ -5400,8 +5400,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           chequeId: target.id,
           tenantId: target.tenantId,
           ownerId: target.ownerId,
-          propertyId: target.propertyId,
-          unitId: target.unitId,
           leaseId: target.leaseId,
           paymentDate: params.clearingDate,
           amountEntered: target.amount,
@@ -7082,13 +7080,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
 
-      if (matchedDeposit.status === "EXCEPTION" || matchedDeposit.status === "CANCELLED") {
+      if (matchedDeposit.status !== "VERIFIED" && matchedDeposit.status !== "RECONCILED") {
         return {
           success: false,
           error:
             language === "ar"
-              ? "سجل الإيداع اليومي المرتبط ملغي أو به استثناء مالي ولم يتم اعتماده."
-              : "The linked Daily Deposit record is cancelled or has an unresolved financial exception.",
+              ? "سجل الإيداع اليومي المرتبط لم يتم التحقق منه واعتماده بعد. يجب اعتماد الإيداع البنكي أولاً."
+              : "The linked Daily Deposit record must be verified before settling this cash transaction.",
         };
       }
 
@@ -7558,6 +7556,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     overrideType?: VerificationOverrideType;
     aiVerificationDetails?: any;
     paymentMethod?: PaymentMethod;
+    dailyDepositId?: string;
   }): Promise<{ success: boolean; error?: string }> => {
     const {
       leaseId,
@@ -7573,6 +7572,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       overrideType,
       aiVerificationDetails,
       paymentMethod = "BANK_TRANSFER",
+      dailyDepositId,
     } = params;
 
     // RBAC Authorization check
@@ -7592,6 +7592,28 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (existingLease.securityDepositStatus === "SETTLED" || existingLease.securityDepositStatus === "REFUNDED") {
       return { success: true };
+    }
+
+    if (existingLease.securityDepositPaymentMethod === "CASH") {
+      if (!dailyDepositId) {
+        return {
+          success: false,
+          error: language === "ar" ? "رقم الإيداع اليومي مطلوب لتسوية تأمين نقدي." : "Daily deposit ID is required to settle cash security deposit.",
+        };
+      }
+      const matchedDeposit = dailyDeposits.find(d => d.id === dailyDepositId);
+      if (!matchedDeposit) {
+        return {
+          success: false,
+          error: language === "ar" ? "سجل الإيداع اليومي غير موجود." : "Daily deposit record not found.",
+        };
+      }
+      if (matchedDeposit.status !== "VERIFIED" && matchedDeposit.status !== "RECONCILED") {
+        return {
+          success: false,
+          error: language === "ar" ? "سجل الإيداع اليومي المرتبط لم يتم اعتماده." : "The linked daily deposit must be verified.",
+        };
+      }
     }
 
     // Resolve proof document from archive
@@ -9878,7 +9900,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdById?: string;
       createdByName?: string;
     }
-  ): { success: boolean; expense?: PropertyExpenseRecord; error?: string } => {
+  ): Promise<{ success: boolean; expense?: PropertyExpenseRecord; error?: string }> => {
     // Financial Period Validation
     const periodCheck = validateTransactionPeriod(data.expenseDate, financialPeriods);
     if (!periodCheck.allowed) {
@@ -10222,7 +10244,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const reversePropertyExpense = async (
     expenseId: string,
     reason: string
-  ): { success: boolean; error?: string } => {
+  ): Promise<{ success: boolean; error?: string }> => {
     const existing = propertyExpenses.find((e) => e.id === expenseId);
     if (!existing) return { success: false, error: "سجل المصروف غير موجود." };
     if (existing.status === "REVERSED") return { success: false, error: "تم عكس هذا المصروف مسبقاً." };
@@ -10354,7 +10376,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }));
     
     if (originalJe && reversalJournal) {
-      setJournalEntries(prev => prev.map(je => je.id === originalJe.id ? { ...je, status: "REVERSED" } : je).concat(reversalJournal!));
+      setJournalEntries(prev => prev.map(je => je.id === originalJe.id ? { ...je, status: "REVERSED" as const } : je).concat(reversalJournal!));
     }
 
     logAudit(
@@ -11799,6 +11821,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (inst.id === installmentId) {
         const updatedInst = {
           ...inst,
+          originalAmount: inst.originalAmount || inst.amount,
           amount: payAmount,
           status: "PAID" as const,
           paidDate: payDate,
@@ -11814,6 +11837,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             ...inst,
             id: `inst-${Date.now()}-${crypto.randomUUID().split("-")[0]}`,
             installmentNumber: (c.settlement?.schedule?.length || 0) + 1,
+            originalAmount: inst.amount - payAmount,
             amount: inst.amount - payAmount,
             status: "PENDING" as const,
           };

@@ -338,7 +338,7 @@ export const CaseDetailsPage: React.FC<CaseDetailsPageProps> = ({
     }
   };
 
-  const handleAddNewLegalExpense = () => {
+  const handleAddNewLegalExpense = async () => {
     setNewExpError("");
     if (newExpAmount <= 0) {
       setNewExpError(language === "ar" ? "يرجى إدخال مبلغ صحيح" : "Please enter a valid amount");
@@ -349,7 +349,7 @@ export const CaseDetailsPage: React.FC<CaseDetailsPageProps> = ({
       return;
     }
 
-    const res = addPropertyExpense({
+    const res = await addPropertyExpense({
       propertyId: currentCase.propertyId,
       unitId: currentCase.unitId,
       ownerId: currentCase.ownerId,

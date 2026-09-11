@@ -364,7 +364,7 @@ export const PropertyExpensesView: React.FC<PropertyExpensesViewProps> = ({ init
     setIsAddModalOpen(true);
   };
 
-  const handleCreateExpense = (e: React.FormEvent) => {
+  const handleCreateExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     setModalError("");
 
@@ -413,7 +413,7 @@ export const PropertyExpensesView: React.FC<PropertyExpensesViewProps> = ({ init
     const vatAmount = (modalAmount * modalVatPercentage) / 100;
     const docs = modalSupportingDoc ? [modalSupportingDoc] : [];
 
-    const res = addPropertyExpense({
+    const res = await addPropertyExpense({
       propertyId: modalPropertyId,
       unitId: modalUnitId || undefined,
       ownerId: modalOwnerId,
@@ -562,7 +562,7 @@ export const PropertyExpensesView: React.FC<PropertyExpensesViewProps> = ({ init
     setIsReversalModalOpen(true);
   };
 
-  const handleConfirmReversal = (e: React.FormEvent) => {
+  const handleConfirmReversal = async (e: React.FormEvent) => {
     e.preventDefault();
     setReversalError("");
 
@@ -571,7 +571,7 @@ export const PropertyExpensesView: React.FC<PropertyExpensesViewProps> = ({ init
       return;
     }
 
-    const res = reversePropertyExpense(reversalExpenseId, reversalReason);
+    const res = await reversePropertyExpense(reversalExpenseId, reversalReason);
     if (res.success) {
       setIsReversalModalOpen(false);
     } else {
