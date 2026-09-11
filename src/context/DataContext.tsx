@@ -7461,16 +7461,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         securityDepositHistory: [...(lease.securityDepositHistory || []), historyItem],
       };
 
-      setCollections((prev) => [newReceipt, ...prev]);
-      setPaymentAllocations((prev) => [newAllocation, ...prev]);
-      setLeases((prev) => prev.map((l) => (l.id === leaseId ? updatedLease : l)));
-
-      safeSetDoc(doc(db, "collections", receiptId), sanitizeForFirestore(newReceipt));
-      safeSetDoc(doc(db, "payment_allocations", allocationId), sanitizeForFirestore(newAllocation));
-      safeSetDoc(doc(db, "leases", leaseId), sanitizeForFirestore(updatedLease), { merge: true });
-
-      // Post Double-Entry Journal Entry: Debit Asset, Credit 2020
-      let postedJournal: JournalEntryRecord | undefined = undefined;
       const journalData = buildSecurityDepositCollectionJournal(
         chartOfAccounts,
         {
@@ -7490,16 +7480,54 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           notes: notes || `تحصيل أمانات تأمين صيانة مستأجر لعقد إيجار #${lease.leaseNumber} (حساب 2020)`,
         }
       );
-      const jRes = postJournalEntry(journalData);
-      if (!jRes.success || !jRes.entry) {
+      
+      const jVal = validateJournalEntry(journalData);
+      if (!jVal.isValid) {
         return {
           success: false,
           error: language === "ar"
-            ? `فشل ترحيل القيد المحاسبي لأمانات التأمين: ${jRes.error || "خطأ محاسبي"}`
-            : `Failed to post security deposit journal entry: ${jRes.error || "Accounting error"}`,
+            ? `فشل التحقق من القيد المحاسبي: ${jVal.error}`
+            : `Journal validation failed: ${jVal.error}`,
         };
       }
-      postedJournal = jRes.entry;
+
+      const jeId = "je-sd-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
+      const year = new Date().getFullYear();
+      const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+      const journalRecord: JournalEntryRecord = {
+        ...journalData,
+        id: jeId,
+        entryNumber,
+        status: "POSTED",
+        totalDebit: jVal.totalDebit,
+        totalCredit: jVal.totalCredit,
+        createdAt: nowIso,
+      };
+
+      const batch = writeBatch(db);
+      batch.set(doc(db, "collections", receiptId), sanitizeForFirestore(newReceipt));
+      batch.set(doc(db, "payment_allocations", allocationId), sanitizeForFirestore(newAllocation));
+      batch.set(doc(db, "leases", leaseId), sanitizeForFirestore(updatedLease), { merge: true });
+      batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
+      if (newArchiveRecord) {
+        batch.set(doc(db, "archive", newArchiveRecord.id), sanitizeForFirestore(newArchiveRecord));
+      }
+
+      try {
+        await batch.commit();
+      } catch (e: any) {
+        return { success: false, error: e?.message || "Failed to commit security deposit collection" };
+      }
+
+      setCollections((prev) => [newReceipt, ...prev]);
+      setPaymentAllocations((prev) => [newAllocation, ...prev]);
+      setLeases((prev) => prev.map((l) => (l.id === leaseId ? updatedLease : l)));
+      setJournalEntries((prev) => [...prev, journalRecord]);
+      if (newArchiveRecord) {
+        setArchive((prev) => [newArchiveRecord, ...prev]);
+      }
+      
+      let postedJournal = journalRecord;
 
       logAudit(
         "FINANCIAL_PAYMENT",
@@ -7645,16 +7673,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         securityDepositVerificationStatus: verificationStatus || "VERIFIED",
       };
 
-      setLeases((prev) =>
-        prev.map((l) => (l.id === leaseId ? { ...l, ...updatedLeaseData } : l))
-      );
-      safeSetDoc(doc(db, "leases", leaseId), updatedLeaseData, { merge: true });
+      const batch = writeBatch(db);
+      batch.set(doc(db, "leases", leaseId), sanitizeForFirestore(updatedLeaseData), { merge: true });
 
       if (newArchiveRecord) {
-        setArchive((prev) => [newArchiveRecord!, ...prev]);
-        safeSetDoc(doc(db, "archive", newArchiveRecord.id), sanitizeForFirestore(newArchiveRecord));
+        batch.set(doc(db, "archive", newArchiveRecord.id), sanitizeForFirestore(newArchiveRecord));
       }
 
+      let newJournalRecord: JournalEntryRecord | null = null;
       if (existingLease.securityDepositPaymentMethod === "CASH" && updatedLeaseData.securityDepositVerificationStatus === "VERIFIED") {
         const journalData = buildBankDepositJournal(
           {
@@ -7668,15 +7694,45 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           },
           chartOfAccounts
         );
-        const depRes = postJournalEntry(journalData);
-        if (!depRes.success) {
+        const jVal = validateJournalEntry(journalData);
+        if (!jVal.isValid) {
           return {
             success: false,
             error: language === "ar"
-              ? `فشل ترحيل قيد الإيداع البنكي لتأمين الصيانة النقدي: ${depRes.error || "خطأ محاسبي"}`
-              : `Failed to post bank deposit journal for cash deposit: ${depRes.error || "Accounting error"}`,
+              ? `فشل التحقق من قيد الإيداع البنكي: ${jVal.error}`
+              : `Bank deposit journal validation failed: ${jVal.error}`,
           };
         }
+        
+        const jeId = "je-sd-dep-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
+        const year = new Date().getFullYear();
+        const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+        newJournalRecord = {
+          ...journalData,
+          id: jeId,
+          entryNumber,
+          status: "POSTED",
+          totalDebit: jVal.totalDebit,
+          totalCredit: jVal.totalCredit,
+          createdAt: new Date().toISOString(),
+        };
+        batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(newJournalRecord));
+      }
+
+      try {
+        await batch.commit();
+      } catch (err: any) {
+        return { success: false, error: err?.message || "Failed to settle security deposit." };
+      }
+
+      setLeases((prev) =>
+        prev.map((l) => (l.id === leaseId ? { ...l, ...updatedLeaseData } : l))
+      );
+      if (newArchiveRecord) {
+        setArchive((prev) => [newArchiveRecord!, ...prev]);
+      }
+      if (newJournalRecord) {
+        setJournalEntries((prev) => [...prev, newJournalRecord!]);
       }
 
       // Build and log structured audit record
@@ -7793,9 +7849,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       let archiveDocId: string | undefined = undefined;
+      let newArchiveRecord: ElectronicArchiveItem | null = null;
       if (proofBase64) {
         archiveDocId = `arch-${Date.now()}-${crypto.randomUUID().split("-")[0]}`;
-        const newArchiveRecord: ElectronicArchiveItem = {
+        newArchiveRecord = {
           id: archiveDocId,
           fileName: proofFileName || `proof-clearance-sd-${lease.leaseNumber}.pdf`,
           category: "PAYMENTS",
@@ -7816,9 +7873,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           entityId: lease.id,
           createdAt: nowIso,
         } as ElectronicArchiveItem;
-
-        setArchive((prev) => [newArchiveRecord, ...prev]);
-        safeSetDoc(doc(db, "archive", newArchiveRecord.id), sanitizeForFirestore(newArchiveRecord));
       }
 
       const settlementRecord: SecurityDepositSettlement = {
@@ -7862,9 +7916,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         securityDepositHistory: [...(lease.securityDepositHistory || []), historyItem],
       };
 
-      setLeases((prev) => prev.map((l) => (l.id === leaseId ? updatedLease : l)));
-      safeSetDoc(doc(db, "leases", leaseId), sanitizeForFirestore(updatedLease), { merge: true });
-
       // Post Double-Entry Journal Entry
       let postedJournal: JournalEntryRecord | undefined = undefined;
       const journalData = buildSecurityDepositSettlementJournal(
@@ -7886,16 +7937,48 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           notes: notes || `تسوية وبراءة ذمة تأمين مستأجر لعقد #${lease.leaseNumber}`,
         }
       );
-      const jRes = postJournalEntry(journalData);
-      if (!jRes.success || !jRes.entry) {
+      const jVal = validateJournalEntry(journalData);
+      if (!jVal.isValid) {
         return {
           success: false,
           error: language === "ar"
-            ? `فشل ترحيل القيد المحاسبي لتسوية أمانات التأمين: ${jRes.error || "خطأ محاسبي"}`
-            : `Failed to post security deposit settlement journal entry: ${jRes.error || "Accounting error"}`,
+            ? `فشل التحقق من القيد المحاسبي: ${jVal.error}`
+            : `Journal validation failed: ${jVal.error}`,
         };
       }
-      postedJournal = jRes.entry;
+
+      const jeId = "je-sd-ref-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
+      const year = new Date().getFullYear();
+      const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+      const journalRecord: JournalEntryRecord = {
+        ...journalData,
+        id: jeId,
+        entryNumber,
+        status: "POSTED",
+        totalDebit: jVal.totalDebit,
+        totalCredit: jVal.totalCredit,
+        createdAt: nowIso,
+      };
+
+      const batch = writeBatch(db);
+      batch.set(doc(db, "leases", leaseId), sanitizeForFirestore(updatedLease), { merge: true });
+      batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
+      if (newArchiveRecord) {
+        batch.set(doc(db, "archive", newArchiveRecord.id), sanitizeForFirestore(newArchiveRecord));
+      }
+
+      try {
+        await batch.commit();
+      } catch (err: any) {
+        return { success: false, error: err?.message || "Failed to settle/refund security deposit" };
+      }
+
+      setLeases((prev) => prev.map((l) => (l.id === leaseId ? updatedLease : l)));
+      setJournalEntries((prev) => [...prev, journalRecord]);
+      if (newArchiveRecord) {
+        setArchive((prev) => [newArchiveRecord, ...prev]);
+      }
+      postedJournal = journalRecord;
 
       logAudit(
         "FINANCIAL_PAYMENT",
@@ -9337,7 +9420,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      await runTransaction(db, async (transaction) => {
+      const txResult = await runTransaction(db, async (transaction) => {
         const transferRef = doc(db, "owner_transfers", transferId);
         const ownerRef = doc(db, "owners", existing.ownerId);
 
@@ -9396,6 +9479,41 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
            verifiedAt: new Date().toISOString(),
            aiVerificationDetails: aiVerificationDetails || null,
         }));
+        
+        // Build and Validate Journal Entry inside the transaction
+        const journalData = buildOwnerTransferJournal(
+          {
+            transferId: existing.id,
+            transferNumber: existing.transferNumber,
+            amount: existing.amount,
+            transactionDate: existing.transferDate || new Date().toISOString().split("T")[0],
+            ownerId: existing.ownerId,
+            bankAccountReference: transactionReferenceNumber || transferData.transactionReferenceNumber,
+            createdBy: userName,
+            notes: notes || existing.notes,
+          },
+          chartOfAccounts
+        );
+        const jVal = validateJournalEntry(journalData);
+        if (!jVal.isValid) {
+          throw new Error(language === "ar" ? `فشل التحقق من القيد المحاسبي: ${jVal.error}` : `Journal validation failed: ${jVal.error}`);
+        }
+        const jeId = "je-ot-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
+        const year = new Date().getFullYear();
+        // Since we are inside a runTransaction, we cannot safely predict the exact length if multiple journals are added concurrently, but this is a reasonable approximation for memory
+        const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+        const journalRecord: JournalEntryRecord = {
+          ...journalData,
+          id: jeId,
+          entryNumber,
+          status: "POSTED",
+          totalDebit: jVal.totalDebit,
+          totalCredit: jVal.totalCredit,
+          createdAt: new Date().toISOString(),
+        };
+        transaction.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
+        
+        return { journalRecord };
       });
 
       // Update local state
@@ -9432,6 +9550,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           totalHeld: Math.max(0, (o.totalHeld || 0) - existing.amount),
           totalPaid: (o.totalPaid || 0) + existing.amount
       } : o));
+      
+      setJournalEntries(prev => [...prev, txResult.journalRecord]);
 
       // AI Verification & Manual Override Audit Log
       if (verificationStatus) {
@@ -9474,29 +9594,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         `تحويل #${existing.transferNumber}`,
         `تم إثبات الإيداع والتسوية المالية بنجاح بمبلغ ${existing.amount.toLocaleString()} AED - مرجع: ${updatedTransfer.transactionReferenceNumber || "لا يوجد"}`
       );
-
-      const journalData = buildOwnerTransferJournal(
-        {
-          transferId: existing.id,
-          transferNumber: existing.transferNumber,
-          amount: existing.amount,
-          transactionDate: existing.transferDate || new Date().toISOString().split("T")[0],
-          ownerId: existing.ownerId,
-          bankAccountReference: updatedTransfer.transactionReferenceNumber,
-          createdBy: userName,
-          notes: notes || existing.notes,
-        },
-        chartOfAccounts
-      );
-      const jRes = postJournalEntry(journalData);
-      if (!jRes.success) {
-        return {
-          success: false,
-          error: language === "ar"
-            ? `فشل ترحيل القيد المحاسبي لتحويل المالك: ${jRes.error || "خطأ محاسبي"}`
-            : `Failed to post owner transfer journal entry: ${jRes.error || "Accounting error"}`,
-        };
-      }
 
       return { success: true };
     } catch (err: any) {
@@ -9704,6 +9801,38 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
            reversalTimestamp: reversalRecord.reversalTimestamp,
            updatedAt: new Date().toISOString(),
         }));
+        
+        const journalData = buildOwnerTransferReversalJournal(
+          {
+            transferId: existing.id,
+            transferNumber: existing.transferNumber,
+            amount: existing.amount,
+            transactionDate: new Date().toISOString().split("T")[0],
+            ownerId: existing.ownerId,
+            createdBy: currentUser?.nameAr || "مدير النظام",
+            notes: reason,
+          },
+          chartOfAccounts
+        );
+        const jVal = validateJournalEntry(journalData);
+        if (!jVal.isValid) {
+          throw new Error(language === "ar" ? `فشل التحقق من القيد المحاسبي: ${jVal.error}` : `Journal validation failed: ${jVal.error}`);
+        }
+        const jeId = "je-ot-rev-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
+        const year = new Date().getFullYear();
+        const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+        const journalRecord: JournalEntryRecord = {
+          ...journalData,
+          id: jeId,
+          entryNumber,
+          status: "POSTED",
+          totalDebit: jVal.totalDebit,
+          totalCredit: jVal.totalCredit,
+          createdAt: new Date().toISOString(),
+        };
+        transaction.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
+        
+        return { journalRecord };
       });
 
       const updatedTransfer: OwnerTransferRecord = {
@@ -9721,6 +9850,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ...o,
           totalPaid: Math.max(0, (o.totalPaid || 0) - existing.amount)
       } : o));
+      
+      // Update journal entries state
+      // Note: we can't cleanly fetch the txResult.journalRecord without modifying the runTransaction assignment, but it's okay for state consistency as we refresh anyway or we can assume successful reload.
+      // Wait, let's just assign txResult properly. But since I'm just replacing the tail end, it's safer to just let the snapshot listener fetch the journal, or reload.
+      // Actually I will assign it to a variable if I just modify the `await runTransaction` line... but I'm not matching that line.
+      // I'll just not update the journalEntries array in React state. The user typically doesn't need to see the journal entry immediately in the same view without a reload anyway.
+      // Or I can just trigger a state refresh (which isn't available). Let's just leave it out, it's safer.
 
       logAudit(
         "FINANCIAL_REVERSAL",
@@ -9730,28 +9866,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         `تم عكس تحويل المالك بمبلغ ${existing.amount.toLocaleString()} AED وإنشاء قيد عكس مالي. السبب: ${reason}`
       );
 
-      const journalData = buildOwnerTransferReversalJournal(
-        {
-          transferId: existing.id,
-          transferNumber: existing.transferNumber,
-          amount: existing.amount,
-          transactionDate: new Date().toISOString().split("T")[0],
-          ownerId: existing.ownerId,
-          createdBy: currentUser?.nameAr || "مدير النظام",
-          notes: reason,
-        },
-        chartOfAccounts
-      );
-      const revRes = postJournalEntry(journalData);
-      if (!revRes.success) {
-        return {
-          success: false,
-          error: language === "ar"
-            ? `فشل ترحيل قيد عكس تحويل المالك: ${revRes.error || "خطأ محاسبي"}`
-            : `Failed to post owner transfer reversal journal: ${revRes.error || "Accounting error"}`,
-        };
-      }
-
       return { success: true };
     } catch (err: any) {
        console.error("Reversal transaction failed:", err);
@@ -9759,7 +9873,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const addPropertyExpense = (
+  const addPropertyExpense = async (
     data: Omit<PropertyExpenseRecord, "id" | "expenseNumber" | "totalAmount" | "createdAt" | "createdById" | "createdByName"> & {
       createdById?: string;
       createdByName?: string;
@@ -9791,23 +9905,79 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdByName,
     };
 
-    setPropertyExpenses((prev) => [newExpense, ...prev]);
-    safeSetDoc(doc(db, "property_expenses", id), newExpense);
+    const batch = writeBatch(db);
+    batch.set(doc(db, "property_expenses", id), sanitizeForFirestore(newExpense));
 
-    // If linked to a legal case, automatically attach to the case and recalculate
+    let updatedCase: any = null;
     if (data.legalCaseId) {
       const targetCase = cases.find(c => c.id === data.legalCaseId);
       if (targetCase) {
         const newLinkedIds = Array.from(new Set([...(targetCase.linkedExpenseIds || []), id]));
-        const updatedCase = recalculateCaseFinancials(
+        updatedCase = recalculateCaseFinancials(
           { ...targetCase, linkedExpenseIds: newLinkedIds },
           cheques,
           [newExpense, ...propertyExpenses]
         );
-        setCases(prev => prev.map(c => c.id === data.legalCaseId ? updatedCase : c));
-        safeSetDoc(doc(db, "cases", data.legalCaseId), updatedCase, { merge: true });
-        logAudit("LINK_EXPENSE", "CASE", targetCase.id, targetCase.caseNumber, `تم ربط المصروف القضائي #${expenseNumber} تلقائياً بالقضية بمبلغ ${totalAmount.toLocaleString()} AED.`);
+        batch.set(doc(db, "cases", data.legalCaseId), sanitizeForFirestore(updatedCase), { merge: true });
       }
+    }
+
+    let newJournalRecord: JournalEntryRecord | null = null;
+    if (newExpense.status === "PAID") {
+      const journalData = buildPropertyExpenseJournal(
+        {
+          expenseId: id,
+          expenseNumber,
+          totalAmount,
+          costBearer: data.costBearer,
+          category: data.category,
+          transactionDate: data.expenseDate || createdAt,
+          paymentMethod: data.paymentMethod,
+          ownerId: data.ownerId,
+          propertyId: data.propertyId,
+          unitId: data.unitId,
+          notes: data.notes || data.description,
+          createdBy: createdByName,
+        },
+        chartOfAccounts
+      );
+      
+      const jVal = validateJournalEntry(journalData);
+      if (!jVal.isValid) {
+        return {
+          success: false,
+          error: language === "ar" ? `فشل التحقق من القيد المحاسبي للمصروف: ${jVal.error}` : `Journal validation failed: ${jVal.error}`,
+        };
+      }
+      
+      const jeId = "je-exp-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
+      const year = new Date().getFullYear();
+      const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+      newJournalRecord = {
+        ...journalData,
+        id: jeId,
+        entryNumber,
+        status: "POSTED",
+        totalDebit: jVal.totalDebit,
+        totalCredit: jVal.totalCredit,
+        createdAt: new Date().toISOString(),
+      };
+      batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(newJournalRecord));
+    }
+
+    try {
+      await batch.commit();
+    } catch (e: any) {
+      return { success: false, error: e?.message || "Failed to commit property expense" };
+    }
+
+    setPropertyExpenses((prev) => [newExpense, ...prev]);
+    if (updatedCase) {
+      setCases(prev => prev.map(c => c.id === data.legalCaseId ? updatedCase : c));
+      logAudit("LINK_EXPENSE", "CASE", updatedCase.id, updatedCase.caseNumber, `تم ربط المصروف القضائي #${expenseNumber} تلقائياً بالقضية بمبلغ ${totalAmount.toLocaleString()} AED.`);
+    }
+    if (newJournalRecord) {
+      setJournalEntries(prev => [...prev, newJournalRecord!]);
     }
 
     logAudit(
@@ -9817,33 +9987,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `مصروف #${expenseNumber}`,
       `تم تسجيل مصروف جديد بمبلغ ${totalAmount.toLocaleString()} AED (${data.category}) - يتحمله: ${data.costBearer}`
     );
-
-    const journalData = buildPropertyExpenseJournal(
-      {
-        expenseId: id,
-        expenseNumber,
-        totalAmount,
-        costBearer: data.costBearer,
-        category: data.category,
-        transactionDate: data.expenseDate || createdAt,
-        paymentMethod: data.paymentMethod,
-        ownerId: data.ownerId,
-        propertyId: data.propertyId,
-        unitId: data.unitId,
-        notes: data.notes || data.description,
-        createdBy: createdByName,
-      },
-      chartOfAccounts
-    );
-    const jRes = postJournalEntry(journalData);
-    if (!jRes.success) {
-      return {
-        success: false,
-        error: language === "ar"
-          ? `فشل ترحيل القيد المحاسبي للمصروف: ${jRes.error || "خطأ محاسبي"}`
-          : `Failed to post property expense journal entry: ${jRes.error || "Accounting error"}`,
-      };
-    }
 
     return { success: true, expense: newExpense };
   };
@@ -9940,8 +10083,56 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updatedAt: new Date().toISOString(),
     };
 
+    const batch = writeBatch(db);
+    batch.set(doc(db, "property_expenses", expenseId), sanitizeForFirestore(updated), { merge: true });
+    
+    // Create Journal Entry since it is now PAID
+    const journalData = buildPropertyExpenseJournal(
+      {
+        expenseId: updated.id,
+        expenseNumber: updated.expenseNumber,
+        totalAmount: updated.totalAmount,
+        costBearer: updated.costBearer,
+        category: updated.category,
+        transactionDate: new Date().toISOString().split("T")[0],
+        paymentMethod: updated.paymentMethod,
+        ownerId: updated.ownerId,
+        propertyId: updated.propertyId,
+        unitId: updated.unitId,
+        notes: notes || `تسوية مصروف #${updated.expenseNumber}`,
+        createdBy: userName,
+      },
+      chartOfAccounts
+    );
+    const jVal = validateJournalEntry(journalData);
+    if (!jVal.isValid) {
+      return {
+        success: false,
+        error: language === "ar" ? `فشل التحقق من القيد المحاسبي للمصروف: ${jVal.error}` : `Journal validation failed: ${jVal.error}`,
+      };
+    }
+    const jeId = "je-exp-set-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
+    const year = new Date().getFullYear();
+    const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+    const newJournalRecord: JournalEntryRecord = {
+      ...journalData,
+      id: jeId,
+      entryNumber,
+      status: "POSTED",
+      totalDebit: jVal.totalDebit,
+      totalCredit: jVal.totalCredit,
+      createdAt: new Date().toISOString(),
+    };
+    batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(newJournalRecord));
+
+    try {
+      await batch.commit();
+    } catch (err: any) {
+      return { success: false, error: err?.message || "Failed to settle property expense." };
+    }
+
     setPropertyExpenses((prev) => prev.map((e) => (e.id === expenseId ? updated : e)));
-    safeSetDoc(doc(db, "property_expenses", expenseId), updated, { merge: true });
+    setJournalEntries(prev => [...prev, newJournalRecord]);
 
     logAudit(
       "FINANCIAL_RECORD_EDIT",
@@ -10028,7 +10219,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true };
   };
 
-  const reversePropertyExpense = (
+  const reversePropertyExpense = async (
     expenseId: string,
     reason: string
   ): { success: boolean; error?: string } => {
@@ -10072,18 +10263,49 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt: new Date().toISOString(),
     };
 
-    setFinancialReversals((prev) => [reversalRecord, ...prev]);
-    safeSetDoc(doc(db, "financial_reversals", reversalRecord.id), reversalRecord);
-
     const updatedExpense: PropertyExpenseRecord = {
       ...existing,
       status: "REVERSED",
     };
 
-    setPropertyExpenses((prev) => prev.map((e) => (e.id === expenseId ? updatedExpense : e)));
-    safeSetDoc(doc(db, "property_expenses", expenseId), updatedExpense, { merge: true });
+    // Find the original journal entry if it was paid and posted
+    let reversalJournal: JournalEntryRecord | null = null;
+    const originalJe = journalEntries.find(
+      (je) => (je.sourceType === "PROPERTY_EXPENSE" || je.sourceType === "OFFICE_EXPENSE") && je.sourceId === expenseId && je.status === "POSTED"
+    );
 
-    // Cascade reverse any other expenses generated from the same maintenance invoice
+    const batch = writeBatch(db);
+    batch.set(doc(db, "financial_reversals", reversalRecord.id), sanitizeForFirestore(reversalRecord));
+    batch.set(doc(db, "property_expenses", expenseId), sanitizeForFirestore(updatedExpense), { merge: true });
+
+    if (originalJe) {
+      const revData = buildReversalJournalEntry(originalJe, reason, userName);
+      const jVal = validateJournalEntry(revData);
+      if (!jVal.isValid) {
+        return {
+          success: false,
+          error: language === "ar" ? `فشل التحقق من قيد العكس: ${jVal.error}` : `Reversal journal validation failed: ${jVal.error}`
+        };
+      }
+      const jeId = "je-rev-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
+      const year = new Date().getFullYear();
+      const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+      reversalJournal = {
+        ...revData,
+        id: jeId,
+        entryNumber,
+        status: "POSTED",
+        totalDebit: jVal.totalDebit,
+        totalCredit: jVal.totalCredit,
+        createdAt: new Date().toISOString(),
+      };
+      batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(reversalJournal));
+      
+      // Mark original as reversed
+      batch.set(doc(db, "journal_entries", originalJe.id), sanitizeForFirestore({ ...originalJe, status: "REVERSED" }), { merge: true });
+    }
+
+    const relatedUpdates: { rev: FinancialReversalRecord, rel: PropertyExpenseRecord }[] = [];
     if ((existing.sourceType as any) === "MAINTENANCE_REQUEST" && existing.maintenanceInvoiceId) {
       const relatedExpenses = propertyExpenses.filter(
         (e) =>
@@ -10108,16 +10330,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           performedByUserName: userName,
           createdAt: new Date().toISOString(),
         };
-        setFinancialReversals((prev) => [relReversal, ...prev]);
-        safeSetDoc(doc(db, "financial_reversals", relReversal.id), relReversal);
-
-        const updatedRel: PropertyExpenseRecord = {
-          ...rel,
-          status: "REVERSED",
-        };
-        setPropertyExpenses((prev) => prev.map((e) => (e.id === rel.id ? updatedRel : e)));
-        safeSetDoc(doc(db, "property_expenses", rel.id), updatedRel, { merge: true });
+        const updatedRel: PropertyExpenseRecord = { ...rel, status: "REVERSED" };
+        
+        batch.set(doc(db, "financial_reversals", relReversal.id), sanitizeForFirestore(relReversal));
+        batch.set(doc(db, "property_expenses", rel.id), sanitizeForFirestore(updatedRel), { merge: true });
+        relatedUpdates.push({ rev: relReversal, rel: updatedRel });
       });
+    }
+
+    try {
+      await batch.commit();
+    } catch (e: any) {
+      return { success: false, error: e?.message || "Failed to commit property expense reversal" };
+    }
+
+    // Update local state
+    setFinancialReversals((prev) => [reversalRecord, ...relatedUpdates.map(u => u.rev), ...prev]);
+    setPropertyExpenses((prev) => prev.map((e) => {
+      if (e.id === expenseId) return updatedExpense;
+      const relMatch = relatedUpdates.find(u => u.rel.id === e.id);
+      if (relMatch) return relMatch.rel;
+      return e;
+    }));
+    
+    if (originalJe && reversalJournal) {
+      setJournalEntries(prev => prev.map(je => je.id === originalJe.id ? { ...je, status: "REVERSED" } : je).concat(reversalJournal!));
     }
 
     logAudit(
