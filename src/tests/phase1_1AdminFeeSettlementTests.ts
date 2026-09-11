@@ -161,7 +161,8 @@ export function runPhase1_1AdminFeeSettlementTests(): Phase1_1TestReport {
       verificationStatus: "MANUALLY_VERIFIED",
       hasProof,
       proofRequired: true,
-      userRole: "ADMIN",
+      userRole: "FINANCE",
+      overrideReason: "Verified with valid bank statement and transaction reference",
     });
 
     const directSettlementAllowed = gateCheck.allowed && Boolean(txRef);
@@ -195,6 +196,7 @@ export function runPhase1_1AdminFeeSettlementTests(): Phase1_1TestReport {
       hasProof,
       proofRequired: true,
       userRole: "FINANCE",
+      overrideReason: "Verified with merchant gateway authorization confirmation",
     });
 
     const directSettlementAllowed = gateCheck.allowed && Boolean(txRef);

@@ -5349,6 +5349,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!params.clearingProofUrl) throw new Error(language === "ar" ? "يجب إرفاق إثبات المقاصة / التحصيل البنكي لاعتماد الصرف." : "Bank clearing proof is strictly required.");
         if (!params.clearingRef || !params.clearingRef.trim()) throw new Error(language === "ar" ? "يجب إدخال رقم المرجع المصرفي لعملية المقاصة البنكية." : "Bank clearing reference number is required.");
 
+        if (!target.ownerId || !target.tenantId) {
+          throw new Error(
+            language === "ar"
+              ? "بيانات المالك أو المستأجر غير مكتملة في سجل الشيك. تم إيقاف العملية لمنع إنشاء قيود مالية مجهولة الهوية."
+              : "Missing owner or tenant identity in cheque record. Operation stopped to prevent anonymous financial entries."
+          );
+        }
+
+        const periodCheck = validateTransactionPeriod(params.clearingDate, financialPeriods);
+        if (!periodCheck.allowed) {
+          throw new Error(language === "ar" ? periodCheck.errorAr : periodCheck.errorEn);
+        }
+
         const oldStatus = target.status;
         const nowIso = new Date().toISOString();
 
@@ -5387,6 +5400,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           chequeId: target.id,
           tenantId: target.tenantId,
           ownerId: target.ownerId,
+          propertyId: target.propertyId,
+          unitId: target.unitId,
+          leaseId: target.leaseId,
           paymentDate: params.clearingDate,
           amountEntered: target.amount,
           amountApplied: target.amount,
@@ -5410,17 +5426,53 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           allocationDate: params.clearingDate,
           status: "ACTIVE",
           createdById: params.userId || currentUser?.id || "system",
-
           createdAt: nowIso,
         };
         transaction.set(doc(db, "payment_allocations", allocId), sanitizeForFirestore(alloc));
 
-        return { updated, receipt, alloc };
+        // Required Rent Collection Journal Entry
+        const journalData = buildRentCollectionJournal(
+          {
+            collectionId: colId,
+            receiptNumber,
+            amount: target.amount,
+            transactionDate: params.clearingDate,
+            paymentMethod: "BANK_TRANSFER",
+            ownerId: target.ownerId,
+            propertyId: target.propertyId,
+            unitId: target.unitId,
+            leaseId: target.leaseId,
+            tenantId: target.tenantId,
+            createdBy: params.userName || currentUser?.nameEn || currentUser?.nameAr || "Finance Officer",
+            notes: params.notes || `مقاصة وصرف شيك #${target.chequeNumber} بموجب سند #${receiptNumber}`,
+          },
+          chartOfAccounts
+        );
+        const jVal = validateJournalEntry(journalData);
+        if (!jVal.isValid) {
+          throw new Error(`Journal validation failed: ${jVal.error}`);
+        }
+        const jeId = "je-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
+        const year = new Date().getFullYear();
+        const entryNumber = `JE-${year}-${String(journalEntries.length + 1).padStart(5, "0")}`;
+        const journalRecord: JournalEntryRecord = {
+          ...journalData,
+          id: jeId,
+          entryNumber,
+          status: "POSTED",
+          totalDebit: jVal.totalDebit,
+          totalCredit: jVal.totalCredit,
+          createdAt: nowIso,
+        };
+        transaction.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
+
+        return { updated, receipt, alloc, journalRecord };
       });
 
       setCheques((prev) => prev.map((c) => (c.id === params.chequeId ? result.updated : c)));
       setCollections((prev) => [result.receipt, ...prev]);
       setPaymentAllocations((prev) => [...prev, result.alloc]);
+      setJournalEntries((prev) => [...prev, result.journalRecord]);
 
       syncChequeWithLease(result.updated, "CLEARED");
       dispatchChequeCollectedNotification(result.updated.id);
@@ -7006,11 +7058,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // CASH Settlement Controls: Must link to a valid Daily Deposit
+    let verifiedDailyDeposit: DailyDepositRecord | null = null;
     if (effectivePaymentMethod === "CASH") {
       const targetDepositId = dailyDepositId || (existing as any).dailyDepositId || linkedDailyDeposit?.id;
-      const matchedDeposit = linkedDailyDeposit || (targetDepositId ? dailyDeposits.find((d) => d.id === targetDepositId) : null);
-
-      if (!targetDepositId && !matchedDeposit) {
+      if (!targetDepositId && !linkedDailyDeposit) {
         return {
           success: false,
           error:
@@ -7020,15 +7071,49 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
 
-      if (matchedDeposit && matchedDeposit.status === "EXCEPTION") {
+      const matchedDeposit = linkedDailyDeposit || (targetDepositId ? dailyDeposits.find((d) => d.id === targetDepositId) : null);
+      if (!matchedDeposit) {
         return {
           success: false,
           error:
             language === "ar"
-              ? "سجل الإيداع اليومي المرتبط به استثناء مالي ولم يتم اعتماده."
-              : "The linked Daily Deposit record has an unresolved financial exception.",
+              ? "سجل الإيداع اليومي المحدد غير موجود بالنظام (معرّف غير صحيح أو وهمي)."
+              : "The specified Daily Deposit record does not exist in the system (invalid or fabricated ID).",
         };
       }
+
+      if (matchedDeposit.status === "EXCEPTION" || matchedDeposit.status === "CANCELLED") {
+        return {
+          success: false,
+          error:
+            language === "ar"
+              ? "سجل الإيداع اليومي المرتبط ملغي أو به استثناء مالي ولم يتم اعتماده."
+              : "The linked Daily Deposit record is cancelled or has an unresolved financial exception.",
+        };
+      }
+
+      const expectedAmount = existing.outstandingBalance || (existing.totalCommissionAmount - (existing.collectedAmount || 0));
+      if (matchedDeposit.amount < expectedAmount - 0.01) {
+        return {
+          success: false,
+          error:
+            language === "ar"
+              ? `مبلغ حافظة الإيداع (${matchedDeposit.amount.toLocaleString()} د.إ) أقل من الرسوم الإدارية المستحقة (${expectedAmount.toLocaleString()} د.إ).`
+              : `Daily deposit amount (${matchedDeposit.amount.toLocaleString()} AED) is less than the due administrative fee (${expectedAmount.toLocaleString()} AED).`,
+        };
+      }
+
+      if (matchedDeposit.sourceId && matchedDeposit.sourceId !== existing.id && matchedDeposit.sourceId !== existing.leaseId && !matchedDeposit.id.startsWith("dep-")) {
+        return {
+          success: false,
+          error:
+            language === "ar"
+              ? "سجل الإيداع اليومي غير مرتبط بهذه المعاملة المالية."
+              : "The Daily Deposit record is not linked to this financial transaction.",
+        };
+      }
+
+      verifiedDailyDeposit = matchedDeposit;
     }
 
     // Resolve proof document from archive
@@ -7167,15 +7252,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // If the administrative fee was paid in CASH, post a bank deposit journal moving funds from Cash in Hand (1020) to Operating Bank (1010)
-      if (effectivePaymentMethod === "CASH") {
+      if (effectivePaymentMethod === "CASH" && verifiedDailyDeposit) {
         const depositJournal = buildBankDepositJournal(
           {
-            sourceType: "ADMINISTRATIVE_FEE",
-            sourceId: commissionId,
+            sourceType: "DAILY_DEPOSIT",
+            sourceId: verifiedDailyDeposit.id,
             totalAmount: amountToCollect,
-            transactionDate: new Date().toISOString().split("T")[0],
-            referenceNumber: transactionReferenceNumber || `DEP-FEE-${existing.id.slice(-6)}`,
-            notes: notes || `إيداع بنكي للرسوم الإدارية النقدية #${existing.businessKey || existing.id}`,
+            transactionDate: verifiedDailyDeposit.depositDate || new Date().toISOString().split("T")[0],
+            referenceNumber: verifiedDailyDeposit.depositReference || (verifiedDailyDeposit as any).depositSlipNumber || transactionReferenceNumber || `DEP-${verifiedDailyDeposit.id.slice(-6)}`,
+            notes: notes || `إيداع بنكي لحافظة إيداع يومي #${verifiedDailyDeposit.id} للرسوم الإدارية #${existing.businessKey || existing.id}`,
             createdBy: userName,
           },
           chartOfAccounts
@@ -7282,9 +7367,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Handle archive document if proof provided
       let archiveDocId: string | undefined = undefined;
+      let newArchiveRecord: ElectronicArchiveItem | null = null;
       if (proofBase64) {
         archiveDocId = `arch-${Date.now()}-${crypto.randomUUID().split("-")[0]}`;
-        const newArchiveRecord: ElectronicArchiveItem = {
+        newArchiveRecord = {
           id: archiveDocId,
           fileName: proofFileName || `proof-deposit-${lease.leaseNumber}.pdf`,
           category: "PAYMENTS",
@@ -7305,9 +7391,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           entityId: lease.id,
           createdAt: nowIso,
         } as ElectronicArchiveItem;
-
-        setArchive((prev) => [newArchiveRecord, ...prev]);
-        safeSetDoc(doc(db, "archive", newArchiveRecord.id), sanitizeForFirestore(newArchiveRecord));
       }
 
       // Generate Official Receipt Voucher (DEP-REC-)
