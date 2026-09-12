@@ -1,3 +1,0 @@
-[install]
-# Limit concurrent network requests to prevent OOM SIGKILL in container environments
-concurrency = 2
