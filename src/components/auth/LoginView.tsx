@@ -148,10 +148,70 @@ export const LoginView: React.FC = () => {
           </div>
 
           {error && (
-            <div className="mb-6 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2.5">
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
+            error === "auth/operation-not-allowed" ? (
+              <div className="mb-6 p-5 rounded-2xl bg-amber-50/70 border border-amber-200 text-slate-800 text-xs shadow-xs animate-in fade-in duration-200">
+                <div className="flex items-start gap-3 mb-3.5">
+                  <AlertCircle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="font-black text-slate-900 text-sm mb-1">
+                      {language === "ar" ? "تفعيل تسجيل الدخول بالبريد الإلكتروني" : "Enable Email/Password Sign-In"}
+                    </h3>
+                    <p className="text-slate-600 leading-relaxed text-[11px]">
+                      {language === "ar" 
+                        ? "يجب تفعيل موفر تسجيل الدخول (البريد الإلكتروني وكلمة المرور) في لوحة تحكم Firebase الخاصة بك لتشغيل النظام بشكل كامل."
+                        : "Email/Password sign-in must be toggled ON in your Firebase Console settings to activate authentication."}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-white/80 rounded-xl p-4 border border-amber-200/50 space-y-3 mb-4">
+                  <h4 className="font-bold text-slate-900 text-xs">
+                    {language === "ar" ? "خطوات التفعيل السريعة:" : "Quick Activation Steps:"}
+                  </h4>
+                  <ol className="list-decimal list-inside space-y-2 text-slate-600 text-[11px] leading-relaxed">
+                    <li>
+                      <span className="font-semibold text-slate-900">
+                        {language === "ar" ? "افتح لوحة تحكم Firebase:" : "Open Firebase Console:"}
+                      </span>{" "}
+                      <a 
+                        href="https://console.firebase.google.com/project/gen-lang-client-0196715356/authentication/providers" 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-amber-700 hover:text-amber-800 underline font-bold inline-flex items-center gap-0.5"
+                      >
+                        {language === "ar" ? "انقر للذهاب مباشرة" : "Click to Go Directly"}
+                      </a>
+                    </li>
+                    <li>
+                      {language === "ar" 
+                        ? "انقر على علامة التبويب (Sign-in method / طريقة تسجيل الدخول) في الأعلى." 
+                        : "Click on the 'Sign-in method' tab at the top of the screen."}
+                    </li>
+                    <li>
+                      {language === "ar" 
+                        ? "اختر موفر (Email/Password / البريد الإلكتروني وكلمة المرور) وقم بتفعيله (Enable) ثم احفظ التغييرات (Save)." 
+                        : "Select 'Email/Password', toggle the switch to Enabled, and click 'Save'."}
+                    </li>
+                  </ol>
+                </div>
+
+                <div className="flex items-center justify-between gap-2.5">
+                  <span className="text-[10px] text-slate-400 font-mono">ID: gen-lang-client-0196715356</span>
+                  <button
+                    type="button"
+                    onClick={() => { setError(null); }}
+                    className="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white font-bold text-[10px] rounded-lg transition-colors cursor-pointer"
+                  >
+                    {language === "ar" ? "إعادة المحاولة" : "Try Again"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mb-6 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
+            )
           )}
 
           <form onSubmit={handleLogin} className="space-y-4">

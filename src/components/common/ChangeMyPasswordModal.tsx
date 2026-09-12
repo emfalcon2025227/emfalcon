@@ -26,7 +26,7 @@ export const ChangeMyPasswordModal: React.FC<ChangeMyPasswordModalProps> = ({ is
 
   if (!currentUser) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFeedback(null);
 
@@ -38,15 +38,15 @@ export const ChangeMyPasswordModal: React.FC<ChangeMyPasswordModalProps> = ({ is
       return;
     }
 
-    if (newPassword.trim().length < 4) {
+    if (newPassword.trim().length < 6) {
       setFeedback({
         type: "error",
-        message: language === "ar" ? "كلمة المرور الجديدة يجب أن تكون 4 رموز على الأقل" : "New password must be at least 4 characters",
+        message: language === "ar" ? "كلمة المرور الجديدة يجب أن تكون 6 رموز على الأقل" : "New password must be at least 6 characters",
       });
       return;
     }
 
-    const res = changeOwnPassword(currentPassword, newPassword);
+    const res = await changeOwnPassword(currentPassword, newPassword);
     if (res.success) {
       setFeedback({
         type: "success",

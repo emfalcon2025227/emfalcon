@@ -29,7 +29,7 @@ export const ForcePasswordChangeModal: React.FC = () => {
 
   if (!isRequired) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFeedback(null);
 
@@ -66,7 +66,7 @@ export const ForcePasswordChangeModal: React.FC = () => {
     }
 
     setIsSubmitting(true);
-    const res = changeOwnPassword(currentPassword, newPassword);
+    const res = await changeOwnPassword(currentPassword, newPassword);
     setIsSubmitting(false);
 
     if (res.success) {

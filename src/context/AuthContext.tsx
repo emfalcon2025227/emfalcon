@@ -8,7 +8,7 @@ import {
 } from "../data/permissionRegistry";
 import { db, sanitizeForFirestore, auth } from "../lib/firebase";
 import { collection, onSnapshot, doc, setDoc, deleteDoc } from "firebase/firestore";
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword, User as FirebaseUser } from "firebase/auth";
 import {
   provisionPortalAccount as provisionService,
   getPortalAccountInfo as getInfoService,
@@ -564,7 +564,7 @@ interface AuthContextType {
   updateUserStatus: (userId: string, isActive: boolean) => { success: boolean; error?: string };
   updateUserRole: (userId: string, newRole: UserRole) => { success: boolean; error?: string };
   resetUserPassword: (userId: string, newPassword?: string) => string;
-  changeOwnPassword: (currentPassword: string, newPassword: string) => { success: boolean; error?: string };
+  changeOwnPassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   deleteUser: (userId: string) => { success: boolean; error?: string };
   provisionPortalAccount: (params: Omit<ProvisionParams, "existingUsers" | "saveUser">) => ReturnType<typeof provisionService>;
   getPortalAccountInfo: (targetId: string, portalRole: "OWNER" | "TENANT", email: string | undefined) => PortalAccountDisplayInfo;
@@ -824,42 +824,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (mode === "OWNER") errorMsg = "خطأ في البريد الإلكتروني أو كلمة المرور لبوابة المالك";
 
     try {
-      // 1. Attempt standard Firebase Auth sign in
+      // Authenticate solely using standard Firebase Authentication
       await signInWithEmailAndPassword(auth, user.email, password);
     } catch (error: any) {
-      const isAuthFail = error.code === "auth/user-not-found" || error.code === "auth/invalid-credential" || error.code === "auth/wrong-password";
-      
-      if (isAuthFail) {
-        // 2. Validate password locally against database document before lazy migration
-        let isLocalPasswordValid = false;
-        if (user.password) {
-          if (user.password === sha256(password)) {
-            isLocalPasswordValid = true;
-          } else if (user.password.length > 20 && user.password === btoa(password)) {
-            isLocalPasswordValid = true;
-          } else if (user.password === password) {
-            isLocalPasswordValid = true;
-          }
-        }
-
-        if (isLocalPasswordValid) {
-          // Correct password, but the user is not migrated to Firebase Auth yet! Lazy create.
-          try {
-            await createUserWithEmailAndPassword(auth, user.email, password);
-          } catch (createErr: any) {
-            console.error("[Auth] Lazy migration failed:", createErr.message);
-            return { success: false, error: "فشل إنشاء حساب المصادقة الجديد: " + createErr.message };
-          }
-        } else {
-          return { success: false, error: errorMsg };
-        }
+      console.error("[Auth] Firebase login failed:", error.message);
+      if (error.code === "auth/operation-not-allowed") {
+        errorMsg = "auth/operation-not-allowed";
+      } else if (error.code === "auth/too-many-requests") {
+        errorMsg = "تم حظر الحساب مؤقتاً بسبب محاولات دخول خاطئة متكررة";
+      } else if (error.code === "auth/user-not-found" || error.code === "auth/invalid-credential" || error.code === "auth/wrong-password") {
+        errorMsg = "اسم المستخدم أو كلمة المرور غير صحيحة";
+        if (mode === "TENANT") errorMsg = "خطأ في البريد الإلكتروني أو كلمة المرور للمستأجر";
+        if (mode === "OWNER") errorMsg = "خطأ في البريد الإلكتروني أو كلمة المرور لبوابة المالك";
       } else {
-        console.error("[Auth] Firebase login failed:", error.message);
-        if (error.code === "auth/too-many-requests") {
-          errorMsg = "تم حظر الحساب مؤقتاً بسبب محاولات دخول خاطئة متكررة";
-        }
-        return { success: false, error: errorMsg };
+        errorMsg = error.message || errorMsg;
       }
+      return { success: false, error: errorMsg };
     }
 
     // Login successful
@@ -1123,44 +1103,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return rawPass;
   };
 
-  const changeOwnPassword = (currentPassword: string, newPassword: string): { success: boolean; error?: string } => {
-    if (!currentUser) {
+  const changeOwnPassword = async (currentPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> => {
+    if (!auth.currentUser) {
       return { success: false, error: "المستخدم غير مسجل الدخول" };
     }
-    let isValidPassword = false;
-    if (currentUser.password) {
-      if (currentUser.password === sha256(currentPassword)) {
-        isValidPassword = true;
-      } else if (currentUser.password.length > 20 && currentUser.password === btoa(currentPassword)) {
-        isValidPassword = true;
-      } else if (currentUser.password === currentPassword) {
-        isValidPassword = true;
+    if (!newPassword || newPassword.trim().length < 6) {
+      return { success: false, error: "كلمة المرور الجديدة يجب أن لا تقل عن 6 رموز" };
+    }
+
+    try {
+      // Direct credential update in Firebase Authentication
+      await updatePassword(auth.currentUser, newPassword);
+
+      if (currentUser) {
+        const updatedUser: User = { 
+          ...currentUser, 
+          mustChangePassword: false,
+          isFirstLoginCompleted: true,
+          portalAccountStatus: "ACTIVE"
+        };
+        // Remove direct password fields from application database records
+        delete updatedUser.password;
+        
+        setCurrentUser(updatedUser);
+        setUsers((prev) =>
+          prev.map((u) => (u.id === currentUser.id ? updatedUser : u))
+        );
+        // Persist profile updates to Firestore
+        await setDoc(doc(db, "users", currentUser.id), sanitizeForFirestore(updatedUser), { merge: true });
       }
+      return { success: true };
+    } catch (e: any) {
+      console.error("[Auth] Change password failed:", e.message);
+      if (e.code === "auth/requires-recent-login") {
+        return { success: false, error: "تتطلب هذه العملية تسجيل الدخول مجدداً للأمان" };
+      }
+      return { success: false, error: e.message || "فشل تغيير كلمة المرور" };
     }
-
-    if (!isValidPassword) {
-      return { success: false, error: "كلمة المرور الحالية غير صحيحة" };
-    }
-    if (!newPassword || newPassword.trim().length < 4) {
-      return { success: false, error: "كلمة المرور الجديدة يجب أن لا تقل عن 4 رموز" };
-    }
-
-    const updatedUser: User = { 
-      ...currentUser, 
-      password: sha256(newPassword),
-      mustChangePassword: false,
-      isFirstLoginCompleted: true,
-      portalAccountStatus: "ACTIVE"
-    };
-    setCurrentUser(updatedUser);
-    setUsers((prev) =>
-      prev.map((u) => (u.id === currentUser.id ? updatedUser : u))
-    );
-    // Persist to Firestore
-    setDoc(doc(db, "users", currentUser.id), sanitizeForFirestore(updatedUser), { merge: true }).catch((e) => {
-      console.warn("[AuthContext] Firestore change password error:", e.message);
-    });
-    return { success: true };
   };
 
   const saveUser = (userToSave: User) => {
