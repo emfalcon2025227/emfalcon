@@ -6,8 +6,9 @@ import {
   LEGACY_PERMISSION_MAP,
   PermissionDefinition 
 } from "../data/permissionRegistry";
-import { db, sanitizeForFirestore } from "../lib/firebase";
+import { db, sanitizeForFirestore, auth } from "../lib/firebase";
 import { collection, onSnapshot, doc, setDoc, deleteDoc } from "firebase/firestore";
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 import {
   provisionPortalAccount as provisionService,
   getPortalAccountInfo as getInfoService,
@@ -324,7 +325,6 @@ export const INITIAL_OWNER_USER: User = {
   isActive: true,
   createdAt: "2024-01-01T08:00:00Z",
   lastLogin: new Date().toISOString(),
-  password: "owner@123",
   mustChangePassword: false,
   isFirstLoginCompleted: true,
   portalAccountStatus: "ACTIVE",
@@ -341,7 +341,6 @@ export const INITIAL_SYSTEM_OWNER: User = {
   isActive: true,
   createdAt: "2024-01-01T08:00:00Z",
   lastLogin: new Date().toISOString(),
-  password: "mahmoud@123",
   mustChangePassword: false,
   isFirstLoginCompleted: true,
   portalAccountStatus: "ACTIVE",
@@ -521,7 +520,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         nameAr: "محمود محمد محمود حامد",
         role: "SYSTEM_OWNER", 
         isActive: true,
-        password: u.password || "mahmoud@123"
       } : u);
     }
 
@@ -546,27 +544,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return [];
   });
 
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    if (typeof window !== "undefined") {
-      const hash = (window.location.hash || "").toLowerCase();
-      const search = (window.location.search || "").toLowerCase();
-      // If user accesses via a login link (e.g. #owner-login, #tenant-login, #login, ?mode=..., ?logout=true), clear any saved session to show the login form
-      if (hash.includes("login") || search.includes("login") || search.includes("logout") || search.includes("mode=")) {
-        localStorage.removeItem("ef_current_user_id");
-        return null;
-      }
-    }
-    const savedId = localStorage.getItem("ef_current_user_id");
-    if (savedId) {
-      const match = users.find((u) => u.id === savedId && u.isActive);
-      return match || null;
-    }
-    return null;
-  });
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const [loadingAuth, setLoadingAuth] = useState(true);
 
   const [loginMode, setLoginMode] = useState<"STAFF" | "TENANT" | "OWNER" | null>(() => {
     return localStorage.getItem("ef_login_mode") as "STAFF" | "TENANT" | "OWNER" | null;
   });
+
+  // Listen to Firebase Auth state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setFirebaseUser(user);
+      setLoadingAuth(false);
+    });
+    return unsubscribe;
+  }, []);
+
+  // Derive currentUser when users or firebaseUser changes
+  useEffect(() => {
+    if (loadingAuth) return;
+    if (!firebaseUser) {
+      setCurrentUser(null);
+      return;
+    }
+    const match = users.find(
+      (u) => (u.email || "").trim().toLowerCase() === (firebaseUser.email || "").trim().toLowerCase()
+    );
+    if (match) {
+      if (match.isActive) {
+        setCurrentUser(match);
+      } else {
+        signOut(auth).catch(() => {});
+        setCurrentUser(null);
+      }
+    } else {
+      if (users.length > 0) {
+        setCurrentUser(null);
+      }
+    }
+  }, [users, firebaseUser, loadingAuth]);
 
   useEffect(() => {
     const handleUrlLoginCheck = () => {
@@ -574,6 +591,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const hash = (window.location.hash || "").toLowerCase();
         const search = (window.location.search || "").toLowerCase();
         if (hash.includes("login") || search.includes("login") || search.includes("logout") || search.includes("mode=")) {
+          signOut(auth).catch(() => {});
           setCurrentUser(null);
           localStorage.removeItem("ef_current_user_id");
         }
@@ -601,7 +619,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           nameAr: "محمود محمد محمود حامد",
           role: "SYSTEM_OWNER", 
           isActive: true,
-          password: u.password || "mahmoud@123"
         } : u);
       }
       return updated;
@@ -624,7 +641,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               ...u,
               isActive: true,
               role: "SYSTEM_OWNER",
-              password: "mahmoud@123"
             } : u);
           }
           setUsers(finalRemote);
@@ -696,9 +712,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (usernameOrEmail: string, password: string, mode: "STAFF" | "TENANT" | "OWNER"): Promise<{ success: boolean; error?: string }> => {
     const clean = usernameOrEmail.trim().toLowerCase();
     
-    // Quick pseudo-hash for new passwords (btoa) to avoid plaintext
-    const hashPwd = (p: string) => btoa(p);
-    
     const user = users.find((u) => {
       const uEmail = (u.email || "").trim().toLowerCase();
       const uUsername = (u.username || "").trim().toLowerCase();
@@ -715,51 +728,60 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     if (!user) {
-      // Emergency backdoor for system owner
-      if (mode === "STAFF" && (clean === "m_hamed@msn.com" || clean === "mahmoud") && password === "mahmoud@123") {
-        const fallbackUser = { ...INITIAL_SYSTEM_OWNER, isActive: true, password: "mahmoud@123", role: "SYSTEM_OWNER" as const };
-        setCurrentUser(fallbackUser);
-        localStorage.setItem("ef_current_user_id", fallbackUser.id);
-        return { success: true };
-      }
-
       let errorMsg = "اسم المستخدم أو كلمة المرور غير صحيحة";
       if (mode === "TENANT") errorMsg = "خطأ في البريد الإلكتروني أو كلمة المرور للمستأجر";
       if (mode === "OWNER") errorMsg = "خطأ في البريد الإلكتروني أو كلمة المرور لبوابة المالك";
       return { success: false, error: errorMsg };
     }
 
-    let isValidPassword = false;
-    if (user.password) {
-      if (user.password.length > 20 && user.password === btoa(password)) {
-        isValidPassword = true;
-      } else if (user.password === password) {
-        isValidPassword = true;
-      }
-    } else {
-      isValidPassword = true; // No password set
+    if (!user.isActive) {
+      return { success: false, error: "الحساب معطل، يرجى التواصل مع مالك النظام SYSTEM_OWNER" };
     }
 
-    if (!isValidPassword) {
-      // Emergency backdoor for system owner if password was changed and forgotten
-      if (mode === "STAFF" && isSystemOwnerUser(user) && password === "mahmoud@123") {
-         // allow login
+    let errorMsg = "اسم المستخدم أو كلمة المرور غير صحيحة";
+    if (mode === "TENANT") errorMsg = "خطأ في البريد الإلكتروني أو كلمة المرور للمستأجر";
+    if (mode === "OWNER") errorMsg = "خطأ في البريد الإلكتروني أو كلمة المرور لبوابة المالك";
+
+    try {
+      // 1. Attempt standard Firebase Auth sign in
+      await signInWithEmailAndPassword(auth, user.email, password);
+    } catch (error: any) {
+      const isAuthFail = error.code === "auth/user-not-found" || error.code === "auth/invalid-credential" || error.code === "auth/wrong-password";
+      
+      if (isAuthFail) {
+        // 2. Validate password locally against database document before lazy migration
+        let isLocalPasswordValid = false;
+        if (user.password) {
+          if (user.password.length > 20 && user.password === btoa(password)) {
+            isLocalPasswordValid = true;
+          } else if (user.password === password) {
+            isLocalPasswordValid = true;
+          }
+        } else {
+          isLocalPasswordValid = true; // No password set in document
+        }
+
+        if (isLocalPasswordValid) {
+          // Correct password, but the user is not migrated to Firebase Auth yet! Lazy create.
+          try {
+            await createUserWithEmailAndPassword(auth, user.email, password);
+          } catch (createErr: any) {
+            console.error("[Auth] Lazy migration failed:", createErr.message);
+            return { success: false, error: "فشل إنشاء حساب المصادقة الجديد: " + createErr.message };
+          }
+        } else {
+          return { success: false, error: errorMsg };
+        }
       } else {
-        let errorMsg = "اسم المستخدم أو كلمة المرور غير صحيحة";
-        if (mode === "TENANT") errorMsg = "خطأ في البريد الإلكتروني أو كلمة المرور للمستأجر";
-        if (mode === "OWNER") errorMsg = "خطأ في البريد الإلكتروني أو كلمة المرور لبوابة المالك";
+        console.error("[Auth] Firebase login failed:", error.message);
+        if (error.code === "auth/too-many-requests") {
+          errorMsg = "تم حظر الحساب مؤقتاً بسبب محاولات دخول خاطئة متكررة";
+        }
         return { success: false, error: errorMsg };
       }
     }
 
-    if (!user.isActive) {
-      if (mode === "STAFF" && isSystemOwnerUser(user) && password === "mahmoud@123") {
-         // allow login
-      } else {
-        return { success: false, error: "الحساب معطل، يرجى التواصل مع مالك النظام SYSTEM_OWNER" };
-      }
-    }
-
+    // Login successful
     const updatedUser = { ...user, lastLogin: new Date().toISOString() };
     setUsers((prev) => prev.map((u) => (u.id === user.id ? updatedUser : u)));
     setLoginMode(mode);
@@ -767,15 +789,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true };
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.error("[Auth] Firebase signOut error:", e);
+    }
     setCurrentUser(null);
+    setLoginMode(null);
+    localStorage.removeItem("ef_current_user_id");
+    localStorage.removeItem("ef_login_mode");
   };
 
   const quickSwitchUser = (userId: string) => {
-    const user = users.find((u) => u.id === userId);
-    if (user && user.isActive) {
-      setCurrentUser(user);
-    }
+    console.warn("[Security Violation Alert] Impersonation via quickSwitchUser was requested and blocked for user ID:", userId);
   };
 
   const hasPermission = (permission: Permission | string, targetUserId?: string): boolean => {
