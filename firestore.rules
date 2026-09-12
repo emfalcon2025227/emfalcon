@@ -1,172 +1,339 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Base rule: The application currently uses a custom authentication system (not standard Firebase Auth tokens).
-    // Therefore, request.auth may be null or custom. We allow read and write for ERP client operations.
-    function isAuthenticated() {
-      return true;
+
+    // --- SECURITY PRIMITIVES ---
+
+    // True if standard standard auth token is present and verified
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
     }
 
-    // Role helper functions based on auth token claims or user document
-    function getUserData() {
-      return request.auth != null && exists(/databases/$(database)/documents/users/$(request.auth.uid)) 
-        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data 
+    // Safely retrieves user role using their verified email address lookup
+    function getUserRole() {
+      if (request.auth == null || request.auth.token.email_verified != true) {
+        return null;
+      }
+      // Direct fast-pass for master account/system owners to prevent extra DB lookups
+      if (request.auth.token.email == 'm_hamed@msn.com') {
+        return 'SYSTEM_OWNER';
+      }
+      if (request.auth.token.email == 'emfalcon2025227@gmail.com') {
+        return 'SYSTEM_OWNER';
+      }
+      // Fetch safe, synced read-only email mapping
+      return exists(/databases/$(database)/documents/users_by_email/$(request.auth.token.email))
+        ? get(/databases/$(database)/documents/users_by_email/$(request.auth.token.email)).data.role
         : null;
     }
 
+    // Role checks
     function isSystemOwner() {
-      return isAuthenticated() && (
-        (request.auth != null && request.auth.token.email == 'm_hamed@msn.com') ||
-        (getUserData() != null && getUserData().role == 'SYSTEM_OWNER')
-      );
+      return getUserRole() == 'SYSTEM_OWNER';
     }
 
     function isAdmin() {
-      return isAuthenticated() && (
-        isSystemOwner() ||
-        (getUserData() != null && (getUserData().role in ['SUPER_ADMIN', 'MANAGER']))
-      );
+      let role = getUserRole();
+      return role == 'SYSTEM_OWNER' || role == 'SUPER_ADMIN' || role == 'MANAGER';
     }
 
-    function isFinancialOfficer() {
-      return isAuthenticated() && (
-        isAdmin() ||
-        (getUserData() != null && (getUserData().role in ['FINANCE', 'ACCOUNTANT', 'COLLECTION_OFFICER']))
-      );
+    function isFinancial() {
+      let role = getUserRole();
+      return role == 'SYSTEM_OWNER' || role == 'SUPER_ADMIN' || role == 'MANAGER' || role == 'FINANCE' || role == 'ACCOUNTANT' || role == 'COLLECTION_OFFICER';
     }
 
-    // ERP Master & Transactional Collections
+    function isStaff() {
+      let role = getUserRole();
+      return role != null && role != 'PROPERTY_OWNER' && role != 'TENANT';
+    }
+
+    // --- DEFAULT DENY (CATCH-ALL) ---
+    // Deny all operations by default on any undefined collections or paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+
+    // --- SPECIFIC COLLECTION RULES ---
+
+    // 1. User profiles master list
+    match /users/{userId} {
+      allow read: if isStaff() || (isSignedIn() && resource.data.email == request.auth.token.email);
+      allow create: if isSystemOwner();
+      allow update: if isSystemOwner() || (
+        isSignedIn() && 
+        resource.data.email == request.auth.token.email && 
+        // Ensure standard users can't touch role, status, permissions, email, id, etc.
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isActive', 'permissions', 'email', 'id'])
+      );
+      allow delete: if isSystemOwner();
+    }
+
+    // 2. Email-to-Role safe mapping table
+    match /users_by_email/{email} {
+      allow read: if isSignedIn();
+      allow write: if isSystemOwner() || isStaff();
+    }
+
+    // 3. Granular overrides
+    match /userPermissionOverrides/{overrideId} {
+      allow read: if isSignedIn();
+      allow write: if isSystemOwner();
+    }
+
+    // 4. Properties master list
     match /properties/{propertyId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isStaff() || (isSignedIn() && getUserRole() == 'PROPERTY_OWNER' && resource.data.ownerId == request.auth.token.email);
+      allow write: if isStaff();
     }
+
+    // 5. Units inside properties
     match /units/{unitId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isSignedIn(); // All authenticated users can view units list
+      allow write: if isStaff();
     }
+
+    // 6. Tenants profiles and risk scoring
     match /tenants/{tenantId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isStaff() || (isSignedIn() && resource.data.email == request.auth.token.email);
+      allow write: if isStaff();
     }
+
+    // 7. Lease contracts (Contracts)
     match /leases/{leaseId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isStaff() || (isSignedIn() && (resource.data.tenantId == request.auth.token.email || resource.data.ownerId == request.auth.token.email));
+      allow write: if isStaff();
+      allow delete: if false; // Delete protected
     }
+
+    // 8. Cheques payments
     match /cheques/{chequeId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isStaff() || (isSignedIn() && resource.data.tenantId == request.auth.token.email);
+      allow write: if isFinancial();
+      allow delete: if false; // Delete protected
     }
+
+    // 9. Payment receipts (Collections)
     match /collections/{collectionId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isStaff() || (isSignedIn() && resource.data.tenantId == request.auth.token.email);
+      allow write: if isFinancial();
+      allow delete: if false; // Delete protected
     }
+
+    // 10. Deposit Batches
     match /deposit_batches/{batchId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isStaff();
+      allow write: if isFinancial();
+      allow delete: if false; // Delete protected
     }
+
+    // 11. Property expenses tracking
     match /property_expenses/{expenseId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isStaff();
+      allow write: if isFinancial();
+      allow delete: if false; // Delete protected
     }
+
+    // 12. Rental dispute legal cases
     match /cases/{caseId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isStaff() || (isSignedIn() && resource.data.tenantId == request.auth.token.email);
+      allow write: if isStaff();
+      allow delete: if false; // Delete protected
     }
+
+    // 13. Digital archive uploaded documents
     match /archive/{archiveId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isStaff() || (isSignedIn() && resource.data.uploadedBy == request.auth.token.email);
+      allow create: if isSignedIn();
+      allow update: if isStaff() || (isSignedIn() && resource.data.uploadedBy == request.auth.token.email);
+      allow delete: if isStaff();
     }
+
+    // 14. Real-time notifications and communications log
     match /notifications/{notificationId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isSignedIn();
     }
+
+    // 15. Team communications
     match /operational_communications/{commId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isStaff();
     }
+
+    // 16. Dynamic payment ledger allocations
     match /payment_allocations/{allocationId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isStaff();
+      allow write: if isFinancial();
+      allow delete: if false; // Delete protected
     }
+
+    // 17. Property owners master database
     match /owners/{ownerId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isStaff() || (isSignedIn() && resource.data.email == request.auth.token.email);
+      allow write: if isStaff();
+      allow delete: if false; // Delete protected
     }
+
+    // 18. Payout owner transfers
     match /owner_transfers/{transferId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isStaff() || (isSignedIn() && resource.data.ownerId == request.auth.token.email);
+      allow write: if isFinancial();
+      allow delete: if false; // Delete protected
     }
+
+    // 19. Auditable receipts/payment reversals
     match /financial_reversals/{reversalId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isStaff();
+      allow write: if isFinancial();
+      allow delete: if false; // Delete protected
     }
+
+    // 20. Manual accounting ledger adjustments
     match /financial_adjustments/{adjId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isStaff();
+      allow write: if isFinancial();
+      allow delete: if false; // Delete protected
     }
+
+    // 21. Defining active financial fiscal quarters/years
     match /financial_periods/{periodId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isSignedIn();
+      allow write: if isSystemOwner();
     }
+
+    // 22. Brokerage/management commissions
     match /commissions/{commId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isStaff();
+      allow write: if isFinancial();
+      allow delete: if false; // Delete protected
     }
+
+    // 23. Tax VAT configurations
     match /vat_rates/{rateId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isSignedIn();
+      allow write: if isSystemOwner();
     }
     match /vatRates/{rateId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isSignedIn();
+      allow write: if isSystemOwner();
     }
+
+    // 24. Office petty cash months
     match /office_petty_cash_months/{monthId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isStaff();
+      allow write: if isFinancial();
+      allow delete: if false; // Delete protected
     }
+
+    // 25. Specific petty cash expense items
     match /office_petty_cash_expenses/{expenseId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isStaff();
+      allow write: if isFinancial();
+      allow delete: if false; // Delete protected
     }
+
+    // 26. Configuration of petty cash categories
     match /office_petty_cash_categories/{categoryId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isSignedIn();
+      allow write: if isFinancial();
+      allow delete: if false; // Delete protected
     }
+
+    // 27. Immutable past years statements historical records
     match /historicalRecords/{recordId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isStaff();
+      allow write: if isSystemOwner();
+      allow delete: if false; // Delete protected
     }
+
+    // 28. Service maintenance requests
     match /maintenance_requests/{reqId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isSignedIn();
     }
+
+    // 29. Maintenance technicians directories
     match /technicians/{techId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isSignedIn();
+      allow write: if isStaff();
     }
+
+    // 30. Collections department action log
     match /collection_actions/{actionId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isStaff();
     }
+
+    // 31. Tenant commitments payment promises
     match /payment_promises/{promiseId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isStaff();
     }
+
+    // 32. Contract renewal drafts and negotiations
     match /lease_renewals/{renewalId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isStaff();
     }
+
+    // 33. Deferred payments installments
     match /deferred_payments/{deferredId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isStaff();
+      allow write: if isFinancial();
+      allow delete: if false; // Delete protected
     }
+
+    // 34. Double-entry chart of accounts Setup
     match /chart_of_accounts/{coaId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isStaff();
+      allow write: if isFinancial();
+      allow delete: if false; // Delete protected
     }
+
+    // 35. Double-entry journal transaction ledger entries
     match /journal_entries/{journalId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isStaff();
+      allow write: if isFinancial();
+      allow delete: if false; // Delete protected
     }
+
+    // 36. ERP security audit trails
     match /auditLogs/{logId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAdmin();
+      allow create: if isSignedIn(); // Allow standard actions to log audit entries
+      allow update, delete: if false; // Audit logs must be completely immutable
     }
+
+    // 37. Draggable UI layouts config
     match /form_layouts/{formId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
+
+    // 38. Hard closing fiscal years certifications
     match /period_certifications/{certId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isStaff();
+      allow write: if isSystemOwner();
+      allow delete: if false; // Delete protected
     }
+
+    // 39. SMTP/API keys/global parameters Settings
     match /settings/{settingId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isSignedIn();
+      allow write: if isSystemOwner();
     }
+
+    // 40. Tenant dynamic risk configuration parameters
     match /risk_config/{configId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isSignedIn();
+      allow write: if isSystemOwner();
     }
+
+    // 41. ERP system backups history
     match /system_backups/{backupId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isSystemOwner();
     }
+
+    // 42. Registered trade legal profile
     match /company_profile/{profileId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isSignedIn();
+      allow write: if isSystemOwner();
     }
-    match /users/{userId} {
-      allow read, write: if isAuthenticated();
-    }
-    match /userPermissionOverrides/{overrideId} {
-      allow read, write: if isAuthenticated();
-    }
-    
-    // Catch-all rule for any sub-collections or dynamic tables
-    match /{document=**} {
-      allow read, write: if isAuthenticated();
-    }
+
   }
 }

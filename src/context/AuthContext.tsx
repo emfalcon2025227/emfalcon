@@ -655,6 +655,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (match) {
       if (match.isActive) {
         setCurrentUser(match);
+        // Securely sync users_by_email map document
+        setDoc(doc(db, "users_by_email", match.email.trim().toLowerCase()), {
+          id: match.id,
+          email: match.email,
+          role: match.role,
+          isActive: match.isActive
+        }, { merge: true }).catch((e) => {
+          console.warn("[AuthContext] Firestore users_by_email sync error:", e.message);
+        });
       } else {
         signOut(auth).catch(() => {});
         setCurrentUser(null);
@@ -827,19 +836,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Authenticate solely using standard Firebase Authentication
       await signInWithEmailAndPassword(auth, user.email, password);
     } catch (error: any) {
-      console.error("[Auth] Firebase login failed:", error.message);
-      if (error.code === "auth/operation-not-allowed") {
+      console.error("[Auth] Firebase login failed, checking auto-registration fallback:", error.message);
+      
+      // If the account does not exist or has an invalid/non-existent credential error,
+      // we attempt to register it on the fly if the user exists locally.
+      // If registration fails with 'auth/email-already-in-use', it means the account exists but the password is wrong!
+      if (error.code === "auth/user-not-found" || error.code === "auth/invalid-credential" || error.code === "auth/wrong-password") {
+        try {
+          console.log("[Auth] Attempting auto-registration for:", user.email);
+          await createUserWithEmailAndPassword(auth, user.email, password);
+          console.log("[Auth] Auto-registration successful for:", user.email);
+        } catch (regError: any) {
+          console.warn("[Auth] Auto-registration failed:", regError.code, regError.message);
+          if (regError.code === "auth/email-already-in-use") {
+            // Email is indeed already in use in Firebase Auth, meaning the user entered an incorrect password
+            errorMsg = "اسم المستخدم أو كلمة المرور غير صحيحة";
+            if (mode === "TENANT") errorMsg = "خطأ في البريد الإلكتروني أو كلمة المرور للمستأجر";
+            if (mode === "OWNER") errorMsg = "خطأ في البريد الإلكتروني أو كلمة المرور لبوابة المالك";
+          } else if (regError.code === "auth/operation-not-allowed") {
+            errorMsg = "auth/operation-not-allowed";
+            return { success: false, error: errorMsg };
+          } else {
+            errorMsg = regError.message || errorMsg;
+            return { success: false, error: errorMsg };
+          }
+        }
+      } else if (error.code === "auth/operation-not-allowed") {
         errorMsg = "auth/operation-not-allowed";
+        return { success: false, error: errorMsg };
       } else if (error.code === "auth/too-many-requests") {
         errorMsg = "تم حظر الحساب مؤقتاً بسبب محاولات دخول خاطئة متكررة";
-      } else if (error.code === "auth/user-not-found" || error.code === "auth/invalid-credential" || error.code === "auth/wrong-password") {
-        errorMsg = "اسم المستخدم أو كلمة المرور غير صحيحة";
-        if (mode === "TENANT") errorMsg = "خطأ في البريد الإلكتروني أو كلمة المرور للمستأجر";
-        if (mode === "OWNER") errorMsg = "خطأ في البريد الإلكتروني أو كلمة المرور لبوابة المالك";
+        return { success: false, error: errorMsg };
       } else {
         errorMsg = error.message || errorMsg;
+        return { success: false, error: errorMsg };
       }
-      return { success: false, error: errorMsg };
     }
 
     // Login successful
@@ -967,6 +998,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setDoc(doc(db, "users", newUser.id), sanitizeForFirestore(newUser), { merge: true }).catch((e) => {
       console.warn("[AuthContext] Firestore create user error:", e.message);
     });
+    if (newUser.email) {
+      setDoc(doc(db, "users_by_email", newUser.email.trim().toLowerCase()), {
+        id: newUser.id,
+        email: newUser.email,
+        role: newUser.role,
+        isActive: newUser.isActive
+      }, { merge: true }).catch((e) => {
+        console.warn("[AuthContext] Firestore users_by_email sync error:", e.message);
+      });
+    }
     return { success: true, user: newUser };
   };
 
@@ -1013,6 +1054,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setDoc(doc(db, "users", userId), sanitizeForFirestore(patch), { merge: true }).catch((e) => {
       console.warn("[AuthContext] Firestore update user error:", e.message);
     });
+    if (updated.email) {
+      setDoc(doc(db, "users_by_email", updated.email.trim().toLowerCase()), {
+        id: updated.id,
+        email: updated.email,
+        role: updated.role,
+        isActive: updated.isActive
+      }, { merge: true }).catch((e) => {
+        console.warn("[AuthContext] Firestore users_by_email sync error:", e.message);
+      });
+    }
     return { success: true };
   };
 
@@ -1043,6 +1094,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setDoc(doc(db, "users", userId), { isActive }, { merge: true }).catch((e) => {
       console.warn("[AuthContext] Firestore update user status error:", e.message);
     });
+    if (target.email) {
+      setDoc(doc(db, "users_by_email", target.email.trim().toLowerCase()), {
+        isActive
+      }, { merge: true }).catch((e) => {
+        console.warn("[AuthContext] Firestore users_by_email sync status error:", e.message);
+      });
+    }
     return { success: true };
   };
 
@@ -1078,6 +1136,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setDoc(doc(db, "users", userId), { role: newRole }, { merge: true }).catch((e) => {
       console.warn("[AuthContext] Firestore update user role error:", e.message);
     });
+    if (target.email) {
+      setDoc(doc(db, "users_by_email", target.email.trim().toLowerCase()), {
+        role: newRole
+      }, { merge: true }).catch((e) => {
+        console.warn("[AuthContext] Firestore users_by_email sync role error:", e.message);
+      });
+    }
     return { success: true };
   };
 

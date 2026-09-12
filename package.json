@@ -13,6 +13,8 @@
     "test:forensic": "tsx src/tests/runForensicValidation.ts"
   },
   "dependencies": {
+    "@firebase/app": "^0.16.2",
+    "@firebase/firestore": "^4.17.2",
     "@google/genai": "^2.21.0",
     "@tailwindcss/vite": "^4.0.0",
     "autoprefixer": "^10.4.20",
