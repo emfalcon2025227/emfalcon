@@ -90,6 +90,7 @@ export interface User {
   mustChangePassword?: boolean;
   isFirstLoginCompleted?: boolean;
   portalAccountStatus?: PortalAccountStatus;
+  firebaseUid?: string;
 }
 
 export interface CompanyLetterheadTemplate {

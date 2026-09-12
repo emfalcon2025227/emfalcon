@@ -42,21 +42,64 @@ try {
   console.warn("Failed to load gemini-key.json fallback", e);
 }
 
-import { initializeApp, getApps } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { initializeApp as initAdminApp, getApps as getAdminApps, cert as adminCert } from "firebase-admin/app";
+import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
+import { getAuth as getAdminAuth } from "firebase-admin/auth";
+
+import { initializeApp as initClientApp, getApps as getClientApps } from "firebase/app";
+import { getFirestore as getClientFirestore, doc as clientDoc, getDoc as clientGetDoc } from "firebase/firestore";
+import firebaseAppletConfig from "./firebase-applet-config.json";
 
 let firestoreAdminDb: any = null;
+let adminAuthClient: any = null;
+let clientFirestoreDb: any = null;
 
 function getFirestoreAdmin() {
   if (firestoreAdminDb) return firestoreAdminDb;
   try {
-    if (!getApps().length) {
-      initializeApp();
+    const base64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+    if (base64) {
+      if (!getAdminApps().length) {
+        const serviceAccount = JSON.parse(Buffer.from(base64, "base64").toString("utf8"));
+        initAdminApp({ credential: adminCert(serviceAccount) });
+      }
+      firestoreAdminDb = getAdminFirestore();
+      return firestoreAdminDb;
     }
-    firestoreAdminDb = getFirestore();
-    return firestoreAdminDb;
+    return null;
   } catch (e) {
     console.warn("[Firebase Admin] Lazy init skipped or unavailable:", e);
+    return null;
+  }
+}
+
+function getAdminAuthClient() {
+  if (adminAuthClient) return adminAuthClient;
+  try {
+    const base64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+    if (base64) {
+      if (!getAdminApps().length) {
+        const serviceAccount = JSON.parse(Buffer.from(base64, "base64").toString("utf8"));
+        initAdminApp({ credential: adminCert(serviceAccount) });
+      }
+      adminAuthClient = getAdminAuth();
+      return adminAuthClient;
+    }
+    return null;
+  } catch (e) {
+    console.warn("[Firebase Admin Auth] Lazy auth init skipped or unavailable:", e);
+    return null;
+  }
+}
+
+function getClientFirestoreDb() {
+  if (clientFirestoreDb) return clientFirestoreDb;
+  try {
+    const app = getClientApps().length ? getClientApps()[0] : initClientApp(firebaseAppletConfig, "server-client-app");
+    clientFirestoreDb = getClientFirestore(app, firebaseAppletConfig.firestoreDatabaseId);
+    return clientFirestoreDb;
+  } catch (e) {
+    console.warn("[Client Firestore Server] Init error:", e);
     return null;
   }
 }
@@ -1103,41 +1146,56 @@ app.get("/api/verify/receipt/:token", async (req, res) => {
     const token = req.params.token;
     if (!token) return res.status(400).json({ error: "Missing verification token" });
 
-    const db = getFirestoreAdmin();
-    if (!db) {
-      return res.status(503).json({ valid: false, error: "DATABASE_UNAVAILABLE" });
-    }
-    const docRef = db.collection('collections').doc(token);
-    const docSnap = await docRef.get();
+    let receipt: any = null;
+    let maskedTenantName = "N/A";
 
-    if (!docSnap.exists) {
+    const adminDb = getFirestoreAdmin();
+    if (adminDb) {
+      const docRef = adminDb.collection('collections').doc(token);
+      const docSnap = await docRef.get();
+      if (docSnap.exists) {
+        receipt = docSnap.data();
+        if (receipt?.tenantId) {
+          const tenantSnap = await adminDb.collection('tenants').doc(receipt.tenantId).get();
+          if (tenantSnap.exists) {
+            const tenantData = tenantSnap.data();
+            const rawName = tenantData?.nameEn || tenantData?.nameAr || "";
+            const parts = rawName.split(" ");
+            if (parts.length > 0) {
+              maskedTenantName = parts[0] + " " + (parts[1] ? parts[1].charAt(0) + ".****" : "****");
+            }
+          }
+        }
+      }
+    } else {
+      const cDb = getClientFirestoreDb();
+      if (cDb) {
+        const docSnap = await clientGetDoc(clientDoc(cDb, 'collections', token));
+        if (docSnap.exists()) {
+          receipt = docSnap.data();
+          if (receipt?.tenantId) {
+            const tenantSnap = await clientGetDoc(clientDoc(cDb, 'tenants', receipt.tenantId));
+            if (tenantSnap.exists()) {
+              const tenantData = tenantSnap.data();
+              const rawName = tenantData?.nameEn || tenantData?.nameAr || "";
+              const parts = rawName.split(" ");
+              if (parts.length > 0) {
+                maskedTenantName = parts[0] + " " + (parts[1] ? parts[1].charAt(0) + ".****" : "****");
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (!receipt) {
       return res.status(404).json({ valid: false, error: "NOT_FOUND" });
     }
-
-    const receipt = docSnap.data();
-    if (!receipt) return res.status(404).json({ valid: false, error: "NOT_FOUND" });
 
     // Check if reversed
     let status = "VERIFIED";
     if (receipt.isReversed || receipt.status === 'CANCELLED' || receipt.status === 'REVERSED') {
       status = "REVERSED";
-    }
-
-    
-    // Fetch tenant name and mask it
-    let maskedTenantName = "N/A";
-    if (receipt.tenantId) {
-      const tenantSnap = await db.collection('tenants').doc(receipt.tenantId).get();
-      if (tenantSnap.exists) {
-        const tenantData = tenantSnap.data();
-        if (tenantData) {
-        const rawName = tenantData.nameEn || tenantData.nameAr || "";
-        const parts = rawName.split(" ");
-        if (parts.length > 0) {
-          maskedTenantName = parts[0] + " " + (parts[1] ? parts[1].charAt(0) + ".****" : "****");
-        }
-        }
-      }
     }
 
     res.json({
@@ -1148,7 +1206,7 @@ app.get("/api/verify/receipt/:token", async (req, res) => {
       currency: "AED",
       paymentDate: receipt.paymentDate,
       paymentMethod: receipt.paymentMethod,
-      tenantId: receipt.tenantId, // Can't easily look up tenant name without another query, so we'll do that
+      tenantId: receipt.tenantId,
       payerName: receipt.payerName,
       status: status
     });
@@ -3340,6 +3398,295 @@ app.post("/api/notifications/dispatch-portal-access", async (req, res) => {
   } catch (err: any) {
     console.error("[Portal Provisioning] Email dispatch error:", err);
     return res.status(500).json({ success: false, error: err?.message || "Failed to dispatch portal access email" });
+  }
+});
+
+// Trusted Server-Side Portal Account Provisioning Endpoint
+app.post("/api/auth/provision-portal-user", async (req, res) => {
+  try {
+    const { portalRole, targetId, email, nameEn, nameAr, phone } = req.body;
+
+    if (!email || !email.includes("@")) {
+      return res.status(400).json({ success: false, error: "البريد الإلكتروني غير صالح أو غير مدخل" });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const dbAdmin = getFirestoreAdmin();
+    const authAdmin = getAdminAuthClient();
+
+    if (!dbAdmin || !authAdmin) {
+      return res.json({
+        success: true,
+        clientManaged: true,
+        message: "حساب البوابة يدار بنجاح عبر الواجهة المباشرة للنظام"
+      });
+    }
+
+    const usersCol = dbAdmin.collection("users");
+
+    let userRecord;
+    let isNewAuthUser = false;
+    let tempPassword = "";
+
+    try {
+      userRecord = await authAdmin.getUserByEmail(cleanEmail);
+    } catch (e: any) {
+      if (e.code === "auth/user-not-found") {
+        const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+        let generatedPass = "";
+        for (let i = 0; i < 12; i++) {
+          generatedPass += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        tempPassword = generatedPass;
+
+        userRecord = await authAdmin.createUser({
+          email: cleanEmail,
+          password: tempPassword,
+          displayName: nameEn || nameAr || cleanEmail,
+          emailVerified: true
+        });
+        isNewAuthUser = true;
+      } else {
+        throw e;
+      }
+    }
+
+    const uid = userRecord.uid;
+    const expectedId = `usr-${portalRole.toLowerCase()}-${targetId}`;
+    let existingUserDoc = await usersCol.doc(expectedId).get();
+    let userData: any = {};
+
+    if (existingUserDoc.exists) {
+      userData = existingUserDoc.data();
+    } else {
+      const emailQuery = await usersCol.where("email", "==", cleanEmail).limit(1).get();
+      if (!emailQuery.empty) {
+        userData = emailQuery.docs[0].data();
+        await usersCol.doc(emailQuery.docs[0].id).delete().catch(() => {});
+      }
+    }
+
+    const updatedUser = {
+      ...userData,
+      id: expectedId,
+      username: cleanEmail,
+      email: cleanEmail,
+      nameEn: nameEn || userData.nameEn || nameAr || cleanEmail,
+      nameAr: nameAr || userData.nameAr || nameEn || cleanEmail,
+      phone: phone || userData.phone || "",
+      role: portalRole === "OWNER" ? "OWNER" : "TENANT",
+      ownerId: portalRole === "OWNER" ? targetId : undefined,
+      tenantId: portalRole === "TENANT" ? targetId : undefined,
+      isActive: userData.isActive !== undefined ? userData.isActive : true,
+      createdAt: userData.createdAt || new Date().toISOString(),
+      mustChangePassword: isNewAuthUser ? true : (userData.mustChangePassword !== undefined ? userData.mustChangePassword : true),
+      isFirstLoginCompleted: isNewAuthUser ? false : (userData.isFirstLoginCompleted !== undefined ? userData.isFirstLoginCompleted : false),
+      portalAccountStatus: isNewAuthUser ? "PENDING_ACTIVATION" : (userData.portalAccountStatus || "ACTIVE"),
+      firebaseUid: uid
+    };
+
+    delete updatedUser.password;
+
+    await usersCol.doc(expectedId).set(updatedUser, { merge: true });
+
+    if (isNewAuthUser && tempPassword) {
+      try {
+        const portalUrl = process.env.PORTAL_URL || req.headers.origin || "https://ais-dev-kurx4d4uvxuhdqsvv4veh2-405724254259.europe-west3.run.app";
+        const loginUrl = portalRole === "OWNER" ? `${portalUrl}/#owner-login` : `${portalUrl}/#tenant-login`;
+
+        const configs = loadConfigs();
+        const secrets = loadSecrets();
+        const emailConfig = getEmailTransporter(configs, secrets);
+
+        const portalName = portalRole === "OWNER" ? "بوابة المالك الاستثمارية" : "بوابة المستأجر";
+        const subject = `${portalName} — صقر الإمارات للعقارات`;
+
+        const messageBody = `
+عزيزي/عزيزتي ${nameAr || nameEn || cleanEmail}،
+
+تحية طيبة،
+يسر شركة صقر الإمارات للعقارات إحاطتكم بأنه تم تفعيل حسابكم الخاص بـ (${portalName}) في النظام الموحد.
+
+بيانات تسجيل الدخول الخاصة بكم:
+- اسم المستخدم: ${cleanEmail}
+- كلمة المرور المؤقتة: ${tempPassword}
+- رابط الدخول المباشر للبوابة: ${loginUrl}
+
+يرجى ملاحظة أنه سيُطلب منك تعيين كلمة مرور جديدة عند تسجيل الدخول لأول مرة لدواعي الأمان والخصوصية.
+
+مع تحيات،
+شركة صقر الإمارات للعقارات
+البريد الإلكتروني للاتصال: ${emailConfig.fromEmail || "info@falcon-realestate.ae"}
+        `.trim();
+
+        if (emailConfig.isLive && emailConfig.transporter) {
+          const mailOptions = {
+            from: `"${emailConfig.senderName}" <${emailConfig.fromEmail}>`,
+            to: cleanEmail,
+            subject: subject,
+            text: messageBody,
+          };
+          await emailConfig.transporter.sendMail(mailOptions);
+        }
+      } catch (emailErr) {
+        console.error("[Portal Provisioning Server] Email notification error:", emailErr);
+      }
+    }
+
+    return res.json({
+      success: true,
+      user: updatedUser,
+      isNew: isNewAuthUser,
+      message: isNewAuthUser ? "تم إنشاء وتفعيل حساب البوابة بنجاح." : "حساب البوابة مسجل مسبقاً ومحدث."
+    });
+  } catch (err: any) {
+    console.error("[Portal Provisioning Server] Provision error:", err);
+    return res.status(500).json({ success: false, error: err?.message || "Failed to provision portal user" });
+  }
+});
+
+// Trusted Server-Side Bulk Portal Account Sync Endpoint
+app.post("/api/auth/sync-portal-users", async (req, res) => {
+  try {
+    const { owners = [], tenants = [] } = req.body;
+    const dbAdmin = getFirestoreAdmin();
+    const authAdmin = getAdminAuthClient();
+
+    if (!dbAdmin || !authAdmin) {
+      return res.json({
+        success: true,
+        clientManaged: true,
+        createdCount: 0,
+        message: "حسابات البوابة تدار بنجاح عبر الواجهة المباشرة للنظام"
+      });
+    }
+
+    const usersCol = dbAdmin.collection("users");
+    let createdCount = 0;
+
+    const allToProvision = [
+      ...owners.map((o: any) => ({ ...o, portalRole: "OWNER" })),
+      ...tenants.map((t: any) => ({ ...t, portalRole: "TENANT" }))
+    ];
+
+    for (const item of allToProvision) {
+      const email = item.email;
+      if (!email || !email.includes("@")) continue;
+
+      const cleanEmail = email.trim().toLowerCase();
+      const expectedId = `usr-${item.portalRole.toLowerCase()}-${item.id}`;
+
+      let existingUserDoc = await usersCol.doc(expectedId).get();
+      let hasUser = existingUserDoc.exists;
+
+      if (!hasUser) {
+        const qEmail = await usersCol.where("email", "==", cleanEmail).limit(1).get();
+        if (!qEmail.empty) {
+          hasUser = true;
+        }
+      }
+
+      if (!hasUser) {
+        let userRecord;
+        let isNewAuthUser = false;
+        let tempPassword = "";
+
+        try {
+          userRecord = await authAdmin.getUserByEmail(cleanEmail);
+        } catch (e: any) {
+          if (e.code === "auth/user-not-found") {
+            const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+            let generatedPass = "";
+            for (let i = 0; i < 12; i++) {
+              generatedPass += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            tempPassword = generatedPass;
+
+            userRecord = await authAdmin.createUser({
+              email: cleanEmail,
+              password: tempPassword,
+              displayName: item.nameEn || item.nameAr || cleanEmail,
+              emailVerified: true
+            });
+            isNewAuthUser = true;
+          } else {
+            continue;
+          }
+        }
+
+        const uid = userRecord.uid;
+
+        const newUserDoc = {
+          id: expectedId,
+          username: cleanEmail,
+          email: cleanEmail,
+          nameEn: item.nameEn || item.nameAr || cleanEmail,
+          nameAr: item.nameAr || item.nameEn || cleanEmail,
+          phone: item.phone || "",
+          role: item.portalRole === "OWNER" ? "OWNER" : "TENANT",
+          ownerId: item.portalRole === "OWNER" ? item.id : undefined,
+          tenantId: item.portalRole === "TENANT" ? item.id : undefined,
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          mustChangePassword: true,
+          isFirstLoginCompleted: false,
+          portalAccountStatus: "PENDING_ACTIVATION",
+          firebaseUid: uid
+        };
+
+        await usersCol.doc(expectedId).set(newUserDoc, { merge: true });
+        createdCount++;
+
+        if (isNewAuthUser && tempPassword) {
+          try {
+            const portalUrl = process.env.PORTAL_URL || req.headers.origin || "https://ais-dev-kurx4d4uvxuhdqsvv4veh2-405724254259.europe-west3.run.app";
+            const loginUrl = item.portalRole === "OWNER" ? `${portalUrl}/#owner-login` : `${portalUrl}/#tenant-login`;
+
+            const configs = loadConfigs();
+            const secrets = loadSecrets();
+            const emailConfig = getEmailTransporter(configs, secrets);
+
+            const portalName = item.portalRole === "OWNER" ? "بوابة المالك الاستثمارية" : "بوابة المستأجر";
+            const subject = `${portalName} — صقر الإمارات للعقارات`;
+
+            const messageBody = `
+عزيزي/عزيزتي ${item.nameAr || item.nameEn || cleanEmail}،
+
+تحية طيبة،
+يسر شركة صقر الإمارات للعقارات إحاطتكم بأنه تم تفعيل حسابكم الخاص بـ (${portalName}) في النظام الموحد.
+
+بيانات تسجيل الدخول الخاصة بكم:
+- اسم المستخدم: ${cleanEmail}
+- كلمة المرور المؤقتة: ${tempPassword}
+- رابط الدخول المباشر للبوابة: ${loginUrl}
+
+يرجى ملاحظة أنه سيُطلب منك تعيين كلمة مرور جديدة عند تسجيل الدخول لأول مرة لدواعي الأمان والخصوصية.
+
+مع تحيات،
+شركة صقر الإمارات للعقارات
+البريد الإلكتروني للاتصال: ${emailConfig.fromEmail || "info@falcon-realestate.ae"}
+            `.trim();
+
+            if (emailConfig.isLive && emailConfig.transporter) {
+              const mailOptions = {
+                from: `"${emailConfig.senderName}" <${emailConfig.fromEmail}>`,
+                to: cleanEmail,
+                subject: subject,
+                text: messageBody,
+              };
+              await emailConfig.transporter.sendMail(mailOptions);
+            }
+          } catch (emailErr) {
+            console.error("Bulk sync email send failed for:", cleanEmail, emailErr);
+          }
+        }
+      }
+    }
+
+    return res.json({ success: true, createdCount });
+  } catch (err: any) {
+    console.error("[Portal Bulk Sync Server] Sync error:", err);
+    return res.status(500).json({ success: false, error: err?.message || "Failed to bulk sync portal users" });
   }
 });
 

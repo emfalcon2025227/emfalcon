@@ -215,8 +215,8 @@ export const TenantAccountsSettings: React.FC = () => {
         </div>
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <button
-            onClick={() => {
-              const count = syncPortalAccounts(owners, tenants);
+            onClick={async () => {
+              const count = await syncPortalAccounts(owners, tenants);
               setSuccess(
                 count > 0
                   ? (language === "ar" ? `تمت المزامنة: تم إنشاء ${count} حسابات بوابة جديدة للمستأجرين` : `Sync complete: Created ${count} new tenant portal accounts`)

@@ -187,8 +187,8 @@ export const OwnerAccountsSettings: React.FC = () => {
     }, 1500);
   };
 
-  const handleSyncAll = () => {
-    const createdCount = syncPortalAccounts(owners, tenants);
+  const handleSyncAll = async () => {
+    const createdCount = await syncPortalAccounts(owners, tenants);
     if (createdCount > 0) {
       setSyncFeedback(
         language === "ar"

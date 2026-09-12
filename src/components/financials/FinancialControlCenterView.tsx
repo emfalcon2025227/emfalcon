@@ -214,7 +214,7 @@ export const FinancialControlCenterView: React.FC = () => {
     setCreatedSnapshots((prev) => [newSnapshot, ...prev]);
     setSnapshotSuccessMessage(
       isAr
-        ? `تم إنشاء لقطة رقابية شرعية وموثقة بنجاح: ${newSnapshot.snapshotNumber} (${newSnapshot.snapshotHash.substring(0, 16)}...)`
+        ? `تم إنشاء لقطة رقابية شرعية وموثقة بنجاح: ${newSnapshot.snapshotNumber} (${(newSnapshot.snapshotHash || "").substring(0, 16)}...)`
         : `Forensic Continuous Control Snapshot generated successfully: ${newSnapshot.snapshotNumber}`
     );
     setTimeout(() => setSnapshotSuccessMessage(""), 5000);
@@ -1069,7 +1069,7 @@ export const FinancialControlCenterView: React.FC = () => {
             {/* Snapshot Hash Badge */}
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700 text-slate-300 font-mono text-[10px]">
               <span className="text-slate-400 font-bold">HASH:</span>
-              <span className="text-indigo-300 font-semibold">{continuousSummary.snapshotHash.substring(0, 16)}...</span>
+              <span className="text-indigo-300 font-semibold">{(continuousSummary.snapshotHash || "").substring(0, 16)}...</span>
             </div>
           </div>
 
@@ -1448,7 +1448,7 @@ export const FinancialControlCenterView: React.FC = () => {
               <div>
                 <span className="opacity-70 text-[11px] block">{isAr ? "بصمة التوثيق (Snapshot Hash):" : "Forensic Hash:"}</span>
                 <span className="font-black text-xs font-mono truncate block text-indigo-700 dark:text-indigo-300">
-                  {continuousSummary.snapshotHash.substring(0, 18)}...
+                  {(continuousSummary.snapshotHash || "").substring(0, 18)}...
                 </span>
               </div>
             </div>

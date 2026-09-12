@@ -566,9 +566,9 @@ interface AuthContextType {
   resetUserPassword: (userId: string, newPassword?: string) => string;
   changeOwnPassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   deleteUser: (userId: string) => { success: boolean; error?: string };
-  provisionPortalAccount: (params: Omit<ProvisionParams, "existingUsers" | "saveUser">) => ReturnType<typeof provisionService>;
+  provisionPortalAccount: (params: Omit<ProvisionParams, "existingUsers" | "saveUser">) => Promise<any>;
   getPortalAccountInfo: (targetId: string, portalRole: "OWNER" | "TENANT", email: string | undefined) => PortalAccountDisplayInfo;
-  syncPortalAccounts: (owners: Owner[], tenants: Tenant[]) => number;
+  syncPortalAccounts: (owners: Owner[], tenants: Tenant[]) => Promise<number>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -649,9 +649,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCurrentUser(null);
       return;
     }
-    const match = users.find(
-      (u) => (u.email || "").trim().toLowerCase() === (firebaseUser.email || "").trim().toLowerCase()
-    );
+    // 1. Prioritize matching by firebaseUid
+    let match = users.find((u) => u.firebaseUid && u.firebaseUid === firebaseUser.uid);
+    
+    // 2. Fallback to matching by email if firebaseUid not yet linked
+    if (!match && firebaseUser.email) {
+      const emailLower = firebaseUser.email.trim().toLowerCase();
+      match = users.find((u) => (u.email || "").trim().toLowerCase() === emailLower);
+      if (match && !match.firebaseUid) {
+        // Auto-link firebaseUid to this matched profile securely
+        match.firebaseUid = firebaseUser.uid;
+        setDoc(doc(db, "users", match.id), { firebaseUid: firebaseUser.uid }, { merge: true }).catch((e) => {
+          console.warn("[AuthContext] Auto-link firebaseUid error:", e.message);
+        });
+      }
+    }
+
     if (match) {
       if (match.isActive) {
         setCurrentUser(match);
@@ -836,41 +849,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Authenticate solely using standard Firebase Authentication
       await signInWithEmailAndPassword(auth, user.email, password);
     } catch (error: any) {
-      console.error("[Auth] Firebase login failed, checking auto-registration fallback:", error.message);
-      
-      // If the account does not exist or has an invalid/non-existent credential error,
-      // we attempt to register it on the fly if the user exists locally.
-      // If registration fails with 'auth/email-already-in-use', it means the account exists but the password is wrong!
-      if (error.code === "auth/user-not-found" || error.code === "auth/invalid-credential" || error.code === "auth/wrong-password") {
-        try {
-          console.log("[Auth] Attempting auto-registration for:", user.email);
-          await createUserWithEmailAndPassword(auth, user.email, password);
-          console.log("[Auth] Auto-registration successful for:", user.email);
-        } catch (regError: any) {
-          console.warn("[Auth] Auto-registration failed:", regError.code, regError.message);
-          if (regError.code === "auth/email-already-in-use") {
-            // Email is indeed already in use in Firebase Auth, meaning the user entered an incorrect password
-            errorMsg = "اسم المستخدم أو كلمة المرور غير صحيحة";
-            if (mode === "TENANT") errorMsg = "خطأ في البريد الإلكتروني أو كلمة المرور للمستأجر";
-            if (mode === "OWNER") errorMsg = "خطأ في البريد الإلكتروني أو كلمة المرور لبوابة المالك";
-          } else if (regError.code === "auth/operation-not-allowed") {
-            errorMsg = "auth/operation-not-allowed";
-            return { success: false, error: errorMsg };
-          } else {
-            errorMsg = regError.message || errorMsg;
-            return { success: false, error: errorMsg };
-          }
-        }
-      } else if (error.code === "auth/operation-not-allowed") {
-        errorMsg = "auth/operation-not-allowed";
-        return { success: false, error: errorMsg };
-      } else if (error.code === "auth/too-many-requests") {
-        errorMsg = "تم حظر الحساب مؤقتاً بسبب محاولات دخول خاطئة متكررة";
-        return { success: false, error: errorMsg };
-      } else {
-        errorMsg = error.message || errorMsg;
-        return { success: false, error: errorMsg };
+      console.error("[Auth] Firebase login failed:", error.code, error.message);
+      if (error.code === "auth/too-many-requests") {
+        return { success: false, error: "تم حظر الحساب مؤقتاً بسبب محاولات دخول خاطئة متكررة" };
       }
+      return { success: false, error: errorMsg };
     }
 
     // Login successful
@@ -1227,20 +1210,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  const provisionPortalAccount = (params: Omit<ProvisionParams, "existingUsers" | "saveUser">) => {
-    return provisionService({
-      ...params,
-      existingUsers: users,
-      saveUser,
-    });
+  const provisionPortalAccount = async (params: Omit<ProvisionParams, "existingUsers" | "saveUser">) => {
+    try {
+      const response = await fetch('/api/auth/provision-portal-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params)
+      });
+      const data = await response.json();
+      if (!data.success) {
+        console.warn("[AuthContext] Server provision endpoint returned error, falling back to local service:", data.error);
+        const res = provisionService({
+          ...params,
+          existingUsers: users,
+          saveUser,
+        });
+        return { success: true, user: res.user, isNew: res.isNew, message: res.message };
+      }
+      if (data.user) {
+        saveUser(data.user);
+      }
+      return { success: true, user: data.user, isNew: data.isNew, message: data.message };
+    } catch (e: any) {
+      console.warn("[AuthContext] provisionPortalAccount network error, falling back to local service:", e.message);
+      const res = provisionService({
+        ...params,
+        existingUsers: users,
+        saveUser,
+      });
+      return { success: true, user: res.user, isNew: res.isNew, message: res.message };
+    }
   };
 
   const getPortalAccountInfo = (targetId: string, portalRole: "OWNER" | "TENANT", email: string | undefined) => {
     return getInfoService(targetId, portalRole, email, users);
   };
 
-  const syncPortalAccounts = (owners: Owner[], tenants: Tenant[]) => {
-    return syncAllService(owners, tenants, users, saveUser);
+  const syncPortalAccounts = async (owners: Owner[], tenants: Tenant[]) => {
+    try {
+      const response = await fetch('/api/auth/sync-portal-users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owners, tenants })
+      });
+      const data = await response.json();
+      if (data.success && typeof data.createdCount === 'number') {
+        // Also refresh local users state if needed or merge saved users
+        return data.createdCount;
+      }
+      const count = syncAllService(owners, tenants, users, saveUser);
+      return count;
+    } catch (e) {
+      console.warn("[AuthContext] syncPortalAccounts network error, falling back to local service:", e);
+      const count = syncAllService(owners, tenants, users, saveUser);
+      return count;
+    }
   };
 
   const deleteUser = (userId: string): { success: boolean; error?: string } => {

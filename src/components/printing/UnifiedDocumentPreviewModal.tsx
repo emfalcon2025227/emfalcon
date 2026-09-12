@@ -58,12 +58,13 @@ export const UnifiedDocumentPreviewModal: React.FC<UnifiedDocumentPreviewModalPr
   // Log read-only view event
   useEffect(() => {
     if (isOpen && doc) {
+      const authId = doc.authoritativeId || doc.id || "";
       logAudit(
         "DOCUMENT_VIEW",
         "DOCUMENT",
-        doc.authoritativeId,
+        authId,
         doc.documentNumber,
-        `Viewed financial document #${doc.documentNumber} (${doc.documentType} - Authoritative ID: ${doc.authoritativeId})`
+        `Viewed financial document #${doc.documentNumber} (${doc.documentType} - Authoritative ID: ${authId})`
       );
     }
   }, [isOpen, doc?.id]);
@@ -74,13 +75,14 @@ export const UnifiedDocumentPreviewModal: React.FC<UnifiedDocumentPreviewModalPr
   const isPrintable = doc.isPrintable;
 
   const handlePrint = () => {
+    const authId = doc.authoritativeId || doc.id || "";
     // Log safe reprint audit
     logAudit(
       "RECEIPT_PRINT",
       "DOCUMENT",
-      doc.authoritativeId,
+      authId,
       doc.documentNumber,
-      `Printed / Exported financial voucher #${doc.documentNumber} (${doc.documentType} - Authoritative ID: ${doc.authoritativeId})`
+      `Printed / Exported financial voucher #${doc.documentNumber} (${doc.documentType} - Authoritative ID: ${authId})`
     );
 
     if (onPrintSuccess) {
@@ -606,7 +608,7 @@ export const UnifiedDocumentPreviewModal: React.FC<UnifiedDocumentPreviewModalPr
                   <div className="flex items-center gap-3">
                     <div className="bg-white p-1 rounded-lg shadow-sm border border-slate-200">
                       <QRCode 
-                        value={`${window.location.origin}/verify/receipt/${doc.authoritativeId}`} 
+                        value={`${window.location.origin}/verify/receipt/${doc.authoritativeId || doc.id || ""}`} 
                         size={48} 
                         level="L" 
                       />
@@ -616,8 +618,8 @@ export const UnifiedDocumentPreviewModal: React.FC<UnifiedDocumentPreviewModalPr
                         <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                         <span>
                           {isAr
-                            ? `مستند مالي إلكتروني معتمد — كود التحقق: ${doc.authoritativeId.substring(0, 12)}`
-                            : `Certified Electronic Financial Voucher — Hash: ${doc.authoritativeId.substring(0, 12)}`}
+                            ? `مستند مالي إلكتروني معتمد — كود التحقق: ${(doc.authoritativeId || doc.id || "").substring(0, 12)}`
+                            : `Certified Electronic Financial Voucher — Hash: ${(doc.authoritativeId || doc.id || "").substring(0, 12)}`}
                         </span>
                       </div>
                       <span className="text-[9px] text-slate-400">

@@ -809,15 +809,17 @@ export const OwnersView: React.FC = () => {
                   </span>
                 </div>
 
-                <div className="mt-3 text-xs bg-amber-50/50 p-2.5 rounded-xl border border-amber-100 flex items-center justify-between">
-                  <div className="flex items-center gap-2 truncate">
-                    <CreditCard className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                    <span className="text-[11px] font-medium text-slate-700 truncate">{owner.bankName}</span>
+                {(owner.bankName || owner.iban) && (
+                  <div className="mt-3 text-xs bg-amber-50/50 p-2.5 rounded-xl border border-amber-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2 truncate">
+                      <CreditCard className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                      <span className="text-[11px] font-medium text-slate-700 truncate">{owner.bankName || "—"}</span>
+                    </div>
+                    <span className="text-[11px] font-mono font-bold text-slate-900 shrink-0">
+                      {owner.iban ? (owner.iban.length > 12 ? `${owner.iban.substring(0, 8)}...${owner.iban.substring(owner.iban.length - 4)}` : owner.iban) : "—"}
+                    </span>
                   </div>
-                  <span className="text-[11px] font-mono font-bold text-slate-900 shrink-0">
-                    {owner.iban.substring(0, 8)}...{owner.iban.substring(owner.iban.length - 4)}
-                  </span>
-                </div>
+                )}
               </div>
 
               <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1">

@@ -5480,7 +5480,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const prop = properties.find((p) => p.id === targetLease.propertyId);
       const chqNum = inst.chequeNumber
         ? String(inst.chequeNumber).trim()
-        : `CHQ-${targetLease.leaseNumber || targetLease.id.substring(0, 4)}-${installmentNumber}`;
+        : `CHQ-${targetLease.leaseNumber || (targetLease.id || "LSE").substring(0, 4)}-${installmentNumber}`;
       const resolvedOwnerId = targetLease.ownerId || prop?.ownerId;
       if (!resolvedOwnerId) {
         return { success: false, error: "لا يمكن إنشاء سجل الشيك المرتجع لعدم وجود مالك مرتبط بعقد الإيجار." };

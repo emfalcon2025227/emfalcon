@@ -61,7 +61,9 @@ export function buildUnifiedFinancialDocuments(data: DataContextSnapshot): Unifi
   const getLease = (id?: string) => (id ? leases.find((l) => l.id === id) : undefined);
 
   // 1. MAPPING RENTAL COLLECTIONS (إيصالات وسندات القبض الإيجاري)
-  collections.forEach((col) => {
+  collections.forEach((col, idx) => {
+    if (!col) return;
+    const safeId = String(col.id || col.receiptNumber || `col-${idx}`);
     const tenant = getTenant(col.tenantId);
     const cheque = col.chequeId ? cheques.find((c) => c.id === col.chequeId) : undefined;
     const lease = cheque?.leaseId
@@ -110,9 +112,9 @@ export function buildUnifiedFinancialDocuments(data: DataContextSnapshot): Unifi
     const tenantName = col.payerName || (tenant ? tenant.nameAr || tenant.nameEn : "المستأجر");
 
     docs.push({
-      id: `doc-rcp-${col.id}`,
-      authoritativeId: col.id,
-      documentNumber: col.receiptNumber || `RCP-${col.id.substring(0, 6)}`,
+      id: `doc-rcp-${safeId}`,
+      authoritativeId: safeId,
+      documentNumber: col.receiptNumber || `RCP-${safeId.substring(0, 6)}`,
       documentType: isSecurity ? "SECURITY_DEPOSIT_RECEIPT" : "RENTAL_RECEIPT",
       titleAr: isSecurity ? "سند استلام مبلغ التأمين" : "إيصال وسند قبض مالي إيجاري",
       titleEn: isSecurity ? "Security Deposit Receipt" : "Official Rental Collection Receipt",
@@ -151,7 +153,9 @@ export function buildUnifiedFinancialDocuments(data: DataContextSnapshot): Unifi
   });
 
   // 2. MAPPING OWNER TRANSFERS (سندات صرف ودفع الملاك)
-  ownerTransfers.forEach((trf) => {
+  ownerTransfers.forEach((trf, idx) => {
+    if (!trf) return;
+    const safeId = String(trf.id || trf.transferNumber || `trf-${idx}`);
     const owner = getOwner(trf.ownerId);
     const property = getProperty(trf.propertyId);
     const unit = getUnit(trf.unitId);
@@ -170,9 +174,9 @@ export function buildUnifiedFinancialDocuments(data: DataContextSnapshot): Unifi
     ];
 
     docs.push({
-      id: `doc-trf-${trf.id}`,
-      authoritativeId: trf.id,
-      documentNumber: trf.transferNumber || `TRF-${trf.id.substring(0, 6)}`,
+      id: `doc-trf-${safeId}`,
+      authoritativeId: safeId,
+      documentNumber: trf.transferNumber || `TRF-${safeId.substring(0, 6)}`,
       documentType: "OWNER_PAYMENT_VOUCHER",
       titleAr: "سند صرف وتحويل مالي للمالك",
       titleEn: "Owner Payment & Disbursement Voucher",
@@ -222,7 +226,9 @@ export function buildUnifiedFinancialDocuments(data: DataContextSnapshot): Unifi
   });
 
   // 3. MAPPING PROPERTY & MAINTENANCE EXPENSES (سندات صرف مصروفات العقارات والصيانة)
-  propertyExpenses.forEach((exp) => {
+  propertyExpenses.forEach((exp, idx) => {
+    if (!exp) return;
+    const safeId = String(exp.id || exp.expenseNumber || `exp-${idx}`);
     const owner = getOwner(exp.ownerId);
     const tenant = getTenant(exp.tenantId);
     const property = getProperty(exp.propertyId);
@@ -268,9 +274,9 @@ export function buildUnifiedFinancialDocuments(data: DataContextSnapshot): Unifi
         : "المكتب / الشركة");
 
     docs.push({
-      id: `doc-exp-${exp.id}`,
-      authoritativeId: exp.id,
-      documentNumber: exp.expenseNumber || `EXP-${exp.id.substring(0, 6)}`,
+      id: `doc-exp-${safeId}`,
+      authoritativeId: safeId,
+      documentNumber: exp.expenseNumber || `EXP-${safeId.substring(0, 6)}`,
       documentType: "PROPERTY_EXPENSE_VOUCHER",
       titleAr: "سند صرف مصروفات عقار وصيانة",
       titleEn: "Property & Maintenance Expense Voucher",
@@ -307,7 +313,9 @@ export function buildUnifiedFinancialDocuments(data: DataContextSnapshot): Unifi
   });
 
   // 4. MAPPING OFFICE PETTY CASH EXPENSES (سندات صرف النثرية والمصاريف المكتبية)
-  officePettyCashExpenses.forEach((pc) => {
+  officePettyCashExpenses.forEach((pc, idx) => {
+    if (!pc) return;
+    const safeId = String(pc.id || pc.expenseNumber || `pc-${idx}`);
     const isReversed = false;
     const breakdown: FinancialBreakdownItem[] = [
       {
@@ -319,9 +327,9 @@ export function buildUnifiedFinancialDocuments(data: DataContextSnapshot): Unifi
     ];
 
     docs.push({
-      id: `doc-pc-${pc.id}`,
-      authoritativeId: pc.id,
-      documentNumber: pc.expenseNumber || `PC-${pc.id.substring(0, 6)}`,
+      id: `doc-pc-${safeId}`,
+      authoritativeId: safeId,
+      documentNumber: pc.expenseNumber || `PC-${safeId.substring(0, 6)}`,
       documentType: "PETTY_CASH_VOUCHER",
       titleAr: "سند صرف عهدة ونثرية مكتبية",
       titleEn: "Office Petty Cash Expense Voucher",
@@ -345,7 +353,9 @@ export function buildUnifiedFinancialDocuments(data: DataContextSnapshot): Unifi
   });
 
   // 5. MAPPING CHEQUES (سندات استلام وحركة الشيكات)
-  cheques.forEach((chq) => {
+  cheques.forEach((chq, idx) => {
+    if (!chq) return;
+    const safeId = String(chq.id || chq.chequeNumber || `chq-${idx}`);
     const tenant = getTenant(chq.tenantId);
     const property = getProperty(chq.propertyId);
     const unit = getUnit(chq.unitId);
@@ -376,9 +386,9 @@ export function buildUnifiedFinancialDocuments(data: DataContextSnapshot): Unifi
     ];
 
     docs.push({
-      id: `doc-chq-${chq.id}`,
-      authoritativeId: chq.id,
-      documentNumber: `CHQ-${chq.chequeNumber}`,
+      id: `doc-chq-${safeId}`,
+      authoritativeId: safeId,
+      documentNumber: chq.chequeNumber ? `CHQ-${chq.chequeNumber}` : `CHQ-${safeId.substring(0, 6)}`,
       documentType: "CHEQUE_RECEIPT",
       titleAr: "سند استلام وحركة شيك إيجاري",
       titleEn: "Cheque Custody & Deposit Receipt",
@@ -413,7 +423,9 @@ export function buildUnifiedFinancialDocuments(data: DataContextSnapshot): Unifi
   });
 
   // 6. MAPPING DAILY DEPOSITS (سندات الإيداع البنكي اليومي)
-  dailyDeposits.forEach((dep) => {
+  dailyDeposits.forEach((dep, idx) => {
+    if (!dep) return;
+    const safeId = String(dep.id || dep.depositReference || `dep-${idx}`);
     const breakdown: FinancialBreakdownItem[] = [
       {
         labelAr: "إجمالي الإيداع البنكي المعتمد",
@@ -424,9 +436,9 @@ export function buildUnifiedFinancialDocuments(data: DataContextSnapshot): Unifi
     ];
 
     docs.push({
-      id: `doc-dep-${dep.id}`,
-      authoritativeId: dep.id,
-      documentNumber: dep.depositReference || `DEP-${dep.id.substring(0, 6)}`,
+      id: `doc-dep-${safeId}`,
+      authoritativeId: safeId,
+      documentNumber: dep.depositReference || `DEP-${safeId.substring(0, 6)}`,
       documentType: "BANK_DEPOSIT_SLIP",
       titleAr: "سند إيداع بنكي يومي معتمد",
       titleEn: "Official Daily Bank Deposit Slip",
@@ -452,5 +464,5 @@ export function buildUnifiedFinancialDocuments(data: DataContextSnapshot): Unifi
   });
 
   // Sort descending by date
-  return docs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  return docs.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
 }

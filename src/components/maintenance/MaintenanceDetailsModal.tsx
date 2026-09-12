@@ -465,8 +465,8 @@ export const MaintenanceDetailsModal: React.FC<MaintenanceDetailsModalProps> = (
                 )}
               </div>
               <h2 className="text-base sm:text-lg font-bold text-white mt-1">
-                {request.issueDescription.substring(0, 70)}
-                {request.issueDescription.length > 70 ? "..." : ""}
+                {(request.issueDescription || "").substring(0, 70)}
+                {(request.issueDescription || "").length > 70 ? "..." : ""}
               </h2>
             </div>
           </div>

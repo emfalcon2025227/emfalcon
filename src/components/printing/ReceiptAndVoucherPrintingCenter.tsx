@@ -171,11 +171,11 @@ export const ReceiptAndVoucherPrintingCenter: React.FC = () => {
       if (searchQuery.trim()) {
         const q = searchQuery.trim();
         const searchPool = [
-          doc.documentNumber,
-          doc.authoritativeId,
-          doc.titleAr,
-          doc.titleEn,
-          doc.partyName,
+          doc.documentNumber || "",
+          doc.authoritativeId || "",
+          doc.titleAr || "",
+          doc.titleEn || "",
+          doc.partyName || "",
           doc.partyPhone || "",
           doc.propertyName || "",
           doc.unitNumber || "",
@@ -187,7 +187,7 @@ export const ReceiptAndVoucherPrintingCenter: React.FC = () => {
           doc.description || "",
           doc.notes || "",
           doc.recordedByName || "",
-          doc.amount.toString(),
+          (doc.amount || 0).toString(),
         ];
 
         const matches = matchAnyArabicSearch(searchPool, q);
@@ -220,7 +220,7 @@ export const ReceiptAndVoucherPrintingCenter: React.FC = () => {
 
     allDocuments.forEach((d) => {
       totalAll++;
-      totalAmountAED += d.amount;
+      totalAmountAED += Number(d.amount || 0);
       if (d.documentType === "RENTAL_RECEIPT") totalReceipts++;
       else if (d.documentType === "SECURITY_DEPOSIT_RECEIPT") totalSecurityDeposits++;
       else if (d.documentType === "OWNER_PAYMENT_VOUCHER") totalOwnerVouchers++;
@@ -329,12 +329,12 @@ export const ReceiptAndVoucherPrintingCenter: React.FC = () => {
       d.date ? d.date.split("T")[0] : "",
       d.titleAr,
       d.partyName,
-      d.amount.toString(),
+      (d.amount ?? 0).toString(),
       d.paymentMethod,
       d.propertyName || "",
       d.unitNumber || "",
       d.status,
-      d.authoritativeId,
+      d.authoritativeId || d.id || "",
     ]);
 
     const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((e) => e.map((val) => `"${(val || "").replace(/"/g, '""')}"`).join(","))].join("\n");
@@ -767,7 +767,7 @@ export const ReceiptAndVoucherPrintingCenter: React.FC = () => {
                         <span className="text-amber-600 font-black">#{doc.documentNumber}</span>
                       </div>
                       <span className="text-[10px] text-slate-400 font-mono block">
-                        {doc.authoritativeId.substring(0, 10)}
+                        {(doc.authoritativeId || doc.id || "").substring(0, 10)}
                       </span>
                     </td>
 
