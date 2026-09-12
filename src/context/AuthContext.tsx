@@ -346,13 +346,94 @@ export const INITIAL_SYSTEM_OWNER: User = {
   portalAccountStatus: "ACTIVE",
 };
 
+export function sha256(ascii: string): string {
+  function rightRotate(value: number, amount: number) {
+    return (value >>> amount) | (value << (32 - amount));
+  }
+  
+  var mathPow = Math.pow;
+  var lengthProperty = 'length';
+  var i, j;
+  var result = '';
+
+  var words: number[] = [];
+  var asciiLength = ascii[lengthProperty];
+  
+  var hash = [
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+  ];
+
+  var k = [
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+  ];
+
+  var wordsLength = ((asciiLength + 8) >> 6) + 1;
+  for (i = 0; i < wordsLength * 16; i++) words[i] = 0;
+  for (i = 0; i < asciiLength; i++) {
+    words[i >> 2] |= ascii.charCodeAt(i) << (24 - (i % 4) * 8);
+  }
+  words[asciiLength >> 2] |= 0x80 << (24 - (asciiLength % 4) * 8);
+  words[wordsLength * 16 - 1] = asciiLength * 8;
+
+  for (j = 0; j < wordsLength; j++) {
+    var w = [];
+    for (i = 0; i < 16; i++) w[i] = words[j * 16 + i];
+    for (i = 16; i < 64; i++) {
+      var s0 = rightRotate(w[i - 15], 7) ^ rightRotate(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+      var s1 = rightRotate(w[i - 2], 17) ^ rightRotate(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+    }
+
+    var a = hash[0], b = hash[1], c = hash[2], d = hash[3], e = hash[4], f = hash[5], g = hash[6], h = hash[7];
+
+    for (i = 0; i < 64; i++) {
+      var S1 = rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25);
+      var ch = (e & f) ^ (~e & g);
+      var temp1 = (h + S1 + ch + k[i] + w[i]) | 0;
+      var S0 = rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22);
+      var maj = (a & b) ^ (a & c) ^ (b & c);
+      var temp2 = (S0 + maj) | 0;
+
+      h = g;
+      g = f;
+      f = e;
+      e = (d + temp1) | 0;
+      d = c;
+      c = b;
+      b = a;
+      a = (temp1 + temp2) | 0;
+    }
+
+    hash[0] = (hash[0] + a) | 0;
+    hash[1] = (hash[1] + b) | 0;
+    hash[2] = (hash[2] + c) | 0;
+    hash[3] = (hash[3] + d) | 0;
+    hash[4] = (hash[4] + e) | 0;
+    hash[5] = (hash[5] + f) | 0;
+    hash[6] = (hash[6] + g) | 0;
+    hash[7] = (hash[7] + h) | 0;
+  }
+
+  for (i = 0; i < 8; i++) {
+    var hex = hash[i].toString(16);
+    while (hex[lengthProperty] < 8) hex = '0' + hex;
+    result += hex;
+  }
+  return result;
+}
+
 export const isSystemOwnerUser = (user?: { id?: string; email?: string; username?: string; role?: string } | null): boolean => {
   if (!user) return false;
   const email = (user.email || "").trim().toLowerCase();
-  const username = (user.username || "").trim().toLowerCase();
-  const id = user.id || "";
   const role = user.role || "";
-  return role === "SYSTEM_OWNER" || email === "m_hamed@msn.com" || id === "usr-01" || username === "mahmoud";
+  return role === "SYSTEM_OWNER" && email === "m_hamed@msn.com";
 };
 
 export interface EffectivePermissionResult {
@@ -752,13 +833,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // 2. Validate password locally against database document before lazy migration
         let isLocalPasswordValid = false;
         if (user.password) {
-          if (user.password.length > 20 && user.password === btoa(password)) {
+          if (user.password === sha256(password)) {
+            isLocalPasswordValid = true;
+          } else if (user.password.length > 20 && user.password === btoa(password)) {
             isLocalPasswordValid = true;
           } else if (user.password === password) {
             isLocalPasswordValid = true;
           }
-        } else {
-          isLocalPasswordValid = true; // No password set in document
         }
 
         if (isLocalPasswordValid) {
@@ -1021,8 +1102,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const resetUserPassword = (userId: string, newPassword?: string): string => {
-    const rawPass = newPassword || ("Falcon@" + Date.now() % 10000);
-    const finalPass = btoa(rawPass);
+    const rawPass = newPassword || ("Falcon@" + (Date.now() % 10000));
+    const finalPass = sha256(rawPass);
     setUsers((prev) =>
       prev.map((u) => {
         if (u.id === userId) {
@@ -1048,13 +1129,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     let isValidPassword = false;
     if (currentUser.password) {
-      if (currentUser.password.length > 20 && currentUser.password === btoa(currentPassword)) {
+      if (currentUser.password === sha256(currentPassword)) {
+        isValidPassword = true;
+      } else if (currentUser.password.length > 20 && currentUser.password === btoa(currentPassword)) {
         isValidPassword = true;
       } else if (currentUser.password === currentPassword) {
         isValidPassword = true;
       }
-    } else {
-      isValidPassword = true;
     }
 
     if (!isValidPassword) {
@@ -1066,7 +1147,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const updatedUser: User = { 
       ...currentUser, 
-      password: btoa(newPassword),
+      password: sha256(newPassword),
       mustChangePassword: false,
       isFirstLoginCompleted: true,
       portalAccountStatus: "ACTIVE"
@@ -1084,9 +1165,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const saveUser = (userToSave: User) => {
     let finalUser = { ...userToSave };
-    // Hash plaintext passwords on save if not already hashed (very simple base64 hash to fulfill prompt constraints without breaking sync)
-    if (finalUser.password && finalUser.password.length < 20 && !finalUser.password.endsWith("==")) {
-      finalUser.password = btoa(finalUser.password);
+    // Hash plaintext passwords on save if not already hashed
+    if (finalUser.password && finalUser.password.length < 20 && !finalUser.password.endsWith("==") && finalUser.password.length !== 64) {
+      finalUser.password = sha256(finalUser.password);
     }
     setUsers((prev) => {
       const idx = prev.findIndex((u) => u.id === finalUser.id);
