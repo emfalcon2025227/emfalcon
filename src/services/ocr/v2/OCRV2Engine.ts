@@ -12,6 +12,7 @@ import { OCRV2Normalizer } from "./OCRV2Normalizer";
 import { OCRV2Validator } from "./OCRV2Validator";
 import { OCRV2Confidence } from "./OCRV2Confidence";
 import { OCRV2Diagnostics } from "./OCRV2Diagnostics";
+import { authenticatedFetch } from "../../../utils/apiClient";
 
 export class OCRV2Engine {
   static async extract(dataUrl: string, profileKey: OCRProfileKey, modelLevel?: OCRModelLevel): Promise<OCRV2Result> {
@@ -64,7 +65,7 @@ export class OCRV2Engine {
       diagnostics.addCheckpoint("07", "MODEL_REQUEST_SENT", "PASS", `Attempt ${attempts} with model ${model}`);
 
       try {
-        const response = await fetch("/api/ocr/v2/extract", {
+        const response = await authenticatedFetch("/api/ocr/v2/extract", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

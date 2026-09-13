@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { allocateNextSequence } from "../utils/sequenceGenerator";
+import { authenticatedFetch } from "../utils/apiClient";
 import { db, handleFirestoreError, OperationType, sanitizeForFirestore } from "../lib/firebase";
 import { collection, onSnapshot, doc, setDoc, deleteDoc, writeBatch, deleteField, runTransaction, getDocs } from "firebase/firestore";
 import { assertCloudWriteAvailable } from "./CloudConnectivityContext";
@@ -2530,7 +2531,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Automated notification dispatch to tenant upon creating tenant profile
     if (newTenant.email) {
       setTimeout(() => {
-        fetch("/api/notifications/dispatch-tenant-welcome", {
+        authenticatedFetch("/api/notifications/dispatch-tenant-welcome", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -2726,7 +2727,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const own = owners.find((o) => o.id === (prop ? prop.ownerId : ""));
         const unt = units.find((u) => u.id === newLease.unitId);
         if ((tnt && tnt.email) || (own && own.email)) {
-          fetch("/api/notifications/dispatch-lease", {
+          authenticatedFetch("/api/notifications/dispatch-lease", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -3022,7 +3023,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const own = owners.find((o) => o.id === (prop ? prop.ownerId : ""));
         const unt = units.find((u) => u.id === lease.unitId);
         if ((tnt && tnt.email) || (own && own.email)) {
-          fetch("/api/notifications/dispatch-lease", {
+          authenticatedFetch("/api/notifications/dispatch-lease", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -4386,7 +4387,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       // 1. Dispatch actual email via SMTP
       if (tenant?.email) {
-        await fetch("/api/notifications/dispatch", {
+        await authenticatedFetch("/api/notifications/dispatch", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -11281,7 +11282,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!cheque) return { success: false, message: "Cheque not found" };
     const tenant = tenants.find((t) => t.id === cheque.tenantId);
     try {
-      const res = await fetch("/api/notifications/dispatch", {
+      const res = await authenticatedFetch("/api/notifications/dispatch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

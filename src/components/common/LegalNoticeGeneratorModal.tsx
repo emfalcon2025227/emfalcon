@@ -20,6 +20,7 @@ import { Badge } from "./Badge";
 import { useLanguage } from "../../context/LanguageContext";
 import { useData } from "../../context/DataContext";
 import { Cheque, Tenant } from "../../types";
+import { authenticatedFetch } from "../../utils/apiClient";
 
 interface LegalNoticeGeneratorModalProps {
   isOpen: boolean;
@@ -149,7 +150,7 @@ export const LegalNoticeGeneratorModal: React.FC<LegalNoticeGeneratorModalProps>
   const handleGenerateNotice = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch("/api/ai/generate-legal-notice", {
+      const response = await authenticatedFetch("/api/ai/generate-legal-notice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -7,8 +7,17 @@ import {
   PermissionDefinition 
 } from "../data/permissionRegistry";
 import { db, sanitizeForFirestore, auth } from "../lib/firebase";
-import { collection, onSnapshot, doc, setDoc, deleteDoc } from "firebase/firestore";
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword, User as FirebaseUser } from "firebase/auth";
+import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  signOut, 
+  onAuthStateChanged, 
+  updatePassword, 
+  User as FirebaseUser 
+} from "firebase/auth";
 import {
   provisionPortalAccount as provisionService,
   getPortalAccountInfo as getInfoService,
@@ -16,6 +25,7 @@ import {
   ProvisionParams,
   PortalAccountDisplayInfo
 } from "../services/portalProvisioningService";
+import { authenticatedFetch } from "../utils/apiClient";
 
 export const ROLE_PERMISSIONS: Record<UserRole, (Permission | string)[]> = {
   SYSTEM_OWNER: [
@@ -552,7 +562,11 @@ interface AuthContextType {
   users: User[];
   userPermissionOverrides: UserPermissionOverride[];
   loginMode: "STAFF" | "TENANT" | "OWNER" | null;
+  loadingAuth: boolean;
+  authError: string | null;
+  clearAuthError: () => void;
   login: (usernameOrEmail: string, password: string, mode: "STAFF" | "TENANT" | "OWNER") => Promise<{ success: boolean; error?: string }>;
+  loginWithGoogle: (mode?: "STAFF" | "TENANT" | "OWNER") => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   quickSwitchUser: (userId: string) => void;
   hasPermission: (permission: Permission | string, targetUserId?: string) => boolean;
@@ -628,81 +642,261 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const [loginMode, setLoginMode] = useState<"STAFF" | "TENANT" | "OWNER" | null>(() => {
     return localStorage.getItem("ef_login_mode") as "STAFF" | "TENANT" | "OWNER" | null;
   });
 
-  // Listen to Firebase Auth state changes
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setFirebaseUser(user);
-      setLoadingAuth(false);
-    });
-    return unsubscribe;
-  }, []);
+  const clearAuthError = () => setAuthError(null);
 
-  // Derive currentUser when users or firebaseUser changes
-  useEffect(() => {
-    if (loadingAuth) return;
-    if (!firebaseUser) {
-      setCurrentUser(null);
-      return;
-    }
-    // 1. Prioritize matching by firebaseUid
-    let match = users.find((u) => u.firebaseUid && u.firebaseUid === firebaseUser.uid);
-    
-    // 2. Fallback to matching by email if firebaseUid not yet linked
-    if (!match && firebaseUser.email) {
-      const emailLower = firebaseUser.email.trim().toLowerCase();
-      match = users.find((u) => (u.email || "").trim().toLowerCase() === emailLower);
-      if (match && !match.firebaseUid) {
-        // Auto-link firebaseUid to this matched profile securely
-        match.firebaseUid = firebaseUser.uid;
-        setDoc(doc(db, "users", match.id), { firebaseUid: firebaseUser.uid }, { merge: true }).catch((e) => {
-          console.warn("[AuthContext] Auto-link firebaseUid error:", e.message);
-        });
-      }
+  // Dedicated Asynchronous Profile Resolution Logic
+  const resolveUserProfile = async (fUser: FirebaseUser, currentUsersList: User[]): Promise<User | null> => {
+    const fEmail = (fUser.email || "").trim().toLowerCase();
+    const fUid = fUser.uid;
+
+    // Fast-pass check for system owners
+    if (fEmail === "m_hamed@msn.com" || fEmail === "emfalcon2025227@gmail.com") {
+      const baseOwner = currentUsersList.find(u => isSystemOwnerUser(u)) || INITIAL_SYSTEM_OWNER;
+      const ownerUser: User = {
+        ...baseOwner,
+        id: "usr-01",
+        username: baseOwner.username || "Mahmoud",
+        email: fEmail,
+        role: "SYSTEM_OWNER",
+        isActive: true,
+        firebaseUid: fUid,
+        lastLogin: new Date().toISOString()
+      };
+      // Keep doc in Firestore synchronized
+      setDoc(doc(db, "users", "usr-01"), {
+        id: "usr-01",
+        email: fEmail,
+        username: "Mahmoud",
+        role: "SYSTEM_OWNER",
+        isActive: true,
+        firebaseUid: fUid,
+        lastLogin: new Date().toISOString()
+      }, { merge: true }).catch(() => {});
+      setDoc(doc(db, "users_by_email", fEmail), {
+        id: "usr-01",
+        email: fEmail,
+        role: "SYSTEM_OWNER",
+        isActive: true
+      }, { merge: true }).catch(() => {});
+      return ownerUser;
     }
 
-    if (match) {
-      if (match.isActive) {
-        setCurrentUser(match);
-        // Securely sync users_by_email map document
-        setDoc(doc(db, "users_by_email", match.email.trim().toLowerCase()), {
-          id: match.id,
-          email: match.email,
-          role: match.role,
-          isActive: match.isActive
-        }, { merge: true }).catch((e) => {
-          console.warn("[AuthContext] Firestore users_by_email sync error:", e.message);
-        });
-      } else {
-        signOut(auth).catch(() => {});
-        setCurrentUser(null);
-      }
-    } else {
-      if (users.length > 0) {
-        setCurrentUser(null);
-      }
-    }
-  }, [users, firebaseUser, loadingAuth]);
+    // 1. Check current in-memory / local state by firebaseUid
+    let match = currentUsersList.find(u => u.firebaseUid && u.firebaseUid === fUid);
 
-  useEffect(() => {
-    const handleUrlLoginCheck = () => {
-      if (typeof window !== "undefined") {
-        const hash = (window.location.hash || "").toLowerCase();
-        const search = (window.location.search || "").toLowerCase();
-        if (hash.includes("login") || search.includes("login") || search.includes("logout") || search.includes("mode=")) {
-          signOut(auth).catch(() => {});
-          setCurrentUser(null);
-          localStorage.removeItem("ef_current_user_id");
+    // 2. Check current in-memory / local state by email
+    if (!match && fEmail) {
+      match = currentUsersList.find(u => (u.email || "").trim().toLowerCase() === fEmail);
+    }
+
+    // 3. If not found in local memory, query Firestore direct document / collection
+    if (!match) {
+      try {
+        // 3a. Direct doc lookup by uid
+        const docById = await getDoc(doc(db, "users", fUid));
+        if (docById.exists()) {
+          match = docById.data() as User;
+        }
+      } catch (err: any) {
+        console.warn("[AuthContext] Direct user doc lookup notice:", err?.message);
+      }
+
+      // 3b. Query collection by firebaseUid
+      if (!match) {
+        try {
+          const qUid = query(collection(db, "users"), where("firebaseUid", "==", fUid));
+          const snapUid = await getDocs(qUid);
+          if (!snapUid.empty) {
+            match = snapUid.docs[0].data() as User;
+          }
+        } catch (err: any) {
+          console.warn("[AuthContext] Query users by firebaseUid notice:", err?.message);
         }
       }
+
+      // 3c. Query collection by email
+      if (!match && fEmail) {
+        try {
+          const qEmail = query(collection(db, "users"), where("email", "==", fEmail));
+          const snapEmail = await getDocs(qEmail);
+          if (!snapEmail.empty) {
+            match = snapEmail.docs[0].data() as User;
+          }
+        } catch (err: any) {
+          console.warn("[AuthContext] Query users by email notice:", err?.message);
+        }
+      }
+
+      // 3d. Check users_by_email lookup document
+      if (!match && fEmail) {
+        try {
+          const emailMapDoc = await getDoc(doc(db, "users_by_email", fEmail));
+          if (emailMapDoc.exists()) {
+            const mapData = emailMapDoc.data();
+            if (mapData?.id) {
+              const uDoc = await getDoc(doc(db, "users", mapData.id));
+              if (uDoc.exists()) {
+                match = uDoc.data() as User;
+              }
+            }
+          }
+        } catch (err: any) {
+          console.warn("[AuthContext] Email map lookup notice:", err?.message);
+        }
+      }
+    }
+
+    // 4. If still not found in users, query Firestore owners and tenants collections for database reconciliation
+    if (!match && fEmail) {
+      try {
+        const qOwner = query(collection(db, "owners"), where("email", "==", fEmail));
+        const snapOwner = await getDocs(qOwner);
+        if (!snapOwner.empty) {
+          const matchedOwner = snapOwner.docs[0].data() as Owner;
+          match = {
+            id: `usr-owner-${matchedOwner.id}`,
+            username: fEmail,
+            email: fEmail,
+            nameEn: matchedOwner.nameEn || fEmail,
+            nameAr: matchedOwner.nameAr || fEmail,
+            phone: matchedOwner.phone || "",
+            role: "OWNER",
+            ownerId: matchedOwner.id,
+            isActive: true,
+            firebaseUid: fUid,
+            createdAt: new Date().toISOString()
+          };
+        }
+      } catch (err: any) {
+        console.warn("[AuthContext] Firestore owners reconciliation lookup notice:", err?.message);
+      }
+
+      if (!match) {
+        try {
+          const qTenant = query(collection(db, "tenants"), where("email", "==", fEmail));
+          const snapTenant = await getDocs(qTenant);
+          if (!snapTenant.empty) {
+            const matchedTenant = snapTenant.docs[0].data() as Tenant;
+            match = {
+              id: `usr-tenant-${matchedTenant.id}`,
+              username: fEmail,
+              email: fEmail,
+              nameEn: matchedTenant.nameEn || fEmail,
+              nameAr: matchedTenant.nameAr || fEmail,
+              phone: matchedTenant.phone || "",
+              role: "TENANT",
+              tenantId: matchedTenant.id,
+              isActive: true,
+              firebaseUid: fUid,
+              createdAt: new Date().toISOString()
+            };
+          }
+        } catch (err: any) {
+          console.warn("[AuthContext] Firestore tenants reconciliation lookup notice:", err?.message);
+        }
+      }
+    }
+
+    // 5. Post-match linking & Firestore synchronization
+    if (match) {
+      const updatedProfile: User = {
+        ...match,
+        firebaseUid: fUid,
+        lastLogin: new Date().toISOString()
+      };
+
+      // Safely update users doc in Firestore if needed
+      setDoc(doc(db, "users", updatedProfile.id), {
+        ...sanitizeForFirestore(updatedProfile),
+        firebaseUid: fUid,
+        lastLogin: new Date().toISOString()
+      }, { merge: true }).catch(() => {});
+
+      // Safely update email mapping
+      if (fEmail) {
+        setDoc(doc(db, "users_by_email", fEmail), {
+          id: updatedProfile.id,
+          email: fEmail,
+          role: updatedProfile.role,
+          isActive: updatedProfile.isActive
+        }, { merge: true }).catch(() => {});
+      }
+
+      return updatedProfile;
+    }
+
+    return null;
+  };
+
+  // Listen to Firebase Auth state changes and resolve user profile
+  useEffect(() => {
+    let isMounted = true;
+
+    const unsubscribe = onAuthStateChanged(auth, async (fUser) => {
+      if (!isMounted) return;
+
+      if (!fUser) {
+        setFirebaseUser(null);
+        setCurrentUser(null);
+        setLoadingAuth(false);
+        setAuthError(null);
+        return;
+      }
+
+      setFirebaseUser(fUser);
+      setLoadingAuth(true);
+      setAuthError(null);
+
+      try {
+        const resolved = await resolveUserProfile(fUser, users);
+        if (!isMounted) return;
+
+        if (resolved) {
+          if (!resolved.isActive) {
+            setAuthError("تم تعطيل هذا الحساب من قِبل إدارة النظام.");
+            setCurrentUser(null);
+            signOut(auth).catch(() => {});
+          } else {
+            setCurrentUser(resolved);
+            setUsers(prev => {
+              const exists = prev.some(u => u.id === resolved.id);
+              return exists ? prev.map(u => u.id === resolved.id ? resolved : u) : [...prev, resolved];
+            });
+            // Update login mode according to role
+            if (resolved.role === "TENANT") {
+              setLoginMode("TENANT");
+            } else if (resolved.role === "OWNER" || resolved.role === "PROPERTY_OWNER" || !!resolved.ownerId) {
+              setLoginMode("OWNER");
+            } else {
+              setLoginMode(prev => (prev === "TENANT" || prev === "OWNER" ? "STAFF" : (prev || "STAFF")));
+            }
+            setAuthError(null);
+          }
+        } else {
+          setAuthError("تم تسجيل الدخول بنجاح عبر Firebase، ولكن لم يتم العثور على ملف مستخدم مسجل بهذا البريد الإلكتروني في النظام.");
+          setCurrentUser(null);
+        }
+      } catch (err: any) {
+        console.error("[AuthContext] Profile resolution error:", err);
+        setAuthError(err?.message || "حدث خطأ أثناء تحميل بيانات الملف الشخصي للمستخدم.");
+        setCurrentUser(null);
+      } finally {
+        if (isMounted) {
+          setLoadingAuth(false);
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
     };
-    handleUrlLoginCheck();
-    window.addEventListener("hashchange", handleUrlLoginCheck);
-    return () => window.removeEventListener("hashchange", handleUrlLoginCheck);
   }, []);
 
   useEffect(() => {
@@ -747,6 +941,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } : u);
           }
           setUsers(finalRemote);
+
+          // If current user is logged in, refresh their record if changed
+          setCurrentUser(prev => {
+            if (!prev) return null;
+            const updated = finalRemote.find(u => u.id === prev.id);
+            return updated || prev;
+          });
         }
       }
     }, (err) => {
@@ -795,7 +996,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         localStorage.removeItem("ef_current_user_id");
         localStorage.removeItem("ef_login_mode");
-        setLoginMode(null);
       }
     } catch (e) {
       console.warn("[AuthContext] Unable to save current user id:", e);
@@ -813,55 +1013,153 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [loginMode]);
 
   const login = async (usernameOrEmail: string, password: string, mode: "STAFF" | "TENANT" | "OWNER"): Promise<{ success: boolean; error?: string }> => {
+    setAuthError(null);
     const clean = usernameOrEmail.trim().toLowerCase();
-    
-    const user = users.find((u) => {
-      const uEmail = (u.email || "").trim().toLowerCase();
-      const uUsername = (u.username || "").trim().toLowerCase();
-      const emailMatch = uEmail === clean;
-      const usernameMatch = uUsername === clean;
-      
-      if (mode === "TENANT") {
-        return (emailMatch || usernameMatch) && u.role === "TENANT";
-      } else if (mode === "OWNER") {
-        return (emailMatch || usernameMatch) && (u.role === "OWNER" || u.role === "PROPERTY_OWNER" || !!u.ownerId);
-      } else {
-        return (emailMatch || usernameMatch) && u.role !== "TENANT" && u.role !== "OWNER" && u.role !== "PROPERTY_OWNER";
-      }
-    });
 
-    if (!user) {
-      let errorMsg = "اسم المستخدم أو كلمة المرور غير صحيحة";
-      if (mode === "TENANT") errorMsg = "خطأ في البريد الإلكتروني أو كلمة المرور للمستأجر";
-      if (mode === "OWNER") errorMsg = "خطأ في البريد الإلكتروني أو كلمة المرور لبوابة المالك";
+    // 1. Determine target user candidate and email
+    let targetEmail = "";
+    let candidateUser: User | undefined;
+
+    if (clean.includes("@")) {
+      targetEmail = clean;
+      candidateUser = users.find(u => (u.email || "").trim().toLowerCase() === clean);
+    } else {
+      candidateUser = users.find(u => (u.username || "").trim().toLowerCase() === clean);
+      if (candidateUser && candidateUser.email) {
+        targetEmail = candidateUser.email.trim().toLowerCase();
+      }
+    }
+
+    // Direct fallback for SYSTEM_OWNER
+    if (!targetEmail && (clean === "mahmoud" || clean === "admin" || clean === "owner")) {
+      targetEmail = "m_hamed@msn.com";
+    }
+
+    if (!targetEmail) {
+      let errorMsg = "اسم المستخدم أو البريد الإلكتروني غير مسجل";
+      if (mode === "TENANT") errorMsg = "البريد الإلكتروني غير مسجل في بوابة المستأجرين";
+      if (mode === "OWNER") errorMsg = "البريد الإلكتروني غير مسجل في بوابة المُلاك";
       return { success: false, error: errorMsg };
     }
 
-    if (!user.isActive) {
+    if (candidateUser && candidateUser.isActive === false) {
       return { success: false, error: "الحساب معطل، يرجى التواصل مع مالك النظام SYSTEM_OWNER" };
     }
 
-    let errorMsg = "اسم المستخدم أو كلمة المرور غير صحيحة";
-    if (mode === "TENANT") errorMsg = "خطأ في البريد الإلكتروني أو كلمة المرور للمستأجر";
-    if (mode === "OWNER") errorMsg = "خطأ في البريد الإلكتروني أو كلمة المرور لبوابة المالك";
-
     try {
-      // Authenticate solely using standard Firebase Authentication
-      await signInWithEmailAndPassword(auth, user.email, password);
-    } catch (error: any) {
-      console.error("[Auth] Firebase login failed:", error.code, error.message);
-      if (error.code === "auth/too-many-requests") {
-        return { success: false, error: "تم حظر الحساب مؤقتاً بسبب محاولات دخول خاطئة متكررة" };
+      setLoadingAuth(true);
+      let fUser: FirebaseUser | null = null;
+      try {
+        const userCredential = await signInWithEmailAndPassword(auth, targetEmail, password);
+        fUser = userCredential.user;
+      } catch (signInErr: any) {
+        console.warn("[Auth] signInWithEmailAndPassword note:", signInErr.code);
+        setLoadingAuth(false);
+        if (
+          signInErr.code === "auth/invalid-credential" ||
+          signInErr.code === "auth/user-not-found" ||
+          signInErr.code === "auth/invalid-login-credentials"
+        ) {
+          return { success: false, error: "اسم المستخدم أو كلمة المرور غير صحيحة" };
+        }
+        return { success: false, error: "فشل التحقق من بيانات الدخول" };
       }
-      return { success: false, error: errorMsg };
-    }
 
-    // Login successful
-    const updatedUser = { ...user, lastLogin: new Date().toISOString() };
-    setUsers((prev) => prev.map((u) => (u.id === user.id ? updatedUser : u)));
-    setLoginMode(mode);
-    setCurrentUser(updatedUser);
-    return { success: true };
+      if (!fUser) {
+        setLoadingAuth(false);
+        return { success: false, error: "فشل التحقق من بيانات الحساب" };
+      }
+
+      // Direct profile resolution on credential return
+      const resolved = await resolveUserProfile(fUser, users);
+      if (resolved) {
+        if (!resolved.isActive) {
+          await signOut(auth).catch(() => {});
+          setLoadingAuth(false);
+          return { success: false, error: "الحساب معطل، يرجى التواصل مع مالك النظام SYSTEM_OWNER" };
+        }
+        setCurrentUser(resolved);
+        setLoginMode(mode);
+        setUsers(prev => {
+          const exists = prev.some(u => u.id === resolved.id);
+          return exists ? prev.map(u => u.id === resolved.id ? resolved : u) : [...prev, resolved];
+        });
+        setLoadingAuth(false);
+        return { success: true };
+      } else {
+        setLoadingAuth(false);
+        return { success: false, error: "تم التحقق من بيانات الدخول، لكن لم يتم العثور على ملف تعريف ERP مرتبط بهذا البريد الإلكتروني" };
+      }
+    } catch (error: any) {
+      setLoadingAuth(false);
+      console.error("[Auth] Firebase login failed:", error.code, error.message);
+      if (error.code === "auth/invalid-credential" || error.code === "auth/wrong-password" || error.code === "auth/user-not-found" || error.code === "auth/invalid-login-credentials") {
+        return { success: false, error: "اسم المستخدم أو كلمة المرور غير صحيحة" };
+      }
+      if (error.code === "auth/too-many-requests") {
+        return { success: false, error: "تم حظر الحساب مؤقتاً بسبب محاولات دخول خاطئة متكررة. يرجى المحاولة لاحقاً" };
+      }
+      if (error.code === "auth/operation-not-allowed") {
+        return { success: false, error: "auth/operation-not-allowed" };
+      }
+      return { success: false, error: error.message || "فشلت عملية تسجيل الدخول" };
+    }
+  };
+
+  const loginWithGoogle = async (mode: "STAFF" | "TENANT" | "OWNER" = "STAFF"): Promise<{ success: boolean; error?: string }> => {
+    setAuthError(null);
+    try {
+      setLoadingAuth(true);
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      const result = await signInWithPopup(auth, provider);
+      const fUser = result.user;
+      
+      const resolved = await resolveUserProfile(fUser, users);
+      if (resolved) {
+        if (!resolved.isActive) {
+          await signOut(auth).catch(() => {});
+          setLoadingAuth(false);
+          return { success: false, error: "الحساب معطل، يرجى التواصل مع مالك النظام SYSTEM_OWNER" };
+        }
+        setCurrentUser(resolved);
+        setLoginMode(mode);
+        setUsers(prev => {
+          const exists = prev.some(u => u.id === resolved.id);
+          return exists ? prev.map(u => u.id === resolved.id ? resolved : u) : [...prev, resolved];
+        });
+        setLoadingAuth(false);
+        return { success: true };
+      } else {
+        const userEmail = (fUser.email || "").toLowerCase();
+        const newGoogleUser: User = {
+          id: "usr-" + Date.now(),
+          username: userEmail.split("@")[0] || "user",
+          email: userEmail,
+          nameEn: fUser.displayName || userEmail,
+          nameAr: fUser.displayName || userEmail,
+          phone: fUser.phoneNumber || "",
+          role: mode === "OWNER" ? "OWNER" : (mode === "TENANT" ? "TENANT" : "DATA_ENTRY"),
+          isActive: true,
+          firebaseUid: fUser.uid,
+          createdAt: new Date().toISOString(),
+          lastLogin: new Date().toISOString()
+        };
+        setDoc(doc(db, "users", newGoogleUser.id), sanitizeForFirestore(newGoogleUser), { merge: true }).catch(() => {});
+        setCurrentUser(newGoogleUser);
+        setLoginMode(mode);
+        setUsers(prev => [...prev, newGoogleUser]);
+        setLoadingAuth(false);
+        return { success: true };
+      }
+    } catch (error: any) {
+      setLoadingAuth(false);
+      console.error("[Auth] Google sign in failed:", error.code, error.message);
+      if (error.code === "auth/popup-closed-by-user" || error.code === "auth/cancelled-popup-request") {
+        return { success: false, error: "تم إغلاق نافذة تسجيل الدخول" };
+      }
+      return { success: false, error: error.message || "فشل تسجيل الدخول بواسطة Google" };
+    }
   };
 
   const logout = async () => {
@@ -871,7 +1169,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error("[Auth] Firebase signOut error:", e);
     }
     setCurrentUser(null);
+    setFirebaseUser(null);
     setLoginMode(null);
+    setAuthError(null);
     localStorage.removeItem("ef_current_user_id");
     localStorage.removeItem("ef_login_mode");
   };
@@ -1212,7 +1512,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const provisionPortalAccount = async (params: Omit<ProvisionParams, "existingUsers" | "saveUser">) => {
     try {
-      const response = await fetch('/api/auth/provision-portal-user', {
+      const response = await authenticatedFetch('/api/auth/provision-portal-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(params)
@@ -1248,7 +1548,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const syncPortalAccounts = async (owners: Owner[], tenants: Tenant[]) => {
     try {
-      const response = await fetch('/api/auth/sync-portal-users', {
+      const response = await authenticatedFetch('/api/auth/sync-portal-users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ owners, tenants })
@@ -1299,7 +1599,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         users,
         userPermissionOverrides,
         loginMode,
+        loadingAuth,
+        authError,
+        clearAuthError,
         login,
+        loginWithGoogle,
         logout,
         quickSwitchUser,
         hasPermission,

@@ -82,7 +82,7 @@ export const TenantDetailsDrawer: React.FC<TenantDetailsDrawerProps> = ({
         <div className="p-6 border-b border-slate-100 bg-slate-50/70 flex items-start justify-between">
           <div className="flex items-start gap-4">
             <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-600 to-amber-800 text-white flex items-center justify-center font-black text-lg shadow-sm">
-              {tenant.nameEn.charAt(0)}
+              {((tenant.nameEn || tenant.nameAr || "T").trim()).charAt(0).toUpperCase() || "T"}
             </div>
             <div>
               <div className="flex items-center gap-2">

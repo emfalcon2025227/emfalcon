@@ -1,4 +1,5 @@
 import { User, Owner, Tenant, PortalAccountStatus } from "../types";
+import { authenticatedFetch } from "../utils/apiClient";
 
 /**
  * Centralized Owner Portal Login URL generator.
@@ -33,24 +34,6 @@ export const isValidEmail = (email?: string): boolean => {
  * Generates an initial temporary password from the person's name.
  * Example: "Ahmed Mohamed" -> "Ahmed@123"
  */
-export const generateInitialPassword = (nameEn?: string, nameAr?: string): string => {
-  let firstWord = "";
-  if (nameEn && nameEn.trim().length > 0) {
-    firstWord = nameEn.trim().split(/\s+/)[0] || "";
-  }
-  if (!firstWord && nameAr && nameAr.trim().length > 0) {
-    firstWord = nameAr.trim().split(/\s+/)[0] || "";
-  }
-
-  // Sanitize firstWord to English characters if possible, or fallback
-  const sanitized = firstWord.replace(/[^a-zA-Z]/g, "");
-  if (sanitized.length >= 2) {
-    const capitalized = sanitized.charAt(0).toUpperCase() + sanitized.slice(1).toLowerCase();
-    return `${capitalized}@123`;
-  }
-
-  return "Falcon@123";
-};
 
 export interface ProvisionParams {
   portalRole: "OWNER" | "TENANT";
@@ -179,7 +162,6 @@ export const provisionPortalAccount = (params: ProvisionParams): ProvisionResult
     };
   }
 
-  const initialPassword = generateInitialPassword(nameEn, nameAr);
   const newUserId = `usr-${portalRole.toLowerCase()}-${targetId}`;
 
   const newUser: User = {
@@ -194,7 +176,6 @@ export const provisionPortalAccount = (params: ProvisionParams): ProvisionResult
     tenantId: portalRole === "TENANT" ? targetId : undefined,
     isActive: true,
     createdAt: new Date().toISOString(),
-    password: initialPassword,
     mustChangePassword: true,
     isFirstLoginCompleted: false,
     portalAccountStatus: "PENDING_ACTIVATION",
@@ -212,32 +193,28 @@ export const provisionPortalAccount = (params: ProvisionParams): ProvisionResult
     );
   }
 
-  // Trigger email dispatch in the background
+  // Trigger secure activation email dispatch via server endpoint in the background
   try {
     const portalUrl = typeof window !== "undefined" ? window.location.origin : "https://ais-dev-kurx4d4uvxuhdqsvv4veh2-405724254259.europe-west3.run.app";
-    const loginUrl = portalRole === "OWNER" ? getOwnerPortalLoginUrl(portalUrl) : getTenantPortalLoginUrl(portalUrl);
-    fetch("/api/notifications/dispatch-portal-access", {
+    authenticatedFetch("/api/auth/send-portal-activation-email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        recipient: cleanEmail,
-        role: portalRole,
+        email: cleanEmail,
         name: nameAr || nameEn || cleanEmail,
-        username: cleanEmail,
-        password: initialPassword,
-        portalUrl: portalUrl,
-        loginUrl: loginUrl
+        role: portalRole,
+        customBaseUrl: portalUrl
       })
-    }).catch(err => console.error("Failed to send portal access email", err));
+    }).catch(err => console.error("Failed to send portal activation link email", err));
   } catch (e) {
-    console.error("Error triggering email dispatch", e);
+    console.error("Error triggering activation email dispatch", e);
   }
 
   return {
     status: "PENDING_ACTIVATION",
     user: newUser,
     isNew: true,
-    message: `تم إنشاء حساب البوابة تلقائياً بكلمة مرور مؤقتة: ${initialPassword}`,
+    message: "تم إنشاء حساب البوابة وإرسال رابط التفعيل الآمن إلى البريد الإلكتروني",
   };
 };
 

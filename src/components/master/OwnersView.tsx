@@ -554,6 +554,31 @@ export const OwnersView: React.FC = () => {
     }
     const trnVal = trn.trim() ? trn.trim() : undefined;
     if (editingOwner) {
+      if (email && email.includes("@") && email !== editingOwner.email) {
+        try {
+          const res = await fetch("/api/auth/sync-email", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${(window as any).__firebaseToken || ""}`,
+            },
+            body: JSON.stringify({
+              targetId: editingOwner.id,
+              role: "OWNER",
+              newEmail: email,
+            }),
+          });
+          const data = await res.json();
+          if (!data.success && !data.clientManaged) {
+             alert(data.error || (language === "ar" ? "فشلت مزامنة البريد الإلكتروني مع نظام الدخول." : "Failed to synchronize email with authentication system."));
+             return; // Stop update if sync fails
+          }
+        } catch (e: any) {
+          alert((language === "ar" ? "خطأ في مزامنة البريد الإلكتروني: " : "Error synchronizing email: ") + e.message);
+          return;
+        }
+      }
+      
       updateOwner(editingOwner.id, {
         code,
         nameEn,

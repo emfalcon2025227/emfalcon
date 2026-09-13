@@ -59,7 +59,7 @@ import { UnifiedCommunicationCenter } from "./components/communication/UnifiedCo
 
 const MainAppContent: React.FC = () => {
   const { language } = useLanguage();
-  const { isAuthenticated, currentUser, loginMode } = useAuth();
+  const { isAuthenticated, currentUser, loginMode, loadingAuth, authError, logout } = useAuth();
   const isOwner = currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'SYSTEM_OWNER';
   const isTenantMode = loginMode === "TENANT";
   const isOwnerMode = loginMode === "OWNER" || currentUser?.role === "OWNER" || currentUser?.role === "PROPERTY_OWNER";
@@ -223,6 +223,51 @@ const MainAppContent: React.FC = () => {
       setCurrentView("REPORTS");
     }
   }, [isAuthenticated, collections, tenants, cheques]);
+
+  if (loadingAuth) {
+    return (
+      <div 
+        dir={language === "ar" ? "rtl" : "ltr"}
+        className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center p-4 selection:bg-amber-500 selection:text-white"
+      >
+        <div className="flex flex-col items-center gap-4 animate-in fade-in duration-300">
+          <div className="w-12 h-12 border-4 border-amber-600/30 border-t-amber-500 rounded-full animate-spin" />
+          <p className="text-xs font-semibold text-slate-300">
+            {language === "ar" ? "جاري التحقق من جلسة تسجيل الدخول..." : "Authenticating session..."}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (authError) {
+    return (
+      <div 
+        dir={language === "ar" ? "rtl" : "ltr"}
+        className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center p-4 selection:bg-amber-500 selection:text-white"
+      >
+        <div className="max-w-md w-full bg-white rounded-3xl p-8 text-slate-900 shadow-2xl border border-rose-100 animate-in fade-in zoom-in-95 duration-200">
+          <div className="flex items-center gap-3 text-rose-600 mb-3 font-bold">
+            <AlertTriangle className="w-6 h-6 shrink-0" />
+            <span className="text-base">
+              {language === "ar" ? "تنبيه في مصادقة الحساب" : "Authentication Notice"}
+            </span>
+          </div>
+          <p className="text-xs text-slate-600 mb-6 leading-relaxed">
+            {authError}
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => logout()}
+              className="px-5 py-2.5 bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm"
+            >
+              {language === "ar" ? "العودة لشاشة الدخول" : "Return to Login"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <LoginView />;

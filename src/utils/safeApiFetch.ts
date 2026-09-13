@@ -4,6 +4,8 @@
  * Inspects HTTP response status, headers, and body before parsing.
  */
 
+import { getAuthToken } from "./apiClient";
+
 export interface SafeApiResponse<T = any> {
   success: boolean;
   data?: T;
@@ -29,7 +31,16 @@ export async function safeFetchJson<T = any>(
        };
     }
 
-    const response = await fetch(input, init);
+    const token = await getAuthToken();
+    const headers = new Headers(init?.headers || {});
+    if (token && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+
+    const response = await fetch(input, {
+      ...init,
+      headers,
+    });
     const contentType = response.headers.get("content-type") || "";
     const rawText = await response.text();
 

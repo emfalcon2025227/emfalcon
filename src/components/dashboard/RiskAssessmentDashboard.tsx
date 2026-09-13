@@ -35,6 +35,7 @@ import { useLanguage } from "../../context/LanguageContext";
 import { useData } from "../../context/DataContext";
 import { Badge } from "../common/Badge";
 import { Tenant } from "../../types";
+import { authenticatedFetch } from "../../utils/apiClient";
 
 interface RiskAssessmentDashboardProps {
   onSelectTenant?: (tenant: Tenant) => void;
@@ -180,7 +181,7 @@ export const RiskAssessmentDashboard: React.FC<RiskAssessmentDashboardProps> = (
   const fetchRiskAnalysis = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch("/api/ai/analyze-risk", {
+      const response = await authenticatedFetch("/api/ai/analyze-risk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

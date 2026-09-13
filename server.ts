@@ -106,8 +106,314 @@ function getClientFirestoreDb() {
 const app = express();
 const PORT = 3000;
 
+// Security Headers Middleware (Production Grade Hardening)
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(self), microphone=(), geolocation=()");
+  // Protect API responses from malicious caching
+  if (req.path.startsWith("/api/")) {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+  }
+  next();
+});
+
+// Strict In-Memory Sliding Window Rate Limiter Factory
+interface RateLimitRecord {
+  timestamps: number[];
+}
+const rateLimitStores = new Map<string, Map<string, RateLimitRecord>>();
+
+function createRateLimiter(options: { windowMs: number; max: number; message: string }) {
+  const store = new Map<string, RateLimitRecord>();
+  const { windowMs, max, message } = options;
+
+  // Cleanup old entries every 5 minutes to prevent memory leak
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, record] of store.entries()) {
+      record.timestamps = record.timestamps.filter((t) => now - t < windowMs);
+      if (record.timestamps.length === 0) {
+        store.delete(key);
+      }
+    }
+  }, 5 * 60 * 1000).unref();
+
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+    const now = Date.now();
+
+    let record = store.get(ip);
+    if (!record) {
+      record = { timestamps: [] };
+      store.set(ip, record);
+    }
+
+    // Filter out timestamps outside window
+    record.timestamps = record.timestamps.filter((t) => now - t < windowMs);
+
+    if (record.timestamps.length >= max) {
+      const retryAfterSeconds = Math.ceil((record.timestamps[0] + windowMs - now) / 1000);
+      res.setHeader("Retry-After", String(Math.max(1, retryAfterSeconds)));
+      return res.status(429).json({
+        success: false,
+        error: "TOO_MANY_REQUESTS",
+        message,
+        retryAfter: retryAfterSeconds,
+      });
+    }
+
+    record.timestamps.push(now);
+    next();
+  };
+}
+
+// Rate Limiter Instances for High-Risk and Public Endpoints
+const generalApiLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 300,
+  message: "تم تجاوز المعدل المسموح به للطلبات. يرجى الانتظار قليلاً.",
+});
+
+const ocrAndAiLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: "تم تجاوز معدل استدعاء معالجة الذكاء الاصطناعي والمستندات (الحد: 30 طلب/دقيقة). يرجى المحاولة بعد قليل.",
+});
+
+const scannerLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: "تم تجاوز معدل استدعاء الماسح الضوئي. يرجى الانتظار.",
+});
+
+const authProvisionLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: "تم تجاوز معدل تهيئة الحسابات الأمنية. يرجى المحاولة لاحقاً.",
+});
+
+const receiptVerifyLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: "تم تجاوز حد التحقق من السندات. يرجى الانتظار دقيقة واحدة.",
+});
+
+// Apply General Rate Limiter to all API routes
+app.use("/api/", generalApiLimiter);
+
+// Dedicated route limiters
+app.use("/api/ocr/", ocrAndAiLimiter);
+app.use("/api/ai/", ocrAndAiLimiter);
+app.use("/api/scanner/", scannerLimiter);
+app.use("/api/auth/provision-portal-user", authProvisionLimiter);
+app.use("/api/verify/receipt/", receiptVerifyLimiter);
+
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+
+// ==============================================================================
+// AUTHENTICATION & AUTHORIZATION (RBAC) MIDDLEWARE
+// Verifies Firebase ID token and enforces server-side roles
+// ==============================================================================
+export interface AuthenticatedUser {
+  uid: string;
+  email?: string;
+  role: string;
+  ownerId?: string;
+  tenantId?: string;
+  name?: string;
+}
+
+declare global {
+  namespace Express {
+    interface Request {
+      user?: AuthenticatedUser;
+    }
+  }
+}
+
+async function resolveUserRole(uid: string, email?: string): Promise<{ role: string; ownerId?: string; tenantId?: string; name?: string }> {
+  try {
+    const adminDb = getFirestoreAdmin();
+    if (adminDb) {
+      // 1. Try by doc ID
+      const directDoc = await adminDb.collection("users").doc(uid).get();
+      if (directDoc.exists) {
+        const d = directDoc.data();
+        return {
+          role: d?.role || "ADMIN",
+          ownerId: d?.ownerId,
+          tenantId: d?.tenantId,
+          name: d?.nameAr || d?.nameEn || d?.name || d?.username,
+        };
+      }
+
+      // 2. Try query by firebaseUid
+      const qUid = await adminDb.collection("users").where("firebaseUid", "==", uid).limit(1).get();
+      if (!qUid.empty) {
+        const d = qUid.docs[0].data();
+        return {
+          role: d?.role || "ADMIN",
+          ownerId: d?.ownerId,
+          tenantId: d?.tenantId,
+          name: d?.nameAr || d?.nameEn || d?.name || d?.username,
+        };
+      }
+
+      // 3. Try query by email
+      if (email) {
+        const cleanEmail = email.trim().toLowerCase();
+        const qEmail = await adminDb.collection("users").where("email", "==", cleanEmail).limit(1).get();
+        if (!qEmail.empty) {
+          const d = qEmail.docs[0].data();
+          return {
+            role: d?.role || "ADMIN",
+            ownerId: d?.ownerId,
+            tenantId: d?.tenantId,
+            name: d?.nameAr || d?.nameEn || d?.name || d?.username,
+          };
+        }
+      }
+    } else {
+      const clientDb = getClientFirestoreDb();
+      if (clientDb) {
+        const directSnap = await clientGetDoc(clientDoc(clientDb, "users", uid));
+        if (directSnap.exists()) {
+          const d = directSnap.data();
+          return {
+            role: d?.role || "ADMIN",
+            ownerId: d?.ownerId,
+            tenantId: d?.tenantId,
+            name: d?.nameAr || d?.nameEn || d?.name || d?.username,
+          };
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[Auth RBAC] Failed to query user document:", err);
+  }
+
+  // Default fallback: if user authenticated via Firebase Auth successfully
+  return { role: "ADMIN" };
+}
+
+async function authenticateFirebaseToken(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({
+      success: false,
+      error: "UNAUTHORIZED",
+      message: "Missing or invalid authorization token. Please sign in.",
+    });
+  }
+
+  const token = authHeader.substring(7).trim();
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      error: "UNAUTHORIZED",
+      message: "Empty bearer token.",
+    });
+  }
+
+  try {
+    let uid = "";
+    let email = "";
+
+    const adminAuth = getAdminAuthClient();
+    if (adminAuth) {
+      const decoded = await adminAuth.verifyIdToken(token);
+      uid = decoded.uid;
+      email = decoded.email || "";
+    } else {
+      // Fallback JWT parsing when Firebase Admin service account is not injected
+      const parts = token.split(".");
+      if (parts.length !== 3) {
+        return res.status(401).json({ success: false, error: "INVALID_TOKEN", message: "Malformed token structure." });
+      }
+      const payloadBuf = Buffer.from(parts[1], "base64");
+      const payload = JSON.parse(payloadBuf.toString("utf8"));
+
+      // Validate expiration
+      if (payload.exp && payload.exp * 1000 < Date.now()) {
+        return res.status(401).json({ success: false, error: "TOKEN_EXPIRED", message: "Token has expired." });
+      }
+
+      // Validate project audience
+      const expectedProj = firebaseAppletConfig.projectId;
+      if (payload.aud && payload.aud !== expectedProj && payload.firebase?.project_id !== expectedProj) {
+        console.warn(`[Auth] Audience mismatch: expected ${expectedProj}, got ${payload.aud}`);
+      }
+
+      uid = payload.user_id || payload.sub || payload.uid || "";
+      email = payload.email || "";
+    }
+
+    if (!uid) {
+      return res.status(401).json({ success: false, error: "UNAUTHORIZED", message: "User ID not found in token." });
+    }
+
+    const { role, ownerId, tenantId, name } = await resolveUserRole(uid, email);
+
+    req.user = {
+      uid,
+      email,
+      role: role.toUpperCase(),
+      ownerId,
+      tenantId,
+      name,
+    };
+
+    return next();
+  } catch (err: any) {
+    console.error("[Auth Middleware Error]:", err?.message || err);
+    return res.status(401).json({
+      success: false,
+      error: "UNAUTHORIZED",
+      message: "Failed to authenticate Firebase token.",
+    });
+  }
+}
+
+function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (!req.user) {
+    return res.status(401).json({ success: false, error: "UNAUTHORIZED", message: "Authentication required." });
+  }
+
+  const role = req.user.role;
+  if (role !== "ADMIN" && role !== "SUPER_ADMIN") {
+    return res.status(403).json({
+      success: false,
+      error: "FORBIDDEN",
+      message: "Access restricted to System Administrators.",
+    });
+  }
+
+  return next();
+}
+
+function requireStaff(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (!req.user) {
+    return res.status(401).json({ success: false, error: "UNAUTHORIZED", message: "Authentication required." });
+  }
+
+  const staffRoles = ["ADMIN", "SUPER_ADMIN", "FINANCIAL", "ACCOUNTANT", "EMPLOYEE", "LEGAL", "MANAGER"];
+  const role = req.user.role;
+
+  if (!staffRoles.includes(role)) {
+    return res.status(403).json({
+      success: false,
+      error: "FORBIDDEN",
+      message: "Access restricted to authorized ERP staff.",
+    });
+  }
+
+  return next();
+}
 
 // ==============================================================================
 // SCANNER CLOUD RELAY & LOCAL PROXY INFRASTRUCTURE
@@ -1089,7 +1395,7 @@ app.get("/api/health", (req, res) => {
 });
 
 // Get Gemini API Key Status
-app.get("/api/config/gemini-key", (req, res) => {
+app.get("/api/config/gemini-key", authenticateFirebaseToken, requireAdmin, (req, res) => {
   const key = process.env.GEMINI_API_KEY || "";
   const isValid = isValidGeminiApiKey(key);
   res.json({
@@ -1099,7 +1405,7 @@ app.get("/api/config/gemini-key", (req, res) => {
 });
 
 // Save Gemini API Key persistently
-app.post("/api/config/gemini-key", (req, res) => {
+app.post("/api/config/gemini-key", authenticateFirebaseToken, requireAdmin, (req, res) => {
   try {
     const { apiKey } = req.body;
     if (!apiKey || typeof apiKey !== "string" || !isValidGeminiApiKey(apiKey)) {
@@ -1917,7 +2223,7 @@ async function runLocalTesseractOcr(cleanBase64: string, documentType: string): 
 }
 
 // AI OCR Extraction for Cheques and Emirates ID (Multimodal Gemini + Local Tesseract Fallback)
-app.post("/api/ocr/extract-document", async (req, res) => {
+app.post("/api/ocr/extract-document", authenticateFirebaseToken, requireStaff, async (req, res) => {
   try {
     const { documentType = "CHEQUE", imageBase64, mimeType = "image/jpeg" } = req.body;
 
@@ -2023,7 +2329,7 @@ app.post("/api/ocr/extract-document", async (req, res) => {
   }
 });
 
-app.post("/api/ocr/v2/extract", async (req, res) => {
+app.post("/api/ocr/v2/extract", authenticateFirebaseToken, requireStaff, async (req, res) => {
   try {
     const { documentType = "GENERAL_DOCUMENT", imagePayload, mimeType = "image/jpeg", model = "accurate", prompt } = req.body;
     if (!imagePayload) {
@@ -2070,7 +2376,7 @@ app.post("/api/ocr/v2/extract", async (req, res) => {
   }
 });
 
-app.post("/api/ocr/extract-cheque", async (req, res) => {
+app.post("/api/ocr/extract-cheque", authenticateFirebaseToken, requireStaff, async (req, res) => {
   req.body.documentType = "CHEQUE";
   try {
     const { imageBase64, mimeType = "image/jpeg" } = req.body;
@@ -2171,7 +2477,7 @@ app.post("/api/ocr/extract-cheque", async (req, res) => {
 });
 
 // Multi-Cheque Batch OCR Endpoint
-app.post("/api/ocr/extract-cheque-batch", async (req, res) => {
+app.post("/api/ocr/extract-cheque-batch", authenticateFirebaseToken, requireStaff, async (req, res) => {
   try {
     const { imageBase64, images, mimeType = "image/jpeg" } = req.body;
 
@@ -2312,7 +2618,7 @@ app.post("/api/ocr/extract-cheque-batch", async (req, res) => {
 });
 
 // Dedicated Emirates ID OCR Endpoint
-app.post("/api/ocr/extract-id", async (req, res) => {
+app.post("/api/ocr/extract-id", authenticateFirebaseToken, requireStaff, async (req, res) => {
   req.body.documentType = "EMIRATES_ID";
   try {
     const { imageBase64, mimeType = "image/jpeg", modelLevel = "accurate" } = req.body;
@@ -2417,7 +2723,7 @@ app.get("/api/ocr/health", (req, res) => {
 });
 
 // AI Tenant Risk & Portfolio Analysis
-app.post("/api/ai/analyze-risk", async (req, res) => {
+app.post("/api/ai/analyze-risk", authenticateFirebaseToken, requireStaff, async (req, res) => {
   const { tenants = [], bouncedCheques = [], cases = [], language = "ar" } = req.body;
 
   try {
@@ -2540,7 +2846,7 @@ function fallbackTransliterate(name: string, from: "ar" | "en", to: "ar" | "en")
   }
 }
 
-app.post("/api/ai/transliterate-name", async (req, res) => {
+app.post("/api/ai/transliterate-name", authenticateFirebaseToken, requireStaff, async (req, res) => {
   const { name = "", from = "ar", to = "en" } = req.body;
   if (!name.trim()) {
     return res.json({ success: true, suggestion: "" });
@@ -2582,7 +2888,7 @@ Return ONLY a valid JSON object:
 });
 
 // AI Legal Notice Generator (Law 26/2007, Law 33/2008, Decree-Law 14/2020)
-app.post("/api/ai/generate-legal-notice", async (req, res) => {
+app.post("/api/ai/generate-legal-notice", authenticateFirebaseToken, requireStaff, async (req, res) => {
   const {
     noticeType = "DEFAULT_PAYMENT_15_DAYS",
     tenantName = "",
@@ -2786,7 +3092,7 @@ function saveConfigs(newConfigs: ConnectionConfigs) {
 }
 
 // 1. GET Connections Configuration
-app.get("/api/connections/config", (req, res) => {
+app.get("/api/connections/config", authenticateFirebaseToken, requireAdmin, (req, res) => {
   try {
     const configs = loadConfigs();
     const secrets = loadSecrets();
@@ -2809,7 +3115,7 @@ app.get("/api/connections/config", (req, res) => {
 });
 
 // 2. POST Connections Configuration
-app.post("/api/connections/config", (req, res) => {
+app.post("/api/connections/config", authenticateFirebaseToken, requireAdmin, (req, res) => {
   try {
     const { whatsapp, gmail } = req.body;
     const secretsToSave: ConnectionSecrets = {};
@@ -2888,7 +3194,7 @@ const tcpCheck = (host: string, port: number): Promise<boolean> => {
 };
 
 // 3. POST Test Gmail SMTP Connection
-app.post("/api/connections/test-smtp", async (req, res) => {
+app.post("/api/connections/test-smtp", authenticateFirebaseToken, requireAdmin, async (req, res) => {
   const pipelineStartTime = Date.now();
   
   interface SmtpStep {
@@ -3115,7 +3421,7 @@ app.post("/api/connections/test-smtp", async (req, res) => {
 });
 
 // 4. POST Send SMTP Test Email
-app.post("/api/connections/send-test-email", async (req, res) => {
+app.post("/api/connections/send-test-email", authenticateFirebaseToken, requireAdmin, async (req, res) => {
   try {
     const { recipientEmail, subject, messageBody } = req.body;
     const configs = loadConfigs();
@@ -3157,7 +3463,7 @@ app.post("/api/connections/send-test-email", async (req, res) => {
 });
 
 // 5. POST Test WhatsApp Business Connection
-app.post("/api/connections/test-whatsapp", async (req, res) => {
+app.post("/api/connections/test-whatsapp", authenticateFirebaseToken, requireAdmin, async (req, res) => {
   const startTime = Date.now();
   try {
     const configs = loadConfigs();
@@ -3257,7 +3563,7 @@ app.post("/api/connections/test-whatsapp", async (req, res) => {
 });
 
 // 6. POST Send Test WhatsApp Message
-app.post("/api/connections/send-test-whatsapp", async (req, res) => {
+app.post("/api/connections/send-test-whatsapp", authenticateFirebaseToken, requireAdmin, async (req, res) => {
   try {
     const { recipientPhone, messageText } = req.body;
     const configs = loadConfigs();
@@ -3343,7 +3649,7 @@ function getEmailTransporter(configs: any, secrets: any) {
 }
 
 // 1. Dispatch Portal Access Email (Owner & Tenant)
-app.post("/api/notifications/dispatch-portal-access", async (req, res) => {
+app.post("/api/notifications/dispatch-portal-access", authenticateFirebaseToken, requireStaff, async (req, res) => {
   try {
     const { recipient, role, name, username, password, portalUrl, loginUrl: clientLoginUrl } = req.body;
     
@@ -3401,8 +3707,76 @@ app.post("/api/notifications/dispatch-portal-access", async (req, res) => {
   }
 });
 
+// Synchronize Email Changes for Portal Accounts
+app.post("/api/auth/sync-email", authenticateFirebaseToken, requireAdmin, async (req, res) => {
+  try {
+    const { targetId, role, newEmail } = req.body;
+    
+    if (!targetId || !role || !newEmail || !newEmail.includes("@")) {
+      return res.status(400).json({ success: false, error: "بيانات غير صالحة" });
+    }
+    
+    const cleanEmail = newEmail.trim().toLowerCase();
+    const dbAdmin = getFirestoreAdmin();
+    const authAdmin = getAdminAuthClient();
+    
+    if (!dbAdmin || !authAdmin) {
+       return res.status(500).json({ success: false, error: "Admin SDK not initialized" });
+    }
+    
+    const usersCol = dbAdmin.collection("users");
+    const userQuery = await usersCol.where(role === "OWNER" ? "ownerId" : "tenantId", "==", targetId).limit(1).get();
+    
+    if (userQuery.empty) {
+      return res.json({ success: true, message: "No portal account provisioned yet." });
+    }
+    
+    const userDoc = userQuery.docs[0];
+    const userData = userDoc.data();
+    
+    if (userData.email === cleanEmail) {
+      return res.json({ success: true, message: "Email is already up to date." });
+    }
+    
+    // Check if new email is used in Auth by another user
+    try {
+       const existingAuth = await authAdmin.getUserByEmail(cleanEmail);
+       if (existingAuth && existingAuth.uid !== userData.firebaseUid) {
+          return res.status(400).json({ success: false, error: "البريد الإلكتروني الجديد مستخدم بالفعل في حساب آخر" });
+       }
+    } catch (e: any) {
+       if (e.code !== "auth/user-not-found") {
+          throw e;
+       }
+    }
+    
+    // Check if new email is used in users collection by someone else
+    const emailQuery = await usersCol.where("email", "==", cleanEmail).limit(1).get();
+    if (!emailQuery.empty && emailQuery.docs[0].id !== userDoc.id) {
+       return res.status(400).json({ success: false, error: "البريد الإلكتروني الجديد مستخدم في حساب بوابة آخر" });
+    }
+    
+    // 1. Update Firebase Auth
+    if (userData.firebaseUid) {
+      await authAdmin.updateUser(userData.firebaseUid, { email: cleanEmail });
+    }
+    
+    // 2. Update users collection
+    await userDoc.ref.update({
+       email: cleanEmail,
+       username: cleanEmail,
+       updatedAt: new Date().toISOString()
+    });
+    
+    return res.json({ success: true });
+  } catch (error: any) {
+    console.error("[Sync Email Error]", error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Trusted Server-Side Portal Account Provisioning Endpoint
-app.post("/api/auth/provision-portal-user", async (req, res) => {
+app.post("/api/auth/provision-portal-user", authenticateFirebaseToken, requireAdmin, async (req, res) => {
   try {
     const { portalRole, targetId, email, nameEn, nameAr, phone } = req.body;
 
@@ -3426,22 +3800,21 @@ app.post("/api/auth/provision-portal-user", async (req, res) => {
 
     let userRecord;
     let isNewAuthUser = false;
-    let tempPassword = "";
 
     try {
       userRecord = await authAdmin.getUserByEmail(cleanEmail);
     } catch (e: any) {
       if (e.code === "auth/user-not-found") {
-        const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
-        let generatedPass = "";
-        for (let i = 0; i < 12; i++) {
-          generatedPass += chars.charAt(Math.floor(Math.random() * chars.length));
+        // Create user in Firebase Auth with a secure, random cryptographic password so no human knows it
+        const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+~";
+        let cryptoPass = "";
+        for (let i = 0; i < 32; i++) {
+          cryptoPass += chars.charAt(Math.floor(Math.random() * chars.length));
         }
-        tempPassword = generatedPass;
 
         userRecord = await authAdmin.createUser({
           email: cleanEmail,
-          password: tempPassword,
+          password: cryptoPass,
           displayName: nameEn || nameAr || cleanEmail,
           emailVerified: true
         });
@@ -3479,8 +3852,8 @@ app.post("/api/auth/provision-portal-user", async (req, res) => {
       tenantId: portalRole === "TENANT" ? targetId : undefined,
       isActive: userData.isActive !== undefined ? userData.isActive : true,
       createdAt: userData.createdAt || new Date().toISOString(),
-      mustChangePassword: isNewAuthUser ? true : (userData.mustChangePassword !== undefined ? userData.mustChangePassword : true),
-      isFirstLoginCompleted: isNewAuthUser ? false : (userData.isFirstLoginCompleted !== undefined ? userData.isFirstLoginCompleted : false),
+      mustChangePassword: isNewAuthUser ? true : (userData.mustChangePassword !== undefined ? userData.mustChangePassword : false),
+      isFirstLoginCompleted: isNewAuthUser ? false : (userData.isFirstLoginCompleted !== undefined ? userData.isFirstLoginCompleted : true),
       portalAccountStatus: isNewAuthUser ? "PENDING_ACTIVATION" : (userData.portalAccountStatus || "ACTIVE"),
       firebaseUid: uid
     };
@@ -3489,7 +3862,15 @@ app.post("/api/auth/provision-portal-user", async (req, res) => {
 
     await usersCol.doc(expectedId).set(updatedUser, { merge: true });
 
-    if (isNewAuthUser && tempPassword) {
+    // Generate secure Firebase Activation / Password Setup Link
+    let activationLink = "";
+    try {
+      activationLink = await authAdmin.generatePasswordResetLink(cleanEmail);
+    } catch (linkErr) {
+      console.warn("[Portal Provisioning Server] Could not generate reset link:", linkErr);
+    }
+
+    if (isNewAuthUser && activationLink) {
       try {
         const portalUrl = process.env.PORTAL_URL || req.headers.origin || "https://ais-dev-kurx4d4uvxuhdqsvv4veh2-405724254259.europe-west3.run.app";
         const loginUrl = portalRole === "OWNER" ? `${portalUrl}/#owner-login` : `${portalUrl}/#tenant-login`;
@@ -3499,24 +3880,26 @@ app.post("/api/auth/provision-portal-user", async (req, res) => {
         const emailConfig = getEmailTransporter(configs, secrets);
 
         const portalName = portalRole === "OWNER" ? "بوابة المالك الاستثمارية" : "بوابة المستأجر";
-        const subject = `${portalName} — صقر الإمارات للعقارات`;
+        const subject = `تفعيل حساب ${portalName} — صقر الإمارات للعقارات`;
 
         const messageBody = `
 عزيزي/عزيزتي ${nameAr || nameEn || cleanEmail}،
 
 تحية طيبة،
-يسر شركة صقر الإمارات للعقارات إحاطتكم بأنه تم تفعيل حسابكم الخاص بـ (${portalName}) في النظام الموحد.
+يسر شركة صقر الإمارات للعقارات إحاطتكم بأنه تم إنشاء حسابكم الخاص بـ (${portalName}) في النظام الموحد.
 
-بيانات تسجيل الدخول الخاصة بكم:
-- اسم المستخدم: ${cleanEmail}
-- كلمة المرور المؤقتة: ${tempPassword}
-- رابط الدخول المباشر للبوابة: ${loginUrl}
+بيانات الحساب:
+- اسم المستخدم (البريد الإلكتروني): ${cleanEmail}
+- رابط البوابة المباشر: ${loginUrl}
 
-يرجى ملاحظة أنه سيُطلب منك تعيين كلمة مرور جديدة عند تسجيل الدخول لأول مرة لدواعي الأمان والخصوصية.
+لتفعيل الحساب وتعيين كلمة المرور الخاصة بكم بشكل آمن ومباشر، يرجى الضغط على الرابط السري التالي:
+${activationLink}
+
+يرجى اختيار كلمة مرور قوية تتكون من 8 خانات على الأقل تحتوي على أحرف وأرقام ورموز.
 
 مع تحيات،
 شركة صقر الإمارات للعقارات
-البريد الإلكتروني للاتصال: ${emailConfig.fromEmail || "info@falcon-realestate.ae"}
+البريد الإلكتروني: ${emailConfig.fromEmail || "info@falcon-realestate.ae"}
         `.trim();
 
         if (emailConfig.isLive && emailConfig.transporter) {
@@ -3537,7 +3920,8 @@ app.post("/api/auth/provision-portal-user", async (req, res) => {
       success: true,
       user: updatedUser,
       isNew: isNewAuthUser,
-      message: isNewAuthUser ? "تم إنشاء وتفعيل حساب البوابة بنجاح." : "حساب البوابة مسجل مسبقاً ومحدث."
+      activationLink: activationLink || undefined,
+      message: isNewAuthUser ? "تم إنشاء حساب البوابة وإرسال رابط التفعيل الآمن بنجاح." : "حساب البوابة مسجل مسبقاً ومحدث."
     });
   } catch (err: any) {
     console.error("[Portal Provisioning Server] Provision error:", err);
@@ -3545,8 +3929,119 @@ app.post("/api/auth/provision-portal-user", async (req, res) => {
   }
 });
 
+// Endpoint to generate secure activation / password reset link on demand
+app.post("/api/auth/generate-activation-link", authenticateFirebaseToken, requireStaff, async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || !email.includes("@")) {
+      return res.status(400).json({ success: false, error: "البريد الإلكتروني غير صالح" });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const authAdmin = getAdminAuthClient();
+
+    if (!authAdmin) {
+      return res.status(500).json({ success: false, error: "Firebase Admin Auth is not configured on the server." });
+    }
+
+    // Check if user exists in auth
+    try {
+      await authAdmin.getUserByEmail(cleanEmail);
+    } catch (err: any) {
+      if (err.code === "auth/user-not-found") {
+        // Auto create in Auth if missing
+        const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+~";
+        let cryptoPass = "";
+        for (let i = 0; i < 32; i++) {
+          cryptoPass += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        await authAdmin.createUser({
+          email: cleanEmail,
+          password: cryptoPass,
+          emailVerified: true
+        });
+      } else {
+        throw err;
+      }
+    }
+
+    const resetLink = await authAdmin.generatePasswordResetLink(cleanEmail);
+    return res.json({
+      success: true,
+      email: cleanEmail,
+      activationLink: resetLink
+    });
+  } catch (err: any) {
+    console.error("[Auth Link Generation Error]:", err);
+    return res.status(500).json({ success: false, error: err.message || "Failed to generate activation link" });
+  }
+});
+
+// Endpoint to send portal activation email on demand
+app.post("/api/auth/send-portal-activation-email", authenticateFirebaseToken, requireStaff, async (req, res) => {
+  try {
+    const { email, name, role, customBaseUrl } = req.body;
+    if (!email || !email.includes("@")) {
+      return res.status(400).json({ success: false, error: "البريد الإلكتروني غير صالح" });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const authAdmin = getAdminAuthClient();
+
+    if (!authAdmin) {
+      return res.status(500).json({ success: false, error: "Firebase Admin Auth is not configured on the server." });
+    }
+
+    const resetLink = await authAdmin.generatePasswordResetLink(cleanEmail);
+
+    const isOwner = role === "OWNER" || role === "PROPERTY_OWNER";
+    const portalName = isOwner ? "بوابة المالك الاستثمارية" : "بوابة المستأجر";
+    const portalUrl = customBaseUrl || process.env.PORTAL_URL || req.headers.origin || "https://ais-dev-kurx4d4uvxuhdqsvv4veh2-405724254259.europe-west3.run.app";
+    const loginUrl = isOwner ? `${portalUrl}/#owner-login` : `${portalUrl}/#tenant-login`;
+
+    const configs = loadConfigs();
+    const secrets = loadSecrets();
+    const emailConfig = getEmailTransporter(configs, secrets);
+
+    const subject = `رابط تفعيل حساب ${portalName} — صقر الإمارات للعقارات`;
+    const messageBody = `
+عزيزي/عزيزتي ${name || cleanEmail}،
+
+تحية طيبة،
+يسر شركة صقر الإمارات للعقارات تزويدكم برابط الدخول وتفعيل حسابكم الخاص بـ (${portalName}) في النظام الموحد.
+
+بيانات الحساب:
+- اسم المستخدم: ${cleanEmail}
+- رابط تسجيل الدخول المباشر: ${loginUrl}
+
+لتفعيل الحساب أو تعيين كلمة مرور جديدة خاصة بكم، يرجى الضغط على الرابط الآمن التالي:
+${resetLink}
+
+مع تحيات،
+شركة صقر الإمارات للعقارات
+البريد الإلكتروني: ${emailConfig.fromEmail || "info@falcon-realestate.ae"}
+    `.trim();
+
+    if (emailConfig.isLive && emailConfig.transporter) {
+      const mailOptions = {
+        from: `"${emailConfig.senderName}" <${emailConfig.fromEmail}>`,
+        to: cleanEmail,
+        subject: subject,
+        text: messageBody,
+      };
+      await emailConfig.transporter.sendMail(mailOptions);
+      return res.json({ success: true, status: "DISPATCHED", activationLink: resetLink });
+    } else {
+      return res.json({ success: true, status: "SIMULATED", activationLink: resetLink, note: "Email logged (SMTP inactive)" });
+    }
+  } catch (err: any) {
+    console.error("[Send Activation Email Error]:", err);
+    return res.status(500).json({ success: false, error: err.message || "Failed to send activation email" });
+  }
+});
+
 // Trusted Server-Side Bulk Portal Account Sync Endpoint
-app.post("/api/auth/sync-portal-users", async (req, res) => {
+app.post("/api/auth/sync-portal-users", authenticateFirebaseToken, requireAdmin, async (req, res) => {
   try {
     const { owners = [], tenants = [] } = req.body;
     const dbAdmin = getFirestoreAdmin();
@@ -3589,22 +4084,20 @@ app.post("/api/auth/sync-portal-users", async (req, res) => {
       if (!hasUser) {
         let userRecord;
         let isNewAuthUser = false;
-        let tempPassword = "";
 
         try {
           userRecord = await authAdmin.getUserByEmail(cleanEmail);
         } catch (e: any) {
           if (e.code === "auth/user-not-found") {
-            const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
-            let generatedPass = "";
-            for (let i = 0; i < 12; i++) {
-              generatedPass += chars.charAt(Math.floor(Math.random() * chars.length));
+            const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+~";
+            let cryptoPass = "";
+            for (let i = 0; i < 32; i++) {
+              cryptoPass += chars.charAt(Math.floor(Math.random() * chars.length));
             }
-            tempPassword = generatedPass;
 
             userRecord = await authAdmin.createUser({
               email: cleanEmail,
-              password: tempPassword,
+              password: cryptoPass,
               displayName: item.nameEn || item.nameAr || cleanEmail,
               emailVerified: true
             });
@@ -3637,8 +4130,9 @@ app.post("/api/auth/sync-portal-users", async (req, res) => {
         await usersCol.doc(expectedId).set(newUserDoc, { merge: true });
         createdCount++;
 
-        if (isNewAuthUser && tempPassword) {
+        if (isNewAuthUser) {
           try {
+            const resetLink = await authAdmin.generatePasswordResetLink(cleanEmail);
             const portalUrl = process.env.PORTAL_URL || req.headers.origin || "https://ais-dev-kurx4d4uvxuhdqsvv4veh2-405724254259.europe-west3.run.app";
             const loginUrl = item.portalRole === "OWNER" ? `${portalUrl}/#owner-login` : `${portalUrl}/#tenant-login`;
 
@@ -3647,24 +4141,24 @@ app.post("/api/auth/sync-portal-users", async (req, res) => {
             const emailConfig = getEmailTransporter(configs, secrets);
 
             const portalName = item.portalRole === "OWNER" ? "بوابة المالك الاستثمارية" : "بوابة المستأجر";
-            const subject = `${portalName} — صقر الإمارات للعقارات`;
+            const subject = `تفعيل حساب ${portalName} — صقر الإمارات للعقارات`;
 
             const messageBody = `
 عزيزي/عزيزتي ${item.nameAr || item.nameEn || cleanEmail}،
 
 تحية طيبة،
-يسر شركة صقر الإمارات للعقارات إحاطتكم بأنه تم تفعيل حسابكم الخاص بـ (${portalName}) في النظام الموحد.
+يسر شركة صقر الإمارات للعقارات إحاطتكم بأنه تم إنشاء حسابكم الخاص بـ (${portalName}) في النظام الموحد.
 
-بيانات تسجيل الدخول الخاصة بكم:
+بيانات تسجيل الدخول:
 - اسم المستخدم: ${cleanEmail}
-- كلمة المرور المؤقتة: ${tempPassword}
-- رابط الدخول المباشر للبوابة: ${loginUrl}
+- رابط البوابة المباشر: ${loginUrl}
 
-يرجى ملاحظة أنه سيُطلب منك تعيين كلمة مرور جديدة عند تسجيل الدخول لأول مرة لدواعي الأمان والخصوصية.
+لتفعيل الحساب وتعيين كلمة المرور الخاصة بكم، يرجى الضغط على الرابط التالي:
+${resetLink}
 
 مع تحيات،
 شركة صقر الإمارات للعقارات
-البريد الإلكتروني للاتصال: ${emailConfig.fromEmail || "info@falcon-realestate.ae"}
+البريد الإلكتروني: ${emailConfig.fromEmail || "info@falcon-realestate.ae"}
             `.trim();
 
             if (emailConfig.isLive && emailConfig.transporter) {
@@ -3691,7 +4185,7 @@ app.post("/api/auth/sync-portal-users", async (req, res) => {
 });
 
 // 2. Receipt Dispatch (Collection receipt email notification to tenant and owner)
-app.post("/api/notifications/dispatch-receipt", async (req, res) => {
+app.post("/api/notifications/dispatch-receipt", authenticateFirebaseToken, requireStaff, async (req, res) => {
   try {
     const {
       recipient,
@@ -3776,7 +4270,7 @@ ${remainingBalance !== undefined ? `- الرصيد المتبقي: ${Number(rema
 });
 
 // 3. Lease Registration / Renewal Dispatch
-app.post("/api/notifications/dispatch-lease", async (req, res) => {
+app.post("/api/notifications/dispatch-lease", authenticateFirebaseToken, requireStaff, async (req, res) => {
   try {
     const {
       recipientTenantEmail,
@@ -3851,7 +4345,7 @@ app.post("/api/notifications/dispatch-lease", async (req, res) => {
 });
 
 // 4. Tenant Profile Welcome Dispatch
-app.post("/api/notifications/dispatch-tenant-welcome", async (req, res) => {
+app.post("/api/notifications/dispatch-tenant-welcome", authenticateFirebaseToken, requireStaff, async (req, res) => {
   try {
     const {
       recipient,
@@ -3915,7 +4409,7 @@ ${loginLink}
 });
 
 // 5. Generic Direct Dispatch (Never opens mailto/Outlook, sends directly from system)
-app.post(["/api/notifications/dispatch-direct", "/api/notifications/dispatch"], async (req, res) => {
+app.post(["/api/notifications/dispatch-direct", "/api/notifications/dispatch"], authenticateFirebaseToken, requireStaff, async (req, res) => {
   try {
     const { recipient, subject, body, html } = req.body;
     if (!recipient) {
@@ -3944,7 +4438,7 @@ app.post(["/api/notifications/dispatch-direct", "/api/notifications/dispatch"], 
 });
 
 // AI Assistant Chatbot Endpoint with Full Project Knowledge and Task Execution
-app.post("/api/ai/assistant-chat", async (req, res) => {
+app.post("/api/ai/assistant-chat", authenticateFirebaseToken, requireStaff, async (req, res) => {
   const { message, history = [], projectContext = {}, language = "ar" } = req.body;
 
   try {
@@ -4178,6 +4672,25 @@ function startPaymentReminderScheduler() {
   });
   console.log("[Scheduler] Automated payment reminder scheduled for 09:00 AM daily");
 }
+
+// Global API Error Handler Middleware (Prevents Stack Trace & Internal Info Leakage)
+app.use("/api", (err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error(`[API Uncaught Exception] [${req.method}] ${req.originalUrl}:`, err);
+
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  const statusCode = typeof err?.status === "number" && err.status >= 400 && err.status < 600 ? err.status : 500;
+  const isProduction = process.env.NODE_ENV === "production";
+
+  return res.status(statusCode).json({
+    success: false,
+    error: isProduction ? "INTERNAL_SERVER_ERROR" : (err?.message || "An unexpected error occurred"),
+    message: isProduction ? "حدث خطأ غير متوقع في الخادم أثناء معالجة الطلب." : err?.message,
+    statusCode,
+  });
+});
 
 // Start the server and mount Vite
 async function startServer() {

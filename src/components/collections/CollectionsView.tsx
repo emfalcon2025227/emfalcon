@@ -29,6 +29,7 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
+import { authenticatedFetch } from "../../utils/apiClient";
 import { useData } from "../../context/DataContext";
 import { useAuth } from "../../context/AuthContext";
 import { useNavigation } from "../../context/NavigationContext";
@@ -111,7 +112,7 @@ export const CollectionsView: React.FC = () => {
     const unit = cheque ? units.find((u) => u.id === cheque.unitId) : null;
     
     try {
-      const response = await fetch("/api/notifications/dispatch-receipt", {
+      const response = await authenticatedFetch("/api/notifications/dispatch-receipt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1104,7 +1105,7 @@ export const CollectionsView: React.FC = () => {
             const prop = cheque ? properties.find((p) => p.id === cheque.propertyId) : null;
             const unit = cheque ? units.find((u) => u.id === cheque.unitId) : null;
 
-            fetch("/api/notifications/dispatch-receipt", {
+            authenticatedFetch("/api/notifications/dispatch-receipt", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({

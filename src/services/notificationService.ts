@@ -5,6 +5,7 @@
  */
 
 import { DEFAULT_NOTIFICATION_TEMPLATES, NotificationTemplate } from "./notificationTemplates";
+import { authenticatedFetch } from "../utils/apiClient";
 
 export interface NotificationRecordItem {
   id: string;
@@ -88,7 +89,7 @@ export async function sendNotification(params: {
   
   if (params.channel === "EMAIL" && params.recipientEmail) {
     try {
-      const res = await fetch("/api/notifications/dispatch", {
+      const res = await authenticatedFetch("/api/notifications/dispatch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

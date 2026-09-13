@@ -300,23 +300,26 @@ export const AdminControlPanel: React.FC = () => {
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {users.map((u) => {
                   const rolePermissions = ROLE_PERMISSIONS[u.role] || [];
-                  const isProtected = u.id === "usr-01" || u.email.toLowerCase() === "m_hamed@msn.com" || u.email.toLowerCase() === "emfalcon2025227@gmail.com" || u.username.toLowerCase() === "mahmoud";
+                  const userEmailLower = (u.email || "").toLowerCase();
+                  const usernameLower = (u.username || "").toLowerCase();
+                  const isProtected = u.id === "usr-01" || userEmailLower === "m_hamed@msn.com" || userEmailLower === "emfalcon2025227@gmail.com" || usernameLower === "mahmoud";
+                  const initialChar = ((u.nameEn || u.nameAr || u.username || "U").trim()).charAt(0).toUpperCase() || "U";
                   return (
                     <tr key={u.id} className="hover:bg-slate-50/70">
                       <td className="py-3 px-4 font-bold text-slate-900">
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 rounded-full bg-slate-900 text-amber-400 font-bold flex items-center justify-center text-xs">
-                            {u.nameEn.charAt(0)}
+                            {initialChar}
                           </div>
                           <div>
-                            <div>{u.nameAr}</div>
-                            <div className="text-[10px] text-slate-400">{u.nameEn}</div>
+                            <div>{u.nameAr || u.nameEn || u.username}</div>
+                            <div className="text-[10px] text-slate-400">{u.nameEn || u.username}</div>
                           </div>
                         </div>
                       </td>
                       <td className="py-3 px-4">
-                        <div className="font-mono text-[11px] text-slate-800">@{u.username}</div>
-                        <div className="text-[11px] text-slate-500">{u.email}</div>
+                        <div className="font-mono text-[11px] text-slate-800">@{u.username || u.id}</div>
+                        <div className="text-[11px] text-slate-500">{u.email || "-"}</div>
                       </td>
                       <td className="py-3 px-4">
                         <SearchableSelect
@@ -789,7 +792,7 @@ export const AdminControlPanel: React.FC = () => {
                     ]}
                     value={editRole}
                     onChange={(val) => setEditRole(val as UserRole)}
-                    disabled={userToEdit.id === "usr-01" || userToEdit.email.toLowerCase() === "m_hamed@msn.com"}
+                    disabled={userToEdit.id === "usr-01" || (userToEdit.email || "").toLowerCase() === "m_hamed@msn.com"}
                     placeholder={language === "ar" ? "اختر الدور..." : "Select role..."}
                     searchPlaceholder={language === "ar" ? "ابحث بالدور..." : "Search role..."}
                   />

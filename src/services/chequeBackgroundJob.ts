@@ -1,4 +1,5 @@
 import { Cheque, Tenant, AuditLogEntry } from "../types";
+import { authenticatedFetch } from "../utils/apiClient";
 
 export interface ChequeBackgroundJobResult {
   checkedCount: number;
@@ -89,7 +90,7 @@ export async function runChequeDueDateBackgroundJob(
 
     try {
       // Call backend API endpoint to dispatch email reminder
-      const response = await fetch("/api/notifications/dispatch", {
+      const response = await authenticatedFetch("/api/notifications/dispatch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

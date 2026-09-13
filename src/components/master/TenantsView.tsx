@@ -601,6 +601,33 @@ export const TenantsView: React.FC<TenantsViewProps> = ({ onSelectTenant }) => {
     setIsSubmittingTenant(true);
     try {
       if (editingTenant) {
+        if (email && email.includes("@") && email !== editingTenant.email) {
+          try {
+            const res = await fetch("/api/auth/sync-email", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${(window as any).__firebaseToken || ""}`,
+              },
+              body: JSON.stringify({
+                targetId: editingTenant.id,
+                role: "TENANT",
+                newEmail: email,
+              }),
+            });
+            const data = await res.json();
+            if (!data.success && !data.clientManaged) {
+               alert(data.error || (language === "ar" ? "فشلت مزامنة البريد الإلكتروني مع نظام الدخول." : "Failed to synchronize email with authentication system."));
+               setIsSubmittingTenant(false);
+               return; // Stop update if sync fails
+            }
+          } catch (e: any) {
+            alert((language === "ar" ? "خطأ في مزامنة البريد الإلكتروني: " : "Error synchronizing email: ") + e.message);
+            setIsSubmittingTenant(false);
+            return;
+          }
+        }
+        
         updateTenant(editingTenant.id, {
           code,
           nameEn,

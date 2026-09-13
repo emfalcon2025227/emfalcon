@@ -34,6 +34,7 @@ import {
   Eye,
 } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
+import { authenticatedFetch } from "../../utils/apiClient";
 import { useData } from "../../context/DataContext";
 import { useAuth } from "../../context/AuthContext";
 import { useNavigation } from "../../context/NavigationContext";
@@ -737,7 +738,7 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
                             const isBounced = cheque.status === "BOUNCED";
                             const alertType = isBounced ? "BOUNCED" : "APPROACHING_DUE";
                             try {
-                              const res = await fetch('/api/notifications/dispatch', {
+                              const res = await authenticatedFetch('/api/notifications/dispatch', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({

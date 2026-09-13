@@ -1,4 +1,5 @@
 import { Language } from "../types";
+import { authenticatedFetch } from "./apiClient";
 
 const COMMON_AR_TO_EN: { [key: string]: string } = {
   "محمد": "Mohamed",
@@ -285,7 +286,7 @@ export async function getBilingualSuggestion(
   }
 
   try {
-    const response = await fetch("/api/ai/transliterate-name", {
+    const response = await authenticatedFetch("/api/ai/transliterate-name", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

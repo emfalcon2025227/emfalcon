@@ -2,49 +2,79 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- SECURITY PRIMITIVES ---
+    // --- SECURITY PRIMITIVES & IDENTITY ---
 
-    // True if standard standard auth token is present and verified
+    // True if standard Firebase Auth token is present
     function isSignedIn() {
-      return request.auth != null && request.auth.token.email_verified == true;
+      return request.auth != null;
     }
 
-    // Safely retrieves user role using their verified email address lookup
+    // Direct system owner check with known primary administrator emails or database role
+    function isSystemOwner() {
+      return isSignedIn() && (
+        request.auth.token.email == 'm_hamed@msn.com' ||
+        request.auth.token.email == 'emfalcon2025227@gmail.com' ||
+        getUserRole() == 'SYSTEM_OWNER'
+      );
+    }
+
+    // Safely retrieves user role using their email / uid mapping lookup in Firestore
     function getUserRole() {
-      if (request.auth == null || request.auth.token.email_verified != true) {
+      if (!isSignedIn()) {
         return null;
       }
-      // Direct fast-pass for master account/system owners to prevent extra DB lookups
-      if (request.auth.token.email == 'm_hamed@msn.com') {
+      if (request.auth.token.email == 'm_hamed@msn.com' || request.auth.token.email == 'emfalcon2025227@gmail.com') {
         return 'SYSTEM_OWNER';
       }
-      if (request.auth.token.email == 'emfalcon2025227@gmail.com') {
-        return 'SYSTEM_OWNER';
-      }
-      // Fetch safe, synced read-only email mapping
       return exists(/databases/$(database)/documents/users_by_email/$(request.auth.token.email))
-        ? get(/databases/$(database)/documents/users_by_email/$(request.auth.token.email)).data.role
-        : null;
+        ? get(/databases/$(database)/documents/users_by_email/$(request.auth.token.email)).data.get('role', null)
+        : (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', null)
+            : null
+        );
     }
 
-    // Role checks
-    function isSystemOwner() {
-      return getUserRole() == 'SYSTEM_OWNER';
-    }
-
+    // Role hierarchies
     function isAdmin() {
       let role = getUserRole();
-      return role == 'SYSTEM_OWNER' || role == 'SUPER_ADMIN' || role == 'MANAGER';
+      return isSystemOwner() || role == 'SUPER_ADMIN' || role == 'MANAGER' || role == 'ADMINISTRATOR';
     }
 
     function isFinancial() {
       let role = getUserRole();
-      return role == 'SYSTEM_OWNER' || role == 'SUPER_ADMIN' || role == 'MANAGER' || role == 'FINANCE' || role == 'ACCOUNTANT' || role == 'COLLECTION_OFFICER';
+      return isAdmin() || role == 'FINANCE' || role == 'ACCOUNTANT' || role == 'COLLECTION_OFFICER';
     }
 
     function isStaff() {
       let role = getUserRole();
-      return role != null && role != 'PROPERTY_OWNER' && role != 'TENANT';
+      return isSystemOwner() || (
+        role != null && 
+        role != 'PROPERTY_OWNER' && 
+        role != 'OWNER' && 
+        role != 'TENANT'
+      );
+    }
+
+    // Owner and Tenant record-level ownership checks (IDOR/BOLA protections)
+    function isPropertyOwner(ownerId) {
+      return isSignedIn() && ownerId != null && (
+        ownerId == request.auth.token.email ||
+        (exists(/databases/$(database)/documents/owners/$(ownerId)) && 
+         (get(/databases/$(database)/documents/owners/$(ownerId)).data.get('email', '') == request.auth.token.email ||
+          get(/databases/$(database)/documents/owners/$(ownerId)).data.get('portalEmail', '') == request.auth.token.email ||
+          get(/databases/$(database)/documents/owners/$(ownerId)).data.get('firebaseUid', '') == request.auth.uid))
+      );
+    }
+
+    function isTenantUser(tenantId) {
+      return isSignedIn() && tenantId != null && (
+        tenantId == request.auth.token.email ||
+        (exists(/databases/$(database)/documents/tenants/$(tenantId)) && 
+         (get(/databases/$(database)/documents/tenants/$(tenantId)).data.get('email', '') == request.auth.token.email ||
+          get(/databases/$(database)/documents/tenants/$(tenantId)).data.get('portalEmail', '') == request.auth.token.email ||
+          get(/databases/$(database)/documents/tenants/$(tenantId)).data.get('firebaseUid', '') == request.auth.uid))
+      );
     }
 
     // --- DEFAULT DENY (CATCH-ALL) ---
@@ -58,13 +88,21 @@ service cloud.firestore {
 
     // 1. User profiles master list
     match /users/{userId} {
-      allow read: if isStaff() || (isSignedIn() && resource.data.email == request.auth.token.email);
-      allow create: if isSystemOwner();
+      allow read: if isStaff() || (isSignedIn() && (
+        resource.data.get('email', '') == request.auth.token.email || 
+        resource.data.get('firebaseUid', '') == request.auth.uid || 
+        request.auth.uid == userId
+      ));
+      allow create: if isSystemOwner() || isAdmin() || (
+        isSignedIn() && request.auth.uid == userId && 
+        (!('role' in request.resource.data) || request.resource.data.role == 'TENANT' || request.resource.data.role == 'DATA_ENTRY')
+      );
       allow update: if isSystemOwner() || (
+        isAdmin() && resource.data.get('role', '') != 'SYSTEM_OWNER' && request.resource.data.get('role', '') != 'SYSTEM_OWNER'
+      ) || (
         isSignedIn() && 
-        resource.data.email == request.auth.token.email && 
-        // Ensure standard users can't touch role, status, permissions, email, id, etc.
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isActive', 'permissions', 'email', 'id'])
+        (resource.data.get('firebaseUid', '') == request.auth.uid || request.auth.uid == userId || resource.data.get('email', '') == request.auth.token.email) && 
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isActive', 'permissions', 'email', 'id', 'firebaseUid', 'ownerId', 'tenantId'])
       );
       allow delete: if isSystemOwner();
     }
@@ -72,7 +110,8 @@ service cloud.firestore {
     // 2. Email-to-Role safe mapping table
     match /users_by_email/{email} {
       allow read: if isSignedIn();
-      allow write: if isSystemOwner() || isStaff();
+      allow create, update: if isSystemOwner() || isAdmin();
+      allow delete: if isSystemOwner();
     }
 
     // 3. Granular overrides
@@ -83,45 +122,79 @@ service cloud.firestore {
 
     // 4. Properties master list
     match /properties/{propertyId} {
-      allow read: if isStaff() || (isSignedIn() && getUserRole() == 'PROPERTY_OWNER' && resource.data.ownerId == request.auth.token.email);
+      allow read: if isStaff() || (isSignedIn() && (
+        resource.data.get('ownerEmail', '') == request.auth.token.email || 
+        isPropertyOwner(resource.data.get('ownerId', ''))
+      ));
       allow write: if isStaff();
+      allow delete: if isAdmin();
     }
 
     // 5. Units inside properties
     match /units/{unitId} {
-      allow read: if isSignedIn(); // All authenticated users can view units list
+      allow read: if isStaff() || (isSignedIn() && (
+        resource.data.get('ownerEmail', '') == request.auth.token.email || 
+        isPropertyOwner(resource.data.get('ownerId', '')) || 
+        isTenantUser(resource.data.get('tenantId', ''))
+      ));
       allow write: if isStaff();
+      allow delete: if isAdmin();
     }
 
     // 6. Tenants profiles and risk scoring
     match /tenants/{tenantId} {
-      allow read: if isStaff() || (isSignedIn() && resource.data.email == request.auth.token.email);
+      allow read: if isStaff() || (isSignedIn() && (
+        resource.data.get('email', '') == request.auth.token.email || 
+        resource.data.get('portalEmail', '') == request.auth.token.email || 
+        resource.data.get('firebaseUid', '') == request.auth.uid
+      ));
       allow write: if isStaff();
+      allow delete: if false; // Delete protected
     }
 
     // 7. Lease contracts (Contracts)
     match /leases/{leaseId} {
-      allow read: if isStaff() || (isSignedIn() && (resource.data.tenantId == request.auth.token.email || resource.data.ownerId == request.auth.token.email));
+      allow read: if isStaff() || (isSignedIn() && (
+        resource.data.get('tenantEmail', '') == request.auth.token.email || 
+        isTenantUser(resource.data.get('tenantId', '')) || 
+        resource.data.get('ownerEmail', '') == request.auth.token.email || 
+        isPropertyOwner(resource.data.get('ownerId', ''))
+      ));
       allow write: if isStaff();
       allow delete: if false; // Delete protected
     }
 
     // 8. Cheques payments
     match /cheques/{chequeId} {
-      allow read: if isStaff() || (isSignedIn() && resource.data.tenantId == request.auth.token.email);
+      allow read: if isStaff() || (isSignedIn() && (
+        resource.data.get('tenantEmail', '') == request.auth.token.email || 
+        isTenantUser(resource.data.get('tenantId', '')) || 
+        resource.data.get('ownerEmail', '') == request.auth.token.email || 
+        isPropertyOwner(resource.data.get('ownerId', ''))
+      ));
       allow write: if isFinancial();
       allow delete: if false; // Delete protected
     }
 
     // 9. Payment receipts (Collections)
     match /collections/{collectionId} {
-      allow read: if isStaff() || (isSignedIn() && resource.data.tenantId == request.auth.token.email);
+      allow read: if isStaff() || (isSignedIn() && (
+        resource.data.get('tenantEmail', '') == request.auth.token.email || 
+        isTenantUser(resource.data.get('tenantId', '')) || 
+        resource.data.get('ownerEmail', '') == request.auth.token.email || 
+        isPropertyOwner(resource.data.get('ownerId', ''))
+      ));
       allow write: if isFinancial();
       allow delete: if false; // Delete protected
     }
 
-    // 10. Deposit Batches
+    // 10. Deposit Batches & Daily Deposits
     match /deposit_batches/{batchId} {
+      allow read: if isStaff();
+      allow write: if isFinancial();
+      allow delete: if false; // Delete protected
+    }
+    match /daily_deposits/{depositId} {
       allow read: if isStaff();
       allow write: if isFinancial();
       allow delete: if false; // Delete protected
@@ -129,34 +202,61 @@ service cloud.firestore {
 
     // 11. Property expenses tracking
     match /property_expenses/{expenseId} {
-      allow read: if isStaff();
+      allow read: if isStaff() || (isSignedIn() && (
+        resource.data.get('ownerEmail', '') == request.auth.token.email || 
+        isPropertyOwner(resource.data.get('ownerId', ''))
+      ));
       allow write: if isFinancial();
       allow delete: if false; // Delete protected
     }
 
     // 12. Rental dispute legal cases
     match /cases/{caseId} {
-      allow read: if isStaff() || (isSignedIn() && resource.data.tenantId == request.auth.token.email);
+      allow read: if isStaff() || (isSignedIn() && (
+        resource.data.get('tenantEmail', '') == request.auth.token.email || 
+        isTenantUser(resource.data.get('tenantId', '')) || 
+        resource.data.get('ownerEmail', '') == request.auth.token.email || 
+        isPropertyOwner(resource.data.get('ownerId', ''))
+      ));
       allow write: if isStaff();
       allow delete: if false; // Delete protected
     }
 
     // 13. Digital archive uploaded documents
     match /archive/{archiveId} {
-      allow read: if isStaff() || (isSignedIn() && resource.data.uploadedBy == request.auth.token.email);
+      allow read: if isStaff() || (isSignedIn() && (
+        resource.data.get('uploadedBy', '') == request.auth.token.email || 
+        resource.data.get('tenantEmail', '') == request.auth.token.email || 
+        isTenantUser(resource.data.get('tenantId', '')) || 
+        resource.data.get('ownerEmail', '') == request.auth.token.email || 
+        isPropertyOwner(resource.data.get('ownerId', ''))
+      ));
       allow create: if isSignedIn();
-      allow update: if isStaff() || (isSignedIn() && resource.data.uploadedBy == request.auth.token.email);
+      allow update: if isStaff() || (isSignedIn() && resource.data.get('uploadedBy', '') == request.auth.token.email);
       allow delete: if isStaff();
     }
 
-    // 14. Real-time notifications and communications log
+    // 14. Real-time notifications
     match /notifications/{notificationId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn() && (
+        isStaff() || 
+        resource.data.get('recipientEmail', '') == request.auth.token.email || 
+        resource.data.get('userId', '') == request.auth.uid || 
+        resource.data.get('targetEmail', '') == request.auth.token.email
+      );
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        isStaff() || 
+        resource.data.get('recipientEmail', '') == request.auth.token.email || 
+        resource.data.get('userId', '') == request.auth.uid
+      );
+      allow delete: if isStaff();
     }
 
     // 15. Team communications
     match /operational_communications/{commId} {
       allow read, write: if isStaff();
+      allow delete: if isAdmin();
     }
 
     // 16. Dynamic payment ledger allocations
@@ -168,14 +268,21 @@ service cloud.firestore {
 
     // 17. Property owners master database
     match /owners/{ownerId} {
-      allow read: if isStaff() || (isSignedIn() && resource.data.email == request.auth.token.email);
+      allow read: if isStaff() || (isSignedIn() && (
+        resource.data.get('email', '') == request.auth.token.email || 
+        resource.data.get('portalEmail', '') == request.auth.token.email || 
+        resource.data.get('firebaseUid', '') == request.auth.uid
+      ));
       allow write: if isStaff();
       allow delete: if false; // Delete protected
     }
 
     // 18. Payout owner transfers
     match /owner_transfers/{transferId} {
-      allow read: if isStaff() || (isSignedIn() && resource.data.ownerId == request.auth.token.email);
+      allow read: if isStaff() || (isSignedIn() && (
+        resource.data.get('ownerEmail', '') == request.auth.token.email || 
+        isPropertyOwner(resource.data.get('ownerId', ''))
+      ));
       allow write: if isFinancial();
       allow delete: if false; // Delete protected
     }
@@ -198,6 +305,7 @@ service cloud.firestore {
     match /financial_periods/{periodId} {
       allow read: if isSignedIn();
       allow write: if isSystemOwner();
+      allow delete: if false; // Delete protected
     }
 
     // 22. Brokerage/management commissions
@@ -211,10 +319,12 @@ service cloud.firestore {
     match /vat_rates/{rateId} {
       allow read: if isSignedIn();
       allow write: if isSystemOwner();
+      allow delete: if false; // Delete protected
     }
     match /vatRates/{rateId} {
       allow read: if isSignedIn();
       allow write: if isSystemOwner();
+      allow delete: if false; // Delete protected
     }
 
     // 24. Office petty cash months
@@ -247,28 +357,45 @@ service cloud.firestore {
 
     // 28. Service maintenance requests
     match /maintenance_requests/{reqId} {
-      allow read, write: if isSignedIn();
+      allow read: if isStaff() || (isSignedIn() && (
+        resource.data.get('tenantEmail', '') == request.auth.token.email || 
+        isTenantUser(resource.data.get('tenantId', '')) || 
+        resource.data.get('createdByEmail', '') == request.auth.token.email || 
+        resource.data.get('ownerEmail', '') == request.auth.token.email || 
+        isPropertyOwner(resource.data.get('ownerId', ''))
+      ));
+      allow create: if isSignedIn();
+      allow update: if isStaff() || (isSignedIn() && (
+        resource.data.get('tenantEmail', '') == request.auth.token.email || 
+        isTenantUser(resource.data.get('tenantId', '')) || 
+        resource.data.get('createdByEmail', '') == request.auth.token.email
+      ));
+      allow delete: if isStaff();
     }
 
     // 29. Maintenance technicians directories
     match /technicians/{techId} {
       allow read: if isSignedIn();
       allow write: if isStaff();
+      allow delete: if isAdmin();
     }
 
     // 30. Collections department action log
     match /collection_actions/{actionId} {
       allow read, write: if isStaff();
+      allow delete: if isAdmin();
     }
 
     // 31. Tenant commitments payment promises
     match /payment_promises/{promiseId} {
       allow read, write: if isStaff();
+      allow delete: if isAdmin();
     }
 
     // 32. Contract renewal drafts and negotiations
     match /lease_renewals/{renewalId} {
       allow read, write: if isStaff();
+      allow delete: if isAdmin();
     }
 
     // 33. Deferred payments installments
@@ -292,11 +419,11 @@ service cloud.firestore {
       allow delete: if false; // Delete protected
     }
 
-    // 36. ERP security audit trails
+    // 36. ERP security audit trails (strictly immutable: create only, no updates or deletes)
     match /auditLogs/{logId} {
       allow read: if isAdmin();
-      allow create: if isSignedIn(); // Allow standard actions to log audit entries
-      allow update, delete: if false; // Audit logs must be completely immutable
+      allow create: if isSignedIn();
+      allow update, delete: if false;
     }
 
     // 37. Draggable UI layouts config
@@ -331,6 +458,20 @@ service cloud.firestore {
 
     // 42. Registered trade legal profile
     match /company_profile/{profileId} {
+      allow read: if isSignedIn();
+      allow write: if isSystemOwner();
+    }
+
+    // 43. System sequence counters & idempotency locks
+    match /system_counters/{counterId} {
+      allow read, write: if isStaff();
+    }
+    match /idempotency_locks/{lockId} {
+      allow read, write: if isStaff();
+    }
+
+    // 44. Real-time system health ping
+    match /_system_health/{docId} {
       allow read: if isSignedIn();
       allow write: if isSystemOwner();
     }

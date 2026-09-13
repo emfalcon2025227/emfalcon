@@ -25,15 +25,13 @@ import { User, Tenant } from "../../types";
 import { Badge } from "../common/Badge";
 import { SearchableSelect, SearchableOption } from "../common/SearchableSelect";
 import {
-  dispatchPortalAccessNotification,
   openWhatsAppDirect,
-  formatWhatsAppPortalAccess,
 } from "../../services/automatedEmailService";
 import { QuickCommunicationButtons } from "../common/QuickCommunicationButtons";
 
 export const TenantAccountsSettings: React.FC = () => {
   const { language } = useLanguage();
-  const { users, createUser, updateUser, deleteUser, resetUserPassword, syncPortalAccounts } = useAuth();
+  const { users, createUser, updateUser, deleteUser, resetUserPassword, syncPortalAccounts, provisionPortalAccount } = useAuth();
   const { tenants, properties, units, owners, leases } = useData();
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -46,7 +44,6 @@ export const TenantAccountsSettings: React.FC = () => {
   const [formData, setFormData] = useState({
     username: "",
     email: "",
-    password: "tenant@123",
     phone: "",
     tenantId: "",
     isActive: true
@@ -97,7 +94,6 @@ export const TenantAccountsSettings: React.FC = () => {
       setFormData({
         username: user.username,
         email: user.email,
-        password: "", // Don't show password
         phone: user.phone || "",
         tenantId: user.tenantId || "",
         isActive: user.isActive
@@ -107,7 +103,6 @@ export const TenantAccountsSettings: React.FC = () => {
       setFormData({
         username: "",
         email: "",
-        password: "tenant@123",
         phone: "",
         tenantId: "",
         isActive: true
@@ -146,41 +141,24 @@ export const TenantAccountsSettings: React.FC = () => {
         isActive: formData.isActive
       };
 
-      if (formData.password) {
-        updateData.password = formData.password;
-      }
-
       updateUser(editingUser.id, updateData);
       setSuccess(language === "ar" ? "تم تحديث الحساب بنجاح" : "Account updated successfully");
     } else {
       const selectedTenant = tenants.find(t => t.id === formData.tenantId);
-      const res = createUser({
-        username: cleanEmail, // Set username to email
+      
+      // Use secure server-side provisioning mechanism instead of local create
+      provisionPortalAccount({
+        portalRole: "TENANT",
+        targetId: formData.tenantId,
         email: cleanEmail,
         nameEn: selectedTenant?.nameEn || "",
         nameAr: selectedTenant?.nameAr || "",
-        password: formData.password || "tenant@123",
         phone: cleanPhone,
-        tenantId: formData.tenantId,
-        role: "TENANT",
-        isActive: true
+      }).then(res => {
+        setSuccess(language === "ar" ? "تم إنشاء الحساب وإرسال رابط التفعيل إلى البريد الإلكتروني بنجاح" : "Account created and activation link emailed successfully");
+      }).catch(err => {
+        setError(err.message || "Failed to provision tenant account");
       });
-
-      if (!res.success) {
-        setError(res.error || "Error");
-        return;
-      }
-
-      // Automatically dispatch credentials email
-      dispatchPortalAccessNotification({
-        recipient: cleanEmail,
-        role: "TENANT",
-        name: selectedTenant?.nameAr || selectedTenant?.nameEn || cleanEmail,
-        username: cleanEmail,
-        password: formData.password || "tenant@123",
-      }).catch(console.error);
-
-      setSuccess(language === "ar" ? "تم إنشاء الحساب وإرسال بيانات الدخول إلى البريد الإلكتروني تلقائياً" : "Account created and credentials emailed automatically");
     }
 
     setIsModalOpen(false);
@@ -293,19 +271,32 @@ export const TenantAccountsSettings: React.FC = () => {
                   emailLabel={language === "ar" ? "إرسال الدخول" : "Email Access"}
                   phone={user.phone}
                   whatsAppLabel={language === "ar" ? "واتساب" : "WhatsApp"}
-                  whatsAppText={formatWhatsAppPortalAccess(
-                    language === "ar" ? user.nameAr || user.nameEn : user.nameEn || user.nameAr,
-                    "TENANT",
-                    user.username
-                  )}
-                  onSendEmail={() =>
-                    dispatchPortalAccessNotification({
-                      recipient: user.email,
-                      role: "TENANT",
-                      name: language === "ar" ? user.nameAr || user.nameEn : user.nameEn || user.nameAr,
-                      username: user.username,
-                    })
-                  }
+                  whatsAppText={`عزيزي المستأجر ${language === "ar" ? user.nameAr || user.nameEn : user.nameEn || user.nameAr}،\nتم إرسال رابط تفعيل حساب بوابة المستأجر إلى بريدكم الإلكتروني: ${user.username}\nرابط الدخول: ${window.location.origin}`}
+                  onSendEmail={async () => {
+                    try {
+                      const res = await fetch("/api/auth/send-portal-activation-email", {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          "Authorization": `Bearer ${(window as any).__firebaseToken || ""}`
+                        },
+                        body: JSON.stringify({
+                          email: user.email,
+                          name: language === "ar" ? user.nameAr || user.nameEn : user.nameEn || user.nameAr,
+                          role: "TENANT",
+                          customBaseUrl: window.location.origin
+                        })
+                      });
+                      const data = await res.json();
+                      if (data.success) {
+                        return { success: true, message: language === "ar" ? "تم إرسال رابط التفعيل بنجاح" : "Activation link sent successfully" };
+                      } else {
+                        return { success: false, error: data.error || "Failed to send activation email" };
+                      }
+                    } catch (e: any) {
+                      return { success: false, error: e?.message || "Error sending email" };
+                    }
+                  }}
                   size="sm"
                   showLabels={false}
                 />
@@ -434,26 +425,6 @@ export const TenantAccountsSettings: React.FC = () => {
                   onChange={(e) => setFormData({ ...formData, email: e.target.value, username: e.target.value })}
                   className="w-full px-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none transition-all"
                 />
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-[11px] font-black text-slate-700 uppercase tracking-wider">
-                  {editingUser 
-                    ? (language === "ar" ? "كلمة المرور (اتركه فارغاً للحفاظ على الحالية)" : "Password (Leave blank to keep current)") 
-                    : (language === "ar" ? "كلمة المرور الافتراضية" : "Default Password")}
-                </label>
-                <div className="relative">
-                  <Key className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder={editingUser ? "••••••••" : "tenant@123"}
-                    className={`w-full pr-10 pl-4 py-2.5 text-xs border border-slate-200 rounded-xl outline-none transition-all font-mono ${
-                      editingUser ? "bg-slate-50 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600" : "bg-slate-100 text-slate-500"
-                    }`}
-                  />
-                </div>
               </div>
 
               <div className="flex items-center gap-3 py-2">

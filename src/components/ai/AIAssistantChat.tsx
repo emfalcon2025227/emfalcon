@@ -4,6 +4,7 @@ import { motion, useDragControls } from "motion/react";
 import { useLanguage } from "../../context/LanguageContext";
 import { useData } from "../../context/DataContext";
 import { ViewState, Tenant, Cheque } from "../../types";
+import { authenticatedFetch } from "../../utils/apiClient";
 
 declare global {
   interface Window {
@@ -394,7 +395,7 @@ export const AIAssistantChat: React.FC<AIAssistantChatProps> = ({
         notifications: data.notifications,
       };
 
-      const res = await fetch("/api/ai/assistant-chat", {
+      const res = await authenticatedFetch("/api/ai/assistant-chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

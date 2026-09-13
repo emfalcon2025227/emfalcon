@@ -5,6 +5,8 @@
  * Guarantees zero secret exposure and absolute financial read-only safety.
  */
 
+import { authenticatedFetch } from "../utils/apiClient";
+
 export interface WhatsAppConfig {
   phoneNumberId: string;
   accessToken: string; // Stored securely/masked in frontend
@@ -40,7 +42,7 @@ export async function getCommunicationProvidersConfigFromServer(): Promise<{
   gmail: GmailSmtpConfig;
 }> {
   try {
-    const res = await fetch("/api/connections/config");
+    const res = await authenticatedFetch("/api/connections/config");
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     const data = await res.json();
     if (!data.success) throw new Error(data.error || "Failed to load configurations from server");
@@ -59,7 +61,7 @@ export async function saveCommunicationProvidersConfigOnServer(params: {
   gmail?: Partial<GmailSmtpConfig>;
 }): Promise<{ success: boolean; message?: string }> {
   try {
-    const res = await fetch("/api/connections/config", {
+    const res = await authenticatedFetch("/api/connections/config", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(params),
@@ -84,7 +86,7 @@ export async function testWhatsAppConnectionOnServer(): Promise<{
   repairInstructions?: string;
 }> {
   try {
-    const res = await fetch("/api/connections/test-whatsapp", { method: "POST" });
+    const res = await authenticatedFetch("/api/connections/test-whatsapp", { method: "POST" });
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     const data = await res.json();
     return {
@@ -125,7 +127,7 @@ export async function testGmailConnectionOnServer(): Promise<{
   steps?: DiagnosticStep[];
 }> {
   try {
-    const res = await fetch("/api/connections/test-smtp", { method: "POST" });
+    const res = await authenticatedFetch("/api/connections/test-smtp", { method: "POST" });
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     const data = await res.json();
     return {
@@ -164,7 +166,7 @@ export async function sendTestWhatsAppMessageOnServer(
   messageText: string
 ): Promise<{ success: boolean; messageId: string }> {
   try {
-    const res = await fetch("/api/connections/send-test-whatsapp", {
+    const res = await authenticatedFetch("/api/connections/send-test-whatsapp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ recipientPhone, messageText }),
@@ -187,7 +189,7 @@ export async function sendTestEmailMessageOnServer(
   messageBody: string
 ): Promise<{ success: boolean; messageId: string }> {
   try {
-    const res = await fetch("/api/connections/send-test-email", {
+    const res = await authenticatedFetch("/api/connections/send-test-email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ recipientEmail, subject, messageBody }),

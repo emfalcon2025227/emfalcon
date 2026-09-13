@@ -5,6 +5,7 @@
  */
 
 import { getOwnerPortalLoginUrl, getTenantPortalLoginUrl } from "./portalProvisioningService";
+import { authenticatedFetch } from "../utils/apiClient";
 
 export interface PortalAccessDispatchParams {
   recipient: string;
@@ -68,7 +69,7 @@ export async function dispatchPortalAccessNotification(params: PortalAccessDispa
     const isOwner = params.role === "OWNER" || params.role === "PROPERTY_OWNER";
     const resolvedUrl = params.loginUrl || (isOwner ? getOwnerPortalLoginUrl() : getTenantPortalLoginUrl());
 
-    const res = await fetch("/api/notifications/dispatch-portal-access", {
+    const res = await authenticatedFetch("/api/notifications/dispatch-portal-access", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -100,7 +101,7 @@ export async function dispatchReceiptNotification(params: ReceiptDispatchParams)
       return { success: false, error: "No recipient email provided" };
     }
 
-    const res = await fetch("/api/notifications/dispatch-receipt", {
+    const res = await authenticatedFetch("/api/notifications/dispatch-receipt", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(params),
@@ -129,7 +130,7 @@ export async function dispatchLeaseNotification(params: LeaseDispatchParams): Pr
       return { success: false, error: "No recipient email provided" };
     }
 
-    const res = await fetch("/api/notifications/dispatch-lease", {
+    const res = await authenticatedFetch("/api/notifications/dispatch-lease", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(params),
@@ -158,7 +159,7 @@ export async function dispatchTenantWelcomeNotification(params: TenantWelcomeDis
       return { success: false, error: "Recipient email is required" };
     }
 
-    const res = await fetch("/api/notifications/dispatch-tenant-welcome", {
+    const res = await authenticatedFetch("/api/notifications/dispatch-tenant-welcome", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(params),
@@ -206,23 +207,6 @@ export function openWhatsAppDirect(phone: string, text: string): void {
 }
 
 // 6. Pre-formatted WhatsApp text generators
-export function formatWhatsAppPortalAccess(name: string, role: string, username: string, password?: string): string {
-  const portalName = role === "OWNER" || role === "PROPERTY_OWNER" ? "بوابة المالك الاستثمارية" : "بوابة المستأجر";
-  const url = role === "OWNER" || role === "PROPERTY_OWNER" ? getOwnerPortalLoginUrl() : getTenantPortalLoginUrl();
-
-  return `
-مرحباً بك ${name}،
-تم تفعيل حسابك في ${portalName} لدى صقر الإمارات للعقارات.
-
-بيانات الدخول:
-• اسم المستخدم: ${username}
-${password ? `• كلمة المرور المؤقتة: ${password}` : ""}
-• رابط تسجيل الدخول المباشر:
-${url}
-
-يسعدنا خدمتك دائماً.
-`.trim();
-}
 
 export function formatWhatsAppReceipt(receiptNumber: string, tenantName: string, amount: number, propertyName?: string, unitNumber?: string): string {
   return `

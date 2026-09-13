@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
+import { authenticatedFetch } from '../../utils/apiClient';
 import {
   Save,
   Upload,
@@ -75,7 +76,7 @@ export function CompanySettings({ language }: { language: "ar" | "en" }) {
   const [apiKeyMessage, setApiKeyMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/config/gemini-key')
+    authenticatedFetch('/api/config/gemini-key')
       .then(res => res.json())
       .then(data => {
         if (data) setApiKeyStatus(data);
@@ -87,7 +88,7 @@ export function CompanySettings({ language }: { language: "ar" | "en" }) {
     e.preventDefault();
     if (!apiKeyInput.trim()) return;
     try {
-      const res = await fetch('/api/config/gemini-key', {
+      const res = await authenticatedFetch('/api/config/gemini-key', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ apiKey: apiKeyInput.trim() }),
@@ -96,7 +97,7 @@ export function CompanySettings({ language }: { language: "ar" | "en" }) {
       if (data.success) {
         setApiKeyMessage(language === 'ar' ? "✅ تم تحديث وحفظ مفتاح Gemini API بنجاح ومزامنته تلقائياً مع النظام!" : "✅ Gemini API key updated and saved successfully!");
         setApiKeyInput('');
-        const statusRes = await fetch('/api/config/gemini-key');
+        const statusRes = await authenticatedFetch('/api/config/gemini-key');
         const statusData = await statusRes.json();
         if (statusData) setApiKeyStatus(statusData);
       } else {

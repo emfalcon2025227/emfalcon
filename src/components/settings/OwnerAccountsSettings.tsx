@@ -27,7 +27,7 @@ import { Modal } from "../common/Modal";
 import {
   dispatchPortalAccessNotification,
   openWhatsAppDirect,
-  formatWhatsAppPortalAccess,
+  
 } from "../../services/automatedEmailService";
 import { QuickCommunicationButtons } from "../common/QuickCommunicationButtons";
 
@@ -73,118 +73,40 @@ export const OwnerAccountsSettings: React.FC = () => {
     successMessage: null,
   });
 
-  // Send Email Modal State
-  const [sendEmailModal, setSendEmailModal] = useState<{
-    isOpen: boolean;
-    owner: Owner | null;
-    user: User | null;
-    recipientEmail: string;
-    emailSubject: string;
-    emailBody: string;
-    statusMessage: string | null;
-  }>({
-    isOpen: false,
-    owner: null,
-    user: null,
-    recipientEmail: "",
-    emailSubject: "",
-    emailBody: "",
-    statusMessage: null,
-  });
-
-  const handleOpenSendEmail = (owner: Owner, user: User | null) => {
+  const handleTriggerActivationEmail = async (owner: Owner, user: User | null) => {
     const email = owner.email || user?.username || "";
-    let passwordVal = "Falcon@2025";
-    try {
-      if (user?.password) {
-        passwordVal = atob(user.password);
-      }
-    } catch (e) {
-      passwordVal = user?.password || "Falcon@2025";
+    if (!email) {
+      alert(language === "ar" ? "البريد الإلكتروني مفقود" : "Email is missing");
+      return;
     }
-
     const ownerName = language === "ar" ? owner.nameAr : owner.nameEn;
-    const subject = language === "ar"
-      ? `بيانات الدخول لبوابة الملاك - شركة صقر الإمارات للعقارات`
-      : `Owner Portal Login Credentials - Emirates Falcon Real Estate`;
-
-    const body = language === "ar"
-      ? `عزيزي المالك المحترم / ${ownerName},\n\nيسرنا إحاطتكم علماً بأنه تم تفعيل حسابكم الخاص بـ "بوابة الملاك" في نظام شركة صقر الإمارات للعقارات.\n\nبيانات الدخول الخاصة بكم:\n- رابط البوابة: ${window.location.origin}\n- اسم المستخدم (البريد الإلكتروني): ${email}\n- كلمة المرور المؤقتة / المعتمدة: ${passwordVal}\n\nيرجى تسجيل الدخول وتغيير كلمة المرور الخاصة بكم عند الدخول الأول لدواعي الأمان.\n\nمع تحيات إدارة شركة صقر الإمارات للعقارات.`
-      : `Dear Esteemed Owner / ${ownerName},\n\nWe are pleased to inform you that your Owner Portal account has been activated at Emirates Falcon Real Estate ERP.\n\nYour Login Credentials:\n- Portal URL: ${window.location.origin}\n- Username (Email): ${email}\n- Temporary / Approved Password: ${passwordVal}\n\nPlease login and update your password upon first entry for security purposes.\n\nBest regards,\nEmirates Falcon Real Estate Management.`;
-
-    setSendEmailModal({
-      isOpen: true,
-      owner,
-      user,
-      recipientEmail: email,
-      emailSubject: subject,
-      emailBody: body,
-      statusMessage: null,
-    });
-  };
-
-  const handleExecuteSendEmail = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!sendEmailModal.recipientEmail) return;
-
+    
     try {
-      const ownerName = language === "ar" ? sendEmailModal.owner?.nameAr || "" : sendEmailModal.owner?.nameEn || "";
-      let passVal = "Falcon@2025";
-      try {
-        passVal = sendEmailModal.user?.password ? atob(sendEmailModal.user.password) : "Falcon@2025";
-      } catch (e) {
-        passVal = sendEmailModal.user?.password || "Falcon@2025";
-      }
-
-      const res = await dispatchPortalAccessNotification({
-        recipient: sendEmailModal.recipientEmail,
-        role: "OWNER",
-        name: ownerName,
-        username: sendEmailModal.user?.username || sendEmailModal.recipientEmail,
-        password: passVal,
+      const res = await fetch("/api/auth/send-portal-activation-email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${(window as any).__firebaseToken || ""}`
+        },
+        body: JSON.stringify({
+          email: email,
+          name: ownerName,
+          role: "OWNER",
+          customBaseUrl: window.location.origin
+        })
       });
-
-      if (logAudit && sendEmailModal.owner) {
-        logAudit("UPDATE", "OWNER", sendEmailModal.owner.id, sendEmailModal.owner.nameAr, `Automated dispatch of portal credentials to owner email: ${sendEmailModal.recipientEmail}`);
-      }
-
-      if (res.success) {
-        setSendEmailModal(prev => ({
-          ...prev,
-          statusMessage: language === "ar" ? "✅ تم إرسال البريد الإلكتروني تلقائياً عبر النظام بنجاح!" : "✅ Email automatically sent via system successfully!",
-        }));
-
-        setTimeout(() => {
-          setSendEmailModal({ isOpen: false, owner: null, user: null, recipientEmail: "", emailSubject: "", emailBody: "", statusMessage: null });
-        }, 1800);
+      const data = await res.json();
+      if (data.success) {
+        if (logAudit) {
+          logAudit("UPDATE", "OWNER", owner.id, owner.nameAr, `Automated dispatch of portal activation link to owner email: ${email}`);
+        }
+        alert(language === "ar" ? "تم إرسال رابط التفعيل الآمن إلى البريد الإلكتروني بنجاح" : "Activation link sent to email successfully");
       } else {
-        alert(res.error || "فشل إرسال البريد الإلكتروني");
+        alert(data.error || "فشل إرسال البريد الإلكتروني");
       }
     } catch (err: any) {
       alert(err?.message || "خطأ أثناء إرسال البريد الإلكتروني");
     }
-  };
-
-  const handleSaveOwnerPassword = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!passwordModal.user || !passwordModal.passwordInput.trim()) return;
-    
-    // Set custom fixed password (non-random, persistent)
-    resetUserPassword(passwordModal.user.id, passwordModal.passwordInput.trim());
-    
-    updateUser(passwordModal.user.id, {
-      isFirstLoginCompleted: true,
-      portalAccountStatus: "ACTIVE",
-    });
-
-    setPasswordModal(prev => ({
-      ...prev,
-      successMessage: language === "ar" ? "✅ تم تحديث وتثبيت كلمة المرور بنجاح ولن يتم تغييرها عشوائياً." : "✅ Password updated and fixed successfully.",
-    }));
-
-    setTimeout(() => {
-      setPasswordModal({ isOpen: false, owner: null, user: null, passwordInput: "Falcon@2025", successMessage: null });
-    }, 1500);
   };
 
   const handleSyncAll = async () => {
@@ -477,63 +399,25 @@ export const OwnerAccountsSettings: React.FC = () => {
                           <Edit className="w-4 h-4" />
                         </button>
 
-                        {/* Reset / Change Password Button */}
+                        {/* Send Activation Email Button */}
                         {info.user && (
                           <button
-                            onClick={() => {
-                              let existingPass = "Falcon@2025";
-                              try {
-                                if (info.user?.password) {
-                                  existingPass = atob(info.user.password);
-                                }
-                              } catch (e) {
-                                existingPass = info.user?.password || "Falcon@2025";
-                              }
-                              setPasswordModal({
-                                isOpen: true,
-                                owner,
-                                user: info.user,
-                                passwordInput: existingPass,
-                                successMessage: null,
-                              });
-                            }}
-                            title={language === "ar" ? "تعديل وتثبيت كلمة المرور" : "Change & Fix Password"}
-                            className="p-2 text-amber-700 hover:bg-amber-100 rounded-lg transition-colors cursor-pointer"
-                          >
-                            <Key className="w-4 h-4" />
-                          </button>
-                        )}
-
-                        {/* Send Email Credentials Button */}
-                        {info.user && (
-                          <button
-                            onClick={() => handleOpenSendEmail(owner, info.user)}
-                            title={language === "ar" ? "إرسال بيانات الدخول عبر البريد الإلكتروني" : "Send Credentials via Email"}
+                            onClick={() => handleTriggerActivationEmail(owner, info.user)}
+                            title={language === "ar" ? "إرسال رابط التفعيل الآمن عبر البريد الإلكتروني" : "Send Secure Activation Link via Email"}
                             className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
                           >
                             <Mail className="w-4 h-4" />
                           </button>
                         )}
 
-                        {/* WhatsApp Credentials Direct Button */}
+                        {/* WhatsApp Portal Info Direct Button */}
                         {info.user && owner.phone && (
                           <button
                             onClick={() => {
-                              let passVal = "Falcon@2025";
-                              try {
-                                passVal = info.user?.password ? atob(info.user.password) : "Falcon@2025";
-                              } catch (e) {
-                                passVal = info.user?.password || "Falcon@2025";
-                              }
-                              const text = formatWhatsAppPortalAccess(
-                                language === "ar" ? owner.nameAr : owner.nameEn,
-                                "OWNER",
-                                info.user.username,
-                                passVal
-                              );
+                              const text = `عزيزي المالك ${language === "ar" ? owner.nameAr : owner.nameEn}،\nتم إرسال رابط التفعيل وتعيين كلمة المرور الخاصة ببوابة الملاك إلى بريدكم الإلكتروني: ${info.user!.username}\nيمكنكم الدخول عبر الرابط: ${window.location.origin}`;
                               openWhatsAppDirect(owner.phone, text);
                             }}
-                            title={language === "ar" ? `إرسال بيانات الدخول عبر واتساب (${owner.phone})` : "Send Credentials via WhatsApp"}
+                            title={language === "ar" ? `إشعار بالبوابة عبر واتساب (${owner.phone})` : "Send Portal Info via WhatsApp"}
                             className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
                           >
                             <MessageCircle className="w-4 h-4" />
@@ -663,141 +547,6 @@ export const OwnerAccountsSettings: React.FC = () => {
       )}
 
       {/* Change & Fix Owner Password Modal */}
-      {passwordModal.isOpen && passwordModal.owner && passwordModal.user && (
-        <Modal
-          isOpen={passwordModal.isOpen}
-          onClose={() => setPasswordModal({ isOpen: false, owner: null, user: null, passwordInput: "Falcon@2025", successMessage: null })}
-          title={language === "ar" ? `إدارة وتثبيت كلمة مرور المالك: ${language === "ar" ? passwordModal.owner.nameAr : passwordModal.owner.nameEn}` : `Manage & Fix Password for Owner`}
-        >
-          <form onSubmit={handleSaveOwnerPassword} className="space-y-4 p-2">
-            <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs space-y-1">
-              <p className="font-black text-slate-900">
-                {language === "ar" ? "اسم المستخدم (البريد الإلكتروني):" : "Username (Email):"} <span className="font-mono">{passwordModal.user.username}</span>
-              </p>
-              <p className="text-slate-600">
-                {language === "ar"
-                  ? "يمكنك تعيين كلمة مرور ثابتة ودائمة لهذا المالك، ولن يتم توليد كلمات سر عشوائية بعد الآن. سيتم الاحتفاظ بها دائماً."
-                  : "You can set a fixed and permanent password for this owner. Random passwords will no longer be generated."}
-              </p>
-            </div>
-
-            {passwordModal.successMessage && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-xl flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
-                <span>{passwordModal.successMessage}</span>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                {language === "ar" ? "كلمة المرور الثابتة / المؤقتة المعتمدة" : "Fixed / Temporary Approved Password"}
-              </label>
-              <input
-                type="text"
-                value={passwordModal.passwordInput}
-                onChange={(e) => setPasswordModal(prev => ({ ...prev, passwordInput: e.target.value }))}
-                placeholder="Falcon@2025"
-                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
-                required
-              />
-              <p className="text-[11px] text-slate-400 mt-1">
-                {language === "ar"
-                  ? "يستطيع المالك الدخول بهذه الكلمة فوراً، أو تغييرها بنفسه عند أول دخول للبوابة لتصبح هي كلمة المرور الدائمة الخاصة به."
-                  : "The owner can login immediately with this password, or change it upon first login to be their permanent password."}
-              </p>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setPasswordModal({ isOpen: false, owner: null, user: null, passwordInput: "Falcon@2025", successMessage: null })}
-                className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 cursor-pointer"
-              >
-                {language === "ar" ? "إلغاء" : "Cancel"}
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-              >
-                <Save className="w-4 h-4" />
-                <span>{language === "ar" ? "حفظ وتثبيت كلمة المرور" : "Save & Fix Password"}</span>
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
-
-      {/* Send Email Credentials Modal */}
-      {sendEmailModal.isOpen && sendEmailModal.owner && (
-        <Modal
-          isOpen={sendEmailModal.isOpen}
-          onClose={() => setSendEmailModal({ isOpen: false, owner: null, user: null, recipientEmail: "", emailSubject: "", emailBody: "", statusMessage: null })}
-          title={language === "ar" ? `إرسال بيانات الدخول للمالك: ${language === "ar" ? sendEmailModal.owner.nameAr : sendEmailModal.owner.nameEn}` : `Send Portal Credentials to Owner`}
-        >
-          <form onSubmit={handleExecuteSendEmail} className="space-y-4 p-2">
-            <div className="p-3 bg-blue-50 rounded-2xl border border-blue-200 text-xs space-y-1">
-              <p className="font-black text-slate-900">
-                {language === "ar" ? "البريد الإلكتروني المستلم:" : "Recipient Email:"} <span className="font-mono">{sendEmailModal.recipientEmail}</span>
-              </p>
-              <p className="text-slate-600">
-                {language === "ar"
-                  ? "سيتم إرسال رسالة بريد إلكتروني تحتوي على رابط البوابة، اسم المستخدم، وكلمة المرور المعتمدة للمالك."
-                  : "An email containing the portal link, username, and approved password will be sent to the owner."}
-              </p>
-            </div>
-
-            {sendEmailModal.statusMessage && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-xl flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
-                <span>{sendEmailModal.statusMessage}</span>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                {language === "ar" ? "عنوان البريد (Subject)" : "Email Subject"}
-              </label>
-              <input
-                type="text"
-                value={sendEmailModal.emailSubject}
-                onChange={(e) => setSendEmailModal(prev => ({ ...prev, emailSubject: e.target.value }))}
-                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                {language === "ar" ? "محتوى الرسالة (Message Body)" : "Email Message Body"}
-              </label>
-              <textarea
-                rows={8}
-                value={sendEmailModal.emailBody}
-                onChange={(e) => setSendEmailModal(prev => ({ ...prev, emailBody: e.target.value }))}
-                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono leading-relaxed focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                required
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setSendEmailModal({ isOpen: false, owner: null, user: null, recipientEmail: "", emailSubject: "", emailBody: "", statusMessage: null })}
-                className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 cursor-pointer"
-              >
-                {language === "ar" ? "إلغاء" : "Cancel"}
-              </button>
-              <button
-                type="submit"
-                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md"
-              >
-                <Mail className="w-4 h-4" />
-                <span>{language === "ar" ? "إرسال البريد الإلكتروني الآن" : "Send Email Now"}</span>
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
     </div>
   );
 };
