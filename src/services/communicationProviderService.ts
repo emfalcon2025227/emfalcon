@@ -6,6 +6,7 @@
  */
 
 import { authenticatedFetch } from "../utils/apiClient";
+import { safeFetchJson } from "../utils/safeApiFetch";
 
 export interface WhatsAppConfig {
   phoneNumberId: string;
@@ -42,13 +43,12 @@ export async function getCommunicationProvidersConfigFromServer(): Promise<{
   gmail: GmailSmtpConfig;
 }> {
   try {
-    const res = await authenticatedFetch("/api/connections/config");
-    if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || "Failed to load configurations from server");
+    const res = await safeFetchJson<{ success: boolean; whatsapp: WhatsAppConfig; gmail: GmailSmtpConfig; error?: string }>("/api/connections/config");
+    if (res.isHtmlResponse) throw new Error(res.error || `HTTP error ${res.status}`);
+    if (!res.success) throw new Error(res.error || "Failed to load configurations from server");
     return {
-      whatsapp: data.whatsapp,
-      gmail: data.gmail,
+      whatsapp: res.data?.whatsapp as WhatsAppConfig,
+      gmail: res.data?.gmail as GmailSmtpConfig,
     };
   } catch (err: any) {
     console.warn("Failed to load connection configurations from server (may be offline):", err?.message || err);
@@ -61,15 +61,14 @@ export async function saveCommunicationProvidersConfigOnServer(params: {
   gmail?: Partial<GmailSmtpConfig>;
 }): Promise<{ success: boolean; message?: string }> {
   try {
-    const res = await authenticatedFetch("/api/connections/config", {
+    const res = await safeFetchJson<{ success: boolean; message?: string; error?: string }>("/api/connections/config", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(params),
     });
-    if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || "Failed to save configurations to server");
-    return data;
+    if (res.isHtmlResponse) throw new Error(res.error || `HTTP error ${res.status}`);
+    if (!res.success) throw new Error(res.error || "Failed to save configurations to server");
+    return res.data || { success: true };
   } catch (err: any) {
     console.error("Failed to save connection configurations to server:", err);
     throw err;
@@ -86,16 +85,16 @@ export async function testWhatsAppConnectionOnServer(): Promise<{
   repairInstructions?: string;
 }> {
   try {
-    const res = await authenticatedFetch("/api/connections/test-whatsapp", { method: "POST" });
-    if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-    const data = await res.json();
+    const res = await safeFetchJson<any>("/api/connections/test-whatsapp", { method: "POST" });
+    if (res.isHtmlResponse) throw new Error(res.error || `HTTP error ${res.status}`);
+    const data = res.data || {};
     return {
-      success: data.success,
-      status: data.status,
+      success: res.success,
+      status: data.status || (res.success ? "VERIFIED" : "ERROR"),
       lastCheckedAt: data.lastCheckedAt,
       latency: data.latency,
-      errorCode: data.errorCode,
-      safeErrorMessage: data.safeErrorMessage,
+      errorCode: data.errorCode || (res.success ? undefined : "CONNECTION_FAILED"),
+      safeErrorMessage: data.safeErrorMessage || res.error,
       repairInstructions: data.repairInstructions,
     };
   } catch (err: any) {
@@ -127,16 +126,16 @@ export async function testGmailConnectionOnServer(): Promise<{
   steps?: DiagnosticStep[];
 }> {
   try {
-    const res = await authenticatedFetch("/api/connections/test-smtp", { method: "POST" });
-    if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-    const data = await res.json();
+    const res = await safeFetchJson<any>("/api/connections/test-smtp", { method: "POST" });
+    if (res.isHtmlResponse) throw new Error(res.error || `HTTP error ${res.status}`);
+    const data = res.data || {};
     return {
-      success: data.success,
-      status: data.status,
+      success: res.success,
+      status: data.status || (res.success ? "VERIFIED" : "ERROR"),
       lastCheckedAt: data.lastCheckedAt,
       latency: data.latency,
-      errorCode: data.errorCode,
-      safeErrorMessage: data.safeErrorMessage,
+      errorCode: data.errorCode || (res.success ? undefined : "CONNECTION_FAILED"),
+      safeErrorMessage: data.safeErrorMessage || res.error,
       repairInstructions: data.repairInstructions,
       steps: data.steps,
     };
@@ -166,17 +165,14 @@ export async function sendTestWhatsAppMessageOnServer(
   messageText: string
 ): Promise<{ success: boolean; messageId: string }> {
   try {
-    const res = await authenticatedFetch("/api/connections/send-test-whatsapp", {
+    const res = await safeFetchJson<any>("/api/connections/send-test-whatsapp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ recipientPhone, messageText }),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `HTTP error ${res.status}`);
-    }
-    const data = await res.json();
-    return { success: data.success, messageId: data.messageId };
+    if (res.isHtmlResponse) throw new Error(res.error || `HTTP error ${res.status}`);
+    if (!res.success) throw new Error(res.error || `HTTP error ${res.status}`);
+    return { success: true, messageId: res.data?.messageId || "UNKNOWN" };
   } catch (err: any) {
     console.error("Failed to send test WhatsApp message:", err);
     throw err;
@@ -189,17 +185,14 @@ export async function sendTestEmailMessageOnServer(
   messageBody: string
 ): Promise<{ success: boolean; messageId: string }> {
   try {
-    const res = await authenticatedFetch("/api/connections/send-test-email", {
+    const res = await safeFetchJson<any>("/api/connections/send-test-email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ recipientEmail, subject, messageBody }),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `HTTP error ${res.status}`);
-    }
-    const data = await res.json();
-    return { success: data.success, messageId: data.messageId };
+    if (res.isHtmlResponse) throw new Error(res.error || `HTTP error ${res.status}`);
+    if (!res.success) throw new Error(res.error || `HTTP error ${res.status}`);
+    return { success: true, messageId: res.data?.messageId || "UNKNOWN" };
   } catch (err: any) {
     console.error("Failed to send test email message:", err);
     throw err;

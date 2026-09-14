@@ -76,15 +76,19 @@ function getFirestoreAdmin() {
 }
 
 function getAdminAuthClient() {
-  const base64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
-  if (!base64) {
-    return null;
-  }
   if (adminAuthClient) return adminAuthClient;
+
+  const base64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+  
   try {
     if (!getAdminApps().length) {
-      const serviceAccount = JSON.parse(Buffer.from(base64, "base64").toString("utf8"));
-      initAdminApp({ credential: adminCert(serviceAccount) });
+      if (base64) {
+        const serviceAccount = JSON.parse(Buffer.from(base64, "base64").toString("utf8"));
+        initAdminApp({ credential: adminCert(serviceAccount) });
+      } else {
+        // Initialize without credentials using projectId. This is sufficient for verifyIdToken.
+        initAdminApp({ projectId: firebaseAppletConfig.projectId });
+      }
     }
     adminAuthClient = getAdminAuth();
     return adminAuthClient;
@@ -238,7 +242,7 @@ declare global {
   }
 }
 
-async function resolveUserRole(uid: string, email?: string): Promise<{ role: string; ownerId?: string; tenantId?: string; name?: string }> {
+async function resolveUserRole(uid: string, email?: string, token?: string): Promise<{ role: string; ownerId?: string; tenantId?: string; name?: string }> {
   try {
     const adminDb = getFirestoreAdmin();
     if (adminDb) {
@@ -280,19 +284,27 @@ async function resolveUserRole(uid: string, email?: string): Promise<{ role: str
           };
         }
       }
-    } else {
-      const clientDb = getClientFirestoreDb();
-      if (clientDb) {
-        const directSnap = await clientGetDoc(clientDoc(clientDb, "users", uid));
-        if (directSnap.exists()) {
-          const d = directSnap.data();
+    } else if (token) {
+      // Fallback: Use REST API to query Firestore acting as the user when Admin SDK is unavailable
+      const dbId = firebaseAppletConfig.firestoreDatabaseId || "(default)";
+      const projectId = firebaseAppletConfig.projectId;
+      const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${dbId}/documents/users/${uid}`;
+      try {
+        const restRes = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        if (restRes.ok) {
+          const json = await restRes.json();
+          const fields = json.fields || {};
           return {
-            role: d?.role || "ADMIN",
-            ownerId: d?.ownerId,
-            tenantId: d?.tenantId,
-            name: d?.nameAr || d?.nameEn || d?.name || d?.username,
+            role: fields.role?.stringValue || "ADMIN",
+            ownerId: fields.ownerId?.stringValue,
+            tenantId: fields.tenantId?.stringValue,
+            name: fields.nameAr?.stringValue || fields.nameEn?.stringValue || fields.name?.stringValue || fields.username?.stringValue,
           };
+        } else {
+          console.warn("[Auth RBAC] REST API fallback failed with status:", restRes.status);
         }
+      } catch (restErr) {
+        console.warn("[Auth RBAC] REST API fallback error:", restErr);
       }
     }
   } catch (err) {
@@ -344,7 +356,7 @@ async function authenticateFirebaseToken(req: express.Request, res: express.Resp
       return res.status(401).json({ success: false, error: "UNAUTHORIZED", message: "User ID not found in token." });
     }
 
-    const { role, ownerId, tenantId, name } = await resolveUserRole(uid, email);
+    const { role, ownerId, tenantId, name } = await resolveUserRole(uid, email, token);
 
     req.user = {
       uid,
