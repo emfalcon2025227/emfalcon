@@ -26,8 +26,8 @@ import { RiskConfigWeights } from "../../types";
 import { Badge } from "../common/Badge";
 import { AdminControlPanel } from "../admin/AdminControlPanel";
 import { ChangeMyPasswordModal } from "../common/ChangeMyPasswordModal";
-import { TenantAccountsSettings } from "./TenantAccountsSettings";
-import { OwnerAccountsSettings } from "./OwnerAccountsSettings";
+import { PortalAccountsSettings } from "./PortalAccountsSettings";
+
 import { CompanySettings } from "./CompanySettings";
 import { CompanyConnectionsView } from "./CompanyConnectionsView";
 import { FirebaseConnectionTester } from "./FirebaseConnectionTester";
@@ -41,7 +41,7 @@ export const SettingsView: React.FC = () => {
   const { riskWeights, updateRiskWeights, auditLogs } = useData();
   const { users, currentUser, deleteUser, hasPermission } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<"COMPANY" | "SECURITY" | "RISK" | "TEMPLATES" | "AUDIT" | "USERS" | "ADMIN" | "TENANT_ACCOUNTS" | "OWNER_ACCOUNTS" | "CONNECTIONS" | "FIREBASE">("COMPANY");
+  const [activeTab, setActiveTab] = useState<"COMPANY" | "SECURITY" | "RISK" | "TEMPLATES" | "AUDIT" | "USERS" | "ADMIN" | "PORTAL_ACCOUNTS" | "CONNECTIONS" | "FIREBASE">("COMPANY");
   const [userToDeleteConfirm, setUserToDeleteConfirm] = useState<any | null>(null);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
@@ -184,29 +184,21 @@ export const SettingsView: React.FC = () => {
           <span>{language === "ar" ? "المستخدمين والأدوار" : "User Roles (RBAC)"}</span>
         </button>
 
+        
         <button
-          onClick={() => setActiveTab("TENANT_ACCOUNTS")}
+          onClick={() => setActiveTab("PORTAL_ACCOUNTS")}
           className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
-            activeTab === "TENANT_ACCOUNTS"
+            activeTab === "PORTAL_ACCOUNTS"
               ? "bg-amber-700 text-white shadow-xs"
               : "text-slate-600 hover:bg-slate-50"
           }`}
         >
           <UserIcon className="w-3.5 h-3.5" />
-          <span>{language === "ar" ? "حسابات المستأجرين" : "Tenant Accounts"}</span>
+          <span>{language === "ar" ? "حسابات البوابات (الملاك والمستأجرين)" : "Portal Accounts (Owners & Tenants)"}</span>
         </button>
 
-        <button
-          onClick={() => setActiveTab("OWNER_ACCOUNTS")}
-          className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
-            activeTab === "OWNER_ACCOUNTS"
-              ? "bg-amber-700 text-white shadow-xs"
-              : "text-slate-600 hover:bg-slate-50"
-          }`}
-        >
-          <Building2 className="w-3.5 h-3.5" />
-          <span>{language === "ar" ? "حسابات الملاك" : "Owner Accounts"}</span>
-        </button>
+
+        
 
         <button
           onClick={() => setActiveTab("ADMIN")}
@@ -249,8 +241,8 @@ export const SettingsView: React.FC = () => {
 
       {activeTab === "SECURITY" && <SecurityPermissionCenter />}
       {activeTab === "ADMIN" && <AdminControlPanel />}
-      {activeTab === "TENANT_ACCOUNTS" && <TenantAccountsSettings />}
-      {activeTab === "OWNER_ACCOUNTS" && <OwnerAccountsSettings />}
+      {activeTab === "PORTAL_ACCOUNTS" && <PortalAccountsSettings />}
+      
       {activeTab === "FIREBASE" && <FirebaseConnectionTester />}
 
       {activeTab === "CONNECTIONS" && (

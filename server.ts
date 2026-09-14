@@ -55,18 +55,19 @@ let adminAuthClient: any = null;
 let clientFirestoreDb: any = null;
 
 function getFirestoreAdmin() {
+  const base64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+  if (!base64) {
+    return null;
+  }
   if (firestoreAdminDb) return firestoreAdminDb;
   try {
-    const base64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
-    if (base64) {
-      if (!getAdminApps().length) {
-        const serviceAccount = JSON.parse(Buffer.from(base64, "base64").toString("utf8"));
-        initAdminApp({ credential: adminCert(serviceAccount) });
-      }
-      firestoreAdminDb = getAdminFirestore();
-      return firestoreAdminDb;
+    const dbId = firebaseAppletConfig.firestoreDatabaseId;
+    if (!getAdminApps().length) {
+      const serviceAccount = JSON.parse(Buffer.from(base64, "base64").toString("utf8"));
+      initAdminApp({ credential: adminCert(serviceAccount) });
     }
-    return null;
+    firestoreAdminDb = dbId ? getAdminFirestore(dbId) : getAdminFirestore();
+    return firestoreAdminDb;
   } catch (e) {
     console.warn("[Firebase Admin] Lazy init skipped or unavailable:", e);
     return null;
@@ -74,18 +75,18 @@ function getFirestoreAdmin() {
 }
 
 function getAdminAuthClient() {
+  const base64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+  if (!base64) {
+    return null;
+  }
   if (adminAuthClient) return adminAuthClient;
   try {
-    const base64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
-    if (base64) {
-      if (!getAdminApps().length) {
-        const serviceAccount = JSON.parse(Buffer.from(base64, "base64").toString("utf8"));
-        initAdminApp({ credential: adminCert(serviceAccount) });
-      }
-      adminAuthClient = getAdminAuth();
-      return adminAuthClient;
+    if (!getAdminApps().length) {
+      const serviceAccount = JSON.parse(Buffer.from(base64, "base64").toString("utf8"));
+      initAdminApp({ credential: adminCert(serviceAccount) });
     }
-    return null;
+    adminAuthClient = getAdminAuth();
+    return adminAuthClient;
   } catch (e) {
     console.warn("[Firebase Admin Auth] Lazy auth init skipped or unavailable:", e);
     return null;

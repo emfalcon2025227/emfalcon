@@ -10,7 +10,7 @@ import { db, sanitizeForFirestore, auth } from "../lib/firebase";
 import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, getDocs, query, where } from "firebase/firestore";
 import { 
   signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
+ 
   signInWithPopup, 
   GoogleAuthProvider, 
   signOut, 
@@ -19,9 +19,7 @@ import {
   User as FirebaseUser 
 } from "firebase/auth";
 import {
-  provisionPortalAccount as provisionService,
   getPortalAccountInfo as getInfoService,
-  syncAllPortalAccounts as syncAllService,
   ProvisionParams,
   PortalAccountDisplayInfo
 } from "../services/portalProvisioningService";
@@ -323,23 +321,6 @@ export const ROLE_PERMISSIONS: Record<UserRole, (Permission | string)[]> = {
   ]
 };
 
-export const INITIAL_OWNER_USER: User = {
-  id: "usr-owner-mahmoud",
-  username: "owner_mahmoud",
-  email: "owner@falcon.ae",
-  nameEn: "Mahmoud Mohamed Mahmoud Hamed (Owner)",
-  nameAr: "محمود محمد محمود حامد (مالك)",
-  role: "OWNER",
-  ownerId: "own-mahmoud",
-  phone: "+971501234567",
-  isActive: true,
-  createdAt: "2024-01-01T08:00:00Z",
-  lastLogin: new Date().toISOString(),
-  mustChangePassword: false,
-  isFirstLoginCompleted: true,
-  portalAccountStatus: "ACTIVE",
-};
-
 export const INITIAL_SYSTEM_OWNER: User = {
   id: "usr-01",
   username: "Mahmoud",
@@ -618,11 +599,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } : u);
     }
 
-    // Ensure demo owner account exists
-    const hasOwner = loadedUsers.some(u => u.id === INITIAL_OWNER_USER.id || u.role === "OWNER" || u.role === "PROPERTY_OWNER");
-    if (!hasOwner) {
-      loadedUsers = [...loadedUsers, INITIAL_OWNER_USER];
-    }
+    
 
     return loadedUsers;
   });
@@ -692,7 +669,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // 2. Check current in-memory / local state by email
     if (!match && fEmail) {
-      match = currentUsersList.find(u => (u.email || "").trim().toLowerCase() === fEmail);
+      const emailMatch = currentUsersList.find(u => (u.email || "").trim().toLowerCase() === fEmail);
+      if (emailMatch && emailMatch.role !== "OWNER" && emailMatch.role !== "TENANT") {
+        match = emailMatch;
+      }
     }
 
     // 3. If not found in local memory, query Firestore direct document / collection
@@ -726,7 +706,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const qEmail = query(collection(db, "users"), where("email", "==", fEmail));
           const snapEmail = await getDocs(qEmail);
           if (!snapEmail.empty) {
-            match = snapEmail.docs[0].data() as User;
+            const emailMatch = snapEmail.docs[0].data() as User;
+            if (emailMatch.role !== "OWNER" && emailMatch.role !== "TENANT") {
+              match = emailMatch;
+            }
           }
         } catch (err: any) {
           console.warn("[AuthContext] Query users by email notice:", err?.message);
@@ -742,7 +725,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (mapData?.id) {
               const uDoc = await getDoc(doc(db, "users", mapData.id));
               if (uDoc.exists()) {
-                match = uDoc.data() as User;
+                const uDocData = uDoc.data() as User;
+                if (uDocData.role !== "OWNER" && uDocData.role !== "TENANT") {
+                  match = uDocData;
+                }
               }
             }
           }
@@ -1002,15 +988,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [currentUser]);
 
-  useEffect(() => {
-    try {
-      if (loginMode) {
-        localStorage.setItem("ef_login_mode", loginMode);
-      }
-    } catch (e) {
-      console.warn("[AuthContext] Unable to save login mode:", e);
-    }
-  }, [loginMode]);
+  // ef_login_mode localStorage behavior removed for security
 
   const login = async (usernameOrEmail: string, password: string, mode: "STAFF" | "TENANT" | "OWNER"): Promise<{ success: boolean; error?: string }> => {
     setAuthError(null);
@@ -1078,6 +1056,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setLoadingAuth(false);
           return { success: false, error: "الحساب معطل، يرجى التواصل مع مالك النظام SYSTEM_OWNER" };
         }
+
+        // Validate that the user role matches the selected login mode
+        if (mode === "OWNER") {
+          const isOwner = resolved.role === "OWNER" || resolved.role === "PROPERTY_OWNER" || !!resolved.ownerId;
+          if (!isOwner) {
+            await signOut(auth).catch(() => {});
+            setLoadingAuth(false);
+            return { success: false, error: "عذراً، هذا الحساب غير مسجل كمالك في النظام." };
+          }
+        } else if (mode === "TENANT") {
+          const isTenant = resolved.role === "TENANT" || !!resolved.tenantId;
+          if (!isTenant) {
+            await signOut(auth).catch(() => {});
+            setLoadingAuth(false);
+            return { success: false, error: "عذراً، هذا الحساب غير مسجل كمستأجر في النظام." };
+          }
+        } else if (mode === "STAFF") {
+          const isStaff = resolved.role !== "OWNER" && resolved.role !== "PROPERTY_OWNER" && resolved.role !== "TENANT" && !resolved.ownerId && !resolved.tenantId;
+          if (!isStaff) {
+            await signOut(auth).catch(() => {});
+            setLoadingAuth(false);
+            return { success: false, error: "عذراً، هذا الحساب غير مصرح له بالدخول كعضو إدارة." };
+          }
+        }
+
         setCurrentUser(resolved);
         setLoginMode(mode);
         setUsers(prev => {
@@ -1122,6 +1125,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setLoadingAuth(false);
           return { success: false, error: "الحساب معطل، يرجى التواصل مع مالك النظام SYSTEM_OWNER" };
         }
+
+        // Validate that the user role matches the selected login mode
+        if (mode === "OWNER") {
+          const isOwner = resolved.role === "OWNER" || resolved.role === "PROPERTY_OWNER" || !!resolved.ownerId;
+          if (!isOwner) {
+            await signOut(auth).catch(() => {});
+            setLoadingAuth(false);
+            return { success: false, error: "عذراً، هذا الحساب غير مسجل كمالك في النظام." };
+          }
+        } else if (mode === "TENANT") {
+          const isTenant = resolved.role === "TENANT" || !!resolved.tenantId;
+          if (!isTenant) {
+            await signOut(auth).catch(() => {});
+            setLoadingAuth(false);
+            return { success: false, error: "عذراً، هذا الحساب غير مسجل كمستأجر في النظام." };
+          }
+        } else if (mode === "STAFF") {
+          const isStaff = resolved.role !== "OWNER" && resolved.role !== "PROPERTY_OWNER" && resolved.role !== "TENANT" && !resolved.ownerId && !resolved.tenantId;
+          if (!isStaff) {
+            await signOut(auth).catch(() => {});
+            setLoadingAuth(false);
+            return { success: false, error: "عذراً، هذا الحساب غير مصرح له بالدخول كعضو إدارة." };
+          }
+        }
+
         setCurrentUser(resolved);
         setLoginMode(mode);
         setUsers(prev => {
@@ -1131,26 +1159,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoadingAuth(false);
         return { success: true };
       } else {
-        const userEmail = (fUser.email || "").toLowerCase();
-        const newGoogleUser: User = {
-          id: "usr-" + Date.now(),
-          username: userEmail.split("@")[0] || "user",
-          email: userEmail,
-          nameEn: fUser.displayName || userEmail,
-          nameAr: fUser.displayName || userEmail,
-          phone: fUser.phoneNumber || "",
-          role: mode === "OWNER" ? "OWNER" : (mode === "TENANT" ? "TENANT" : "DATA_ENTRY"),
-          isActive: true,
-          firebaseUid: fUser.uid,
-          createdAt: new Date().toISOString(),
-          lastLogin: new Date().toISOString()
-        };
-        setDoc(doc(db, "users", newGoogleUser.id), sanitizeForFirestore(newGoogleUser), { merge: true }).catch(() => {});
-        setCurrentUser(newGoogleUser);
-        setLoginMode(mode);
-        setUsers(prev => [...prev, newGoogleUser]);
         setLoadingAuth(false);
-        return { success: true };
+        return { success: false, error: "تم التحقق من بيانات الدخول، لكن لم يتم العثور على ملف تعريف مرتبط بهذا البريد الإلكتروني" };
       }
     } catch (error: any) {
       setLoadingAuth(false);
@@ -1430,6 +1440,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const resetUserPassword = (userId: string, newPassword?: string): string => {
+    const targetUser = users.find(u => u.id === userId);
+    if (targetUser && (targetUser.role === "OWNER" || targetUser.role === "TENANT")) {
+      console.warn("resetUserPassword called for Owner/Tenant. This is forbidden. Use Firebase Secure Reset.");
+      return "";
+    }
     const rawPass = newPassword || ("Falcon@" + (Date.now() % 10000));
     const finalPass = sha256(rawPass);
     setUsers((prev) =>
@@ -1492,8 +1507,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const saveUser = (userToSave: User) => {
     let finalUser = { ...userToSave };
-    // Hash plaintext passwords on save if not already hashed
-    if (finalUser.password && finalUser.password.length < 20 && !finalUser.password.endsWith("==") && finalUser.password.length !== 64) {
+    // Do not allow password fields for Owner/Tenant portal authentication
+    if (finalUser.role === "OWNER" || finalUser.role === "TENANT") {
+      delete finalUser.password;
+    } else if (finalUser.password && finalUser.password.length < 20 && !finalUser.password.endsWith("==") && finalUser.password.length !== 64) {
       finalUser.password = sha256(finalUser.password);
     }
     setUsers((prev) => {
@@ -1518,27 +1535,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         body: JSON.stringify(params)
       });
       const data = await response.json();
-      if (!data.success) {
-        console.warn("[AuthContext] Server provision endpoint returned error, falling back to local service:", data.error);
-        const res = provisionService({
-          ...params,
-          existingUsers: users,
-          saveUser,
-        });
-        return { success: true, user: res.user, isNew: res.isNew, message: res.message };
+      if (!data.success && !data.clientManaged) {
+        return { success: false, error: data.error };
       }
+
       if (data.user) {
         saveUser(data.user);
       }
       return { success: true, user: data.user, isNew: data.isNew, message: data.message };
     } catch (e: any) {
-      console.warn("[AuthContext] provisionPortalAccount network error, falling back to local service:", e.message);
-      const res = provisionService({
-        ...params,
-        existingUsers: users,
-        saveUser,
-      });
-      return { success: true, user: res.user, isNew: res.isNew, message: res.message };
+      return { success: false, error: e.message };
     }
   };
 
@@ -1555,15 +1561,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       const data = await response.json();
       if (data.success && typeof data.createdCount === 'number') {
-        // Also refresh local users state if needed or merge saved users
         return data.createdCount;
       }
-      const count = syncAllService(owners, tenants, users, saveUser);
-      return count;
+      return 0;
     } catch (e) {
-      console.warn("[AuthContext] syncPortalAccounts network error, falling back to local service:", e);
-      const count = syncAllService(owners, tenants, users, saveUser);
-      return count;
+      console.warn("[AuthContext] syncPortalAccounts network error:", e);
+      return 0;
     }
   };
 
