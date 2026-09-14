@@ -791,34 +791,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // 5. Post-match linking & Firestore synchronization
     if (match) {
+      const legacyId = match.id;
       const updatedProfile: User = {
         ...match,
+        id: fUid, // Canonical ID is the Firebase Auth UID
         firebaseUid: fUid,
         lastLogin: new Date().toISOString()
       };
 
-      // Safely update users doc in Firestore if needed
+      // Store systemId / legacy ID reference if it was different
+      if (legacyId && legacyId !== fUid) {
+        (updatedProfile as any).systemId = legacyId;
+      }
+
       const cleanProfile = sanitizeForFirestore(updatedProfile);
-      setDoc(doc(db, "users", updatedProfile.id), {
+
+      // Write EXACTLY ONE document to users/{fUid}
+      setDoc(doc(db, "users", fUid), {
         ...cleanProfile,
         firebaseUid: fUid,
         lastLogin: new Date().toISOString()
       }, { merge: true }).catch(() => {});
 
-      // Double-write user profile under actual firebase UID to ensure exists() checks in Firestore Rules resolve role perfectly
-      if (updatedProfile.id !== fUid) {
-        setDoc(doc(db, "users", fUid), {
-          ...cleanProfile,
-          firebaseUid: fUid,
-          id: updatedProfile.id, // Keep the custom profile ID as reference inside the document
-          lastLogin: new Date().toISOString()
-        }, { merge: true }).catch(() => {});
+      // Delete the old legacy document to avoid duplicate identity entries
+      if (legacyId && legacyId !== fUid) {
+        deleteDoc(doc(db, "users", legacyId)).catch(() => {});
       }
 
       // Safely update email mapping
       if (fEmail) {
         setDoc(doc(db, "users_by_email", fEmail), {
-          id: updatedProfile.id,
+          id: fUid,
           email: fEmail,
           role: updatedProfile.role,
           isActive: updatedProfile.isActive
@@ -1183,10 +1186,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (error: any) {
       setLoadingAuth(false);
-      console.error("[Auth] Google sign in failed:", error.code, error.message);
+      
       if (error.code === "auth/popup-closed-by-user" || error.code === "auth/cancelled-popup-request") {
         return { success: false, error: "تم إغلاق نافذة تسجيل الدخول" };
       }
+      
+      if (error.code === "auth/unauthorized-domain") {
+        console.warn("[Auth] Domain unauthorized for Google Sign-In:", error.message);
+        return { 
+          success: false, 
+          error: "عذراً، النطاق الحالي غير مصرح له بتسجيل الدخول. يجب إضافة هذا الرابط إلى قائمة (Authorized domains) في إعدادات Firebase Authentication لحل المشكلة." 
+        };
+      }
+      
+      console.error("[Auth] Google sign in failed:", error.code, error.message);
       return { success: false, error: error.message || "فشل تسجيل الدخول بواسطة Google" };
     }
   };

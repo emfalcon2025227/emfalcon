@@ -103,9 +103,13 @@ export const getPortalAccountInfo = (
 
   const user = users.find((u) => {
     if (portalRole === "OWNER") {
-      return u.ownerId === targetId || ((u.email || "").trim().toLowerCase() === cleanEmail && (u.role === "OWNER" || u.role === "PROPERTY_OWNER"));
+      if (u.ownerId === targetId) return true;
+      if (u.ownerId && u.ownerId !== targetId) return false;
+      return (u.email || "").trim().toLowerCase() === cleanEmail && (u.role === "OWNER" || u.role === "PROPERTY_OWNER");
     } else {
-      return u.tenantId === targetId || ((u.email || "").trim().toLowerCase() === cleanEmail && u.role === "TENANT");
+      if (u.tenantId === targetId) return true;
+      if (u.tenantId && u.tenantId !== targetId) return false;
+      return (u.email || "").trim().toLowerCase() === cleanEmail && u.role === "TENANT";
     }
   });
 

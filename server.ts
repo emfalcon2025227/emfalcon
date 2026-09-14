@@ -3777,11 +3777,10 @@ app.post(["/api/auth/sync-email", "/api/auth/sync-email/"], authenticateFirebase
     const authAdmin = getAdminAuthClient();
     
     if (!dbAdmin || !authAdmin) {
-       return res.json({
-         success: true,
-         clientManaged: true,
-         message: "حساب البوابة يدار بنجاح عبر الواجهة المباشرة للنظام"
-       });
+      return res.status(500).json({
+        success: false,
+        error: "فشل تهيئة نظام التحقق المركزي على الخادم المركزي. يرجى مراجعة إعدادات Firebase Admin SDK."
+      });
     }
     
     const usersCol = dbAdmin.collection("users");
@@ -3849,10 +3848,9 @@ app.post(["/api/auth/provision-portal-user", "/api/auth/provision-portal-user/"]
     const authAdmin = getAdminAuthClient();
 
     if (!dbAdmin || !authAdmin) {
-      return res.json({
-        success: true,
-        clientManaged: true,
-        message: "حساب البوابة يدار بنجاح عبر الواجهة المباشرة للنظام"
+      return res.status(500).json({
+        success: false,
+        error: "فشل تهيئة نظام التحقق المركزي على الخادم المركزي. يرجى مراجعة إعدادات Firebase Admin SDK."
       });
     }
 
@@ -3886,22 +3884,29 @@ app.post(["/api/auth/provision-portal-user", "/api/auth/provision-portal-user/"]
 
     const uid = userRecord.uid;
     const expectedId = `usr-${portalRole.toLowerCase()}-${targetId}`;
-    let existingUserDoc = await usersCol.doc(expectedId).get();
+    let existingUserDoc = await usersCol.doc(uid).get();
     let userData: any = {};
 
     if (existingUserDoc.exists) {
       userData = existingUserDoc.data();
     } else {
-      const emailQuery = await usersCol.where("email", "==", cleanEmail).limit(1).get();
-      if (!emailQuery.empty) {
-        userData = emailQuery.docs[0].data();
-        await usersCol.doc(emailQuery.docs[0].id).delete().catch(() => {});
+      const legacyDoc = await usersCol.doc(expectedId).get();
+      if (legacyDoc.exists) {
+        userData = legacyDoc.data();
+        await usersCol.doc(expectedId).delete().catch(() => {});
+      } else {
+        const emailQuery = await usersCol.where("email", "==", cleanEmail).limit(1).get();
+        if (!emailQuery.empty) {
+          userData = emailQuery.docs[0].data();
+          await usersCol.doc(emailQuery.docs[0].id).delete().catch(() => {});
+        }
       }
     }
 
     const updatedUser = {
       ...userData,
-      id: expectedId,
+      id: uid,
+      systemId: expectedId,
       username: cleanEmail,
       email: cleanEmail,
       nameEn: nameEn || userData.nameEn || nameAr || cleanEmail,
@@ -3920,7 +3925,7 @@ app.post(["/api/auth/provision-portal-user", "/api/auth/provision-portal-user/"]
 
     delete updatedUser.password;
 
-    await usersCol.doc(expectedId).set(updatedUser, { merge: true });
+    await usersCol.doc(uid).set(updatedUser, { merge: true });
 
     // Generate secure Firebase Activation / Password Setup Link
     let activationLink = "";
@@ -4050,19 +4055,9 @@ app.post(["/api/auth/send-portal-activation-email", "/api/auth/send-portal-activ
     const authAdmin = getAdminAuthClient();
 
     if (!dbAdmin || !authAdmin) {
-      // Graceful client-managed fallback in preview / development context
-      const isOwner = role === "OWNER" || role === "PROPERTY_OWNER";
-      const portalName = isOwner ? "بوابة المالك الاستثمارية" : "بوابة المستأجر";
-      const portalUrl = customBaseUrl || process.env.PORTAL_URL || req.headers.origin || "https://ais-dev-kurx4d4uvxuhdqsvv4veh2-405724254259.europe-west3.run.app";
-      const loginUrl = isOwner ? `${portalUrl}/#owner-login` : `${portalUrl}/#tenant-login`;
-      const resetLink = `${loginUrl}?activate=${encodeURIComponent(cleanEmail)}&role=${isOwner ? "OWNER" : "TENANT"}&id=${targetId || ""}`;
-
-      return res.json({
-        success: true,
-        status: "SIMULATED",
-        clientManaged: true,
-        activationLink: resetLink,
-        note: "Simulated link generated successfully in preview environment."
+      return res.status(500).json({
+        success: false,
+        error: "فشل تهيئة نظام التحقق المركزي على الخادم المركزي. يرجى مراجعة إعدادات Firebase Admin SDK."
       });
     }
 
@@ -4249,11 +4244,9 @@ app.post(["/api/auth/sync-portal-users", "/api/auth/sync-portal-users/"], authen
     const authAdmin = getAdminAuthClient();
 
     if (!dbAdmin || !authAdmin) {
-      return res.json({
-        success: true,
-        clientManaged: true,
-        createdCount: 0,
-        message: "حسابات البوابة تدار بنجاح عبر الواجهة المباشرة للنظام"
+      return res.status(500).json({
+        success: false,
+        error: "فشل تهيئة نظام التحقق المركزي على الخادم المركزي. يرجى مراجعة إعدادات Firebase Admin SDK."
       });
     }
 
@@ -4272,67 +4265,79 @@ app.post(["/api/auth/sync-portal-users", "/api/auth/sync-portal-users/"], authen
       const cleanEmail = email.trim().toLowerCase();
       const expectedId = `usr-${item.portalRole.toLowerCase()}-${item.id}`;
 
-      let existingUserDoc = await usersCol.doc(expectedId).get();
-      let hasUser = existingUserDoc.exists;
+      let userRecord;
+      let isNewAuthUser = false;
 
-      if (!hasUser) {
-        const qEmail = await usersCol.where("email", "==", cleanEmail).limit(1).get();
-        if (!qEmail.empty) {
-          hasUser = true;
+      try {
+        userRecord = await authAdmin.getUserByEmail(cleanEmail);
+      } catch (e: any) {
+        if (e.code === "auth/user-not-found") {
+          const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+~";
+          let cryptoPass = "";
+          for (let i = 0; i < 32; i++) {
+            cryptoPass += chars.charAt(Math.floor(Math.random() * chars.length));
+          }
+
+          userRecord = await authAdmin.createUser({
+            email: cleanEmail,
+            password: cryptoPass,
+            displayName: item.nameEn || item.nameAr || cleanEmail,
+            emailVerified: true
+          });
+          isNewAuthUser = true;
+        } else {
+          continue;
         }
       }
 
-      if (!hasUser) {
-        let userRecord;
-        let isNewAuthUser = false;
+      const uid = userRecord.uid;
 
-        try {
-          userRecord = await authAdmin.getUserByEmail(cleanEmail);
-        } catch (e: any) {
-          if (e.code === "auth/user-not-found") {
-            const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+~";
-            let cryptoPass = "";
-            for (let i = 0; i < 32; i++) {
-              cryptoPass += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
+      // Check if user document already exists at users/{uid}
+      let existingUserDoc = await usersCol.doc(uid).get();
+      let userData: any = {};
 
-            userRecord = await authAdmin.createUser({
-              email: cleanEmail,
-              password: cryptoPass,
-              displayName: item.nameEn || item.nameAr || cleanEmail,
-              emailVerified: true
-            });
-            isNewAuthUser = true;
-          } else {
-            continue;
+      if (existingUserDoc.exists) {
+        userData = existingUserDoc.data();
+      } else {
+        // Check for legacy document at expectedId and migrate if found
+        const legacyDoc = await usersCol.doc(expectedId).get();
+        if (legacyDoc.exists) {
+          userData = legacyDoc.data();
+          await usersCol.doc(expectedId).delete().catch(() => {});
+        } else {
+          const emailQuery = await usersCol.where("email", "==", cleanEmail).limit(1).get();
+          if (!emailQuery.empty) {
+            userData = emailQuery.docs[0].data();
+            await usersCol.doc(emailQuery.docs[0].id).delete().catch(() => {});
           }
         }
+      }
 
-        const uid = userRecord.uid;
+      const newUserDoc = {
+        ...userData,
+        id: uid,
+        systemId: expectedId,
+        username: cleanEmail,
+        email: cleanEmail,
+        nameEn: item.nameEn || userData.nameEn || item.nameAr || cleanEmail,
+        nameAr: item.nameAr || userData.nameAr || item.nameEn || cleanEmail,
+        phone: item.phone || userData.phone || "",
+        role: item.portalRole === "OWNER" ? "OWNER" : "TENANT",
+        ownerId: item.portalRole === "OWNER" ? item.id : undefined,
+        tenantId: item.portalRole === "TENANT" ? item.id : undefined,
+        isActive: userData.isActive !== undefined ? userData.isActive : true,
+        createdAt: userData.createdAt || new Date().toISOString(),
+        mustChangePassword: isNewAuthUser ? true : (userData.mustChangePassword !== undefined ? userData.mustChangePassword : false),
+        isFirstLoginCompleted: isNewAuthUser ? false : (userData.isFirstLoginCompleted !== undefined ? userData.isFirstLoginCompleted : true),
+        portalAccountStatus: isNewAuthUser ? "PENDING_ACTIVATION" : (userData.portalAccountStatus || "ACTIVE"),
+        firebaseUid: uid
+      };
 
-        const newUserDoc = {
-          id: expectedId,
-          username: cleanEmail,
-          email: cleanEmail,
-          nameEn: item.nameEn || item.nameAr || cleanEmail,
-          nameAr: item.nameAr || item.nameEn || cleanEmail,
-          phone: item.phone || "",
-          role: item.portalRole === "OWNER" ? "OWNER" : "TENANT",
-          ownerId: item.portalRole === "OWNER" ? item.id : undefined,
-          tenantId: item.portalRole === "TENANT" ? item.id : undefined,
-          isActive: true,
-          createdAt: new Date().toISOString(),
-          mustChangePassword: true,
-          isFirstLoginCompleted: false,
-          portalAccountStatus: "PENDING_ACTIVATION",
-          firebaseUid: uid
-        };
+      await usersCol.doc(uid).set(newUserDoc, { merge: true });
+      createdCount++;
 
-        await usersCol.doc(expectedId).set(newUserDoc, { merge: true });
-        createdCount++;
-
-        if (isNewAuthUser) {
-          try {
+      if (isNewAuthUser) {
+        try {
             const resetLink = await authAdmin.generatePasswordResetLink(cleanEmail);
             const portalUrl = process.env.PORTAL_URL || req.headers.origin || "https://ais-dev-kurx4d4uvxuhdqsvv4veh2-405724254259.europe-west3.run.app";
             const loginUrl = item.portalRole === "OWNER" ? `${portalUrl}/#owner-login` : `${portalUrl}/#tenant-login`;
@@ -4376,7 +4381,6 @@ ${resetLink}
           }
         }
       }
-    }
 
     return res.json({ success: true, createdCount });
   } catch (err: any) {
