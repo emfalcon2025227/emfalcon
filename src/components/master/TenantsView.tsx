@@ -15,6 +15,7 @@ import { matchAnyArabicSearch, normalizeArabicText } from "../../utils/arabicTex
 import { getBilingualSuggestion, getLocalBilingualSuggestion } from "../../utils/bilingualNaming";
 import { SmartDocumentCaptureModal } from "../ai/SmartDocumentCaptureModal";
 import { DocumentPreviewModal } from "../common/DocumentPreviewModal";
+import { getAuthToken } from "../../utils/apiClient";
 
 
 interface TenantsViewProps {
@@ -603,11 +604,12 @@ export const TenantsView: React.FC<TenantsViewProps> = ({ onSelectTenant }) => {
       if (editingTenant) {
         if (email && email.includes("@") && email !== editingTenant.email) {
           try {
+            const token = await getAuthToken();
             const res = await fetch("/api/auth/sync-email", {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${(window as any).__firebaseToken || ""}`,
+                Authorization: `Bearer ${token || ""}`,
               },
               body: JSON.stringify({
                 targetId: editingTenant.id,

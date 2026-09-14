@@ -24,6 +24,7 @@ import { User, Owner, Tenant, PortalAccountStatus } from "../../types";
 import { Badge } from "../common/Badge";
 import { Modal } from "../common/Modal";
 import { QuickCommunicationButtons } from "../common/QuickCommunicationButtons";
+import { getAuthToken } from "../../utils/apiClient";
 
 export const PortalAccountsSettings: React.FC = () => {
   const [portalRoleFilter, setPortalRoleFilter] = useState<"ALL" | "OWNER" | "TENANT">("ALL");
@@ -124,16 +125,18 @@ export const PortalAccountsSettings: React.FC = () => {
       }
 
       // Now dispatch the secure activation link
+      const token = await getAuthToken();
       const res = await fetch("/api/auth/send-portal-activation-email", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${(window as any).__firebaseToken || ""}`,
+          Authorization: `Bearer ${token || ""}`,
         },
         body: JSON.stringify({
           email,
           name,
-          role: portalRole
+          role: portalRole,
+          targetId
         }),
       });
       const data = await res.json();
@@ -177,11 +180,12 @@ export const PortalAccountsSettings: React.FC = () => {
     // Attempt to sync email securely
     if (editEmail !== editingEmailTarget.email) {
        try {
+         const token = await getAuthToken();
          const res = await fetch("/api/auth/sync-email", {
            method: "POST",
            headers: {
              "Content-Type": "application/json",
-             Authorization: `Bearer ${(window as any).__firebaseToken || ""}`,
+             Authorization: `Bearer ${token || ""}`,
            },
            body: JSON.stringify({
              targetId: editingEmailTarget.id,

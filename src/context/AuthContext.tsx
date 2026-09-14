@@ -828,6 +828,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!isMounted) return;
 
       if (!fUser) {
+        (window as any).__firebaseToken = "";
         setFirebaseUser(null);
         setCurrentUser(null);
         setLoadingAuth(false);
@@ -838,6 +839,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setFirebaseUser(fUser);
       setLoadingAuth(true);
       setAuthError(null);
+
+      try {
+        const token = await fUser.getIdToken();
+        (window as any).__firebaseToken = token;
+      } catch (err) {
+        console.warn("[AuthContext] Failed to update global window token fallback:", err);
+      }
 
       try {
         const resolved = await resolveUserProfile(fUser, users);

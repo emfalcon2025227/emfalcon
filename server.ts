@@ -331,6 +331,21 @@ async function authenticateFirebaseToken(req: express.Request, res: express.Resp
       uid = decoded.uid;
       email = decoded.email || "";
     } else {
+      // Check if this is a privileged operation
+      const privilegedPaths = [
+        "/api/auth/send-portal-activation-email",
+        "/api/auth/provision-portal-user",
+        "/api/auth/sync-portal-users",
+        "/api/auth/sync-email"
+      ];
+      if (privilegedPaths.some(p => req.path === p)) {
+        return res.status(503).json({
+          success: false,
+          error: "FIREBASE_ADMIN_UNAVAILABLE",
+          message: "Firebase Admin service is unavailable. Privileged operations require secure server-side Firebase Admin SDK."
+        });
+      }
+
       // Fallback JWT parsing when Firebase Admin service account is not injected
       const parts = token.split(".");
       if (parts.length !== 3) {
@@ -3981,21 +3996,153 @@ app.post("/api/auth/generate-activation-link", authenticateFirebaseToken, requir
 // Endpoint to send portal activation email on demand
 app.post("/api/auth/send-portal-activation-email", authenticateFirebaseToken, requireStaff, async (req, res) => {
   try {
-    const { email, name, role, customBaseUrl } = req.body;
+    const { email, name, role, targetId, customBaseUrl } = req.body;
     if (!email || !email.includes("@")) {
       return res.status(400).json({ success: false, error: "البريد الإلكتروني غير صالح" });
     }
 
     const cleanEmail = email.trim().toLowerCase();
+    const dbAdmin = getFirestoreAdmin();
     const authAdmin = getAdminAuthClient();
 
-    if (!authAdmin) {
-      return res.status(500).json({ success: false, error: "Firebase Admin Auth is not configured on the server." });
+    if (!dbAdmin || !authAdmin) {
+      return res.status(503).json({
+        success: false,
+        error: "FIREBASE_ADMIN_UNAVAILABLE",
+        message: "Firebase Admin is not configured on the server."
+      });
     }
 
+    // 1. Resolve and Validate Target Profile (Rule 7, Rule 12 Case E, Case D)
+    let targetProfile: any = null;
+    let targetType: "OWNER" | "TENANT" | null = null;
+    let targetRecordId = targetId || "";
+
+    if (targetRecordId) {
+      const isOwnerRole = role === "OWNER" || role === "PROPERTY_OWNER";
+      const colName = isOwnerRole ? "owners" : "tenants";
+      const docSnap = await dbAdmin.collection(colName).doc(targetRecordId).get();
+      if (docSnap.exists) {
+        targetProfile = docSnap.data();
+        targetType = isOwnerRole ? "OWNER" : "TENANT";
+      }
+    }
+
+    // Fallback to searching by email if not found by targetId
+    if (!targetProfile) {
+      const ownersSnap = await dbAdmin.collection("owners").where("email", "==", cleanEmail).limit(1).get();
+      if (!ownersSnap.empty) {
+        targetProfile = ownersSnap.docs[0].data();
+        targetType = "OWNER";
+        targetRecordId = ownersSnap.docs[0].id;
+      } else {
+        const tenantsSnap = await dbAdmin.collection("tenants").where("email", "==", cleanEmail).limit(1).get();
+        if (!tenantsSnap.empty) {
+          targetProfile = tenantsSnap.docs[0].data();
+          targetType = "TENANT";
+          targetRecordId = tenantsSnap.docs[0].id;
+        }
+      }
+    }
+
+    // CASE E: Target profile is not Owner/Tenant
+    if (!targetProfile) {
+      return res.status(404).json({
+        success: false,
+        error: "PROFILE_NOT_FOUND",
+        message: "لم يتم العثور على ملف شخصي مسجل بهذا البريد الإلكتروني في النظام."
+      });
+    }
+
+    if (targetType !== "OWNER" && targetType !== "TENANT") {
+      return res.status(400).json({
+        success: false,
+        error: "INVALID_PROFILE_TYPE",
+        message: "الملف الشخصي المستهدف ليس مالكاً أو مستأجراً"
+      });
+    }
+
+    // Rule 7: Verify target email matches the trusted record
+    const recordEmail = (targetProfile.email || "").trim().toLowerCase();
+    if (recordEmail !== cleanEmail) {
+      return res.status(400).json({
+        success: false,
+        error: "EMAIL_MISMATCH",
+        message: "البريد الإلكتروني لا يطابق البريد المسجل في ملف المالك/المستأجر"
+      });
+    }
+
+    // 2. Query users collection to check for existing linkages (Rule 12 Case C)
+    const usersCol = dbAdmin.collection("users");
+    const emailQuery = await usersCol.where("email", "==", cleanEmail).limit(1).get();
+    let portalDoc: any = null;
+    if (!emailQuery.empty) {
+      portalDoc = emailQuery.docs[0].data();
+    }
+
+    let authUser: any = null;
+    try {
+      authUser = await authAdmin.getUserByEmail(cleanEmail);
+    } catch (err: any) {
+      if (err.code !== "auth/user-not-found") {
+        throw err;
+      }
+    }
+
+    // CASE C: Firebase account exists but is linked to another application profile
+    if (authUser && portalDoc) {
+      const linkedRecordId = portalDoc.ownerId || portalDoc.tenantId;
+      if (linkedRecordId && linkedRecordId !== targetRecordId) {
+        return res.status(400).json({
+          success: false,
+          error: "ACCOUNT_LINK_CONFLICT",
+          message: "تعارض في ربط الحساب: هذا البريد الإلكتروني مسجل لملف شخصي آخر في النظام."
+        });
+      }
+    }
+
+    // CASE B: Target Owner/Tenant exists but Firebase account does not exist (Auto-provision)
+    if (!authUser) {
+      const expectedId = `usr-${targetType.toLowerCase()}-${targetRecordId}`;
+      const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+~";
+      let cryptoPass = "";
+      for (let i = 0; i < 32; i++) {
+        cryptoPass += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+
+      const userRecord = await authAdmin.createUser({
+        email: cleanEmail,
+        password: cryptoPass,
+        displayName: targetProfile.nameEn || targetProfile.nameAr || cleanEmail,
+        emailVerified: true
+      });
+
+      const updatedUser = {
+        id: expectedId,
+        username: cleanEmail,
+        email: cleanEmail,
+        nameEn: targetProfile.nameEn || cleanEmail,
+        nameAr: targetProfile.nameAr || cleanEmail,
+        phone: targetProfile.phone || "",
+        role: targetType,
+        ownerId: targetType === "OWNER" ? targetRecordId : undefined,
+        tenantId: targetType === "TENANT" ? targetRecordId : undefined,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        mustChangePassword: true,
+        isFirstLoginCompleted: false,
+        portalAccountStatus: "PENDING_ACTIVATION",
+        firebaseUid: userRecord.uid
+      };
+
+      await usersCol.doc(expectedId).set(updatedUser, { merge: true });
+      authUser = userRecord;
+    }
+
+    // 3. Generate secure reset/activation link (Case A)
     const resetLink = await authAdmin.generatePasswordResetLink(cleanEmail);
 
-    const isOwner = role === "OWNER" || role === "PROPERTY_OWNER";
+    const isOwner = targetType === "OWNER";
     const portalName = isOwner ? "بوابة المالك الاستثمارية" : "بوابة المستأجر";
     const portalUrl = customBaseUrl || process.env.PORTAL_URL || req.headers.origin || "https://ais-dev-kurx4d4uvxuhdqsvv4veh2-405724254259.europe-west3.run.app";
     const loginUrl = isOwner ? `${portalUrl}/#owner-login` : `${portalUrl}/#tenant-login`;
@@ -4037,7 +4184,7 @@ ${resetLink}
     }
   } catch (err: any) {
     console.error("[Send Activation Email Error]:", err);
-    return res.status(500).json({ success: false, error: err.message || "Failed to send activation email" });
+    return res.status(500).json({ success: false, error: "GENERATE_LINK_FAILED", message: err.message || "Failed to send activation email" });
   }
 });
 
