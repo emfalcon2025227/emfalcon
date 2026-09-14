@@ -605,7 +605,7 @@ export const TenantsView: React.FC<TenantsViewProps> = ({ onSelectTenant }) => {
         if (email && email.includes("@") && email !== editingTenant.email) {
           try {
             const token = await getAuthToken();
-            const res = await fetch("/api/auth/sync-email", {
+            const res = await fetch("/api/auth/sync-email", { credentials: "include",
               method: "POST",
               headers: {
                 "Content-Type": "application/json",

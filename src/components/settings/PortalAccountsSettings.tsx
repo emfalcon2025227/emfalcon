@@ -133,7 +133,7 @@ export const PortalAccountsSettings: React.FC = () => {
 
       // Now dispatch the secure activation link
       const token = await getAuthToken();
-      const res = await fetch("/api/auth/send-portal-activation-email", {
+      const res = await fetch("/api/auth/send-portal-activation-email", { credentials: "include",
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -188,7 +188,7 @@ export const PortalAccountsSettings: React.FC = () => {
     if (editEmail !== editingEmailTarget.email) {
        try {
          const token = await getAuthToken();
-         const res = await fetch("/api/auth/sync-email", {
+         const res = await fetch("/api/auth/sync-email", { credentials: "include",
            method: "POST",
            headers: {
              "Content-Type": "application/json",

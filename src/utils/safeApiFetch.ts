@@ -38,6 +38,7 @@ export async function safeFetchJson<T = any>(
     }
 
     const response = await fetch(input, {
+      credentials: "include",
       ...init,
       headers,
     });

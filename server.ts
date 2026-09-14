@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import * as crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
@@ -326,33 +327,18 @@ async function authenticateFirebaseToken(req: express.Request, res: express.Resp
     let email = "";
 
     const adminAuth = getAdminAuthClient();
-    if (adminAuth) {
-      const decoded = await adminAuth.verifyIdToken(token);
-      uid = decoded.uid;
-      email = decoded.email || "";
-    } else {
-      // Fallback JWT parsing when Firebase Admin service account is not injected
-      const parts = token.split(".");
-      if (parts.length !== 3) {
-        return res.status(401).json({ success: false, error: "INVALID_TOKEN", message: "Malformed token structure." });
-      }
-      const payloadBuf = Buffer.from(parts[1], "base64");
-      const payload = JSON.parse(payloadBuf.toString("utf8"));
-
-      // Validate expiration
-      if (payload.exp && payload.exp * 1000 < Date.now()) {
-        return res.status(401).json({ success: false, error: "TOKEN_EXPIRED", message: "Token has expired." });
-      }
-
-      // Validate project audience
-      const expectedProj = firebaseAppletConfig.projectId;
-      if (payload.aud && payload.aud !== expectedProj && payload.firebase?.project_id !== expectedProj) {
-        console.warn(`[Auth] Audience mismatch: expected ${expectedProj}, got ${payload.aud}`);
-      }
-
-      uid = payload.user_id || payload.sub || payload.uid || "";
-      email = payload.email || "";
+    if (!adminAuth) {
+      console.error("[Auth Middleware Error]: Firebase Admin SDK unavailable.");
+      return res.status(503).json({
+        success: false,
+        error: "SERVICE_UNAVAILABLE",
+        message: "Firebase authentication service is not initialized on the server.",
+      });
     }
+
+    const decoded = await adminAuth.verifyIdToken(token);
+    uid = decoded.uid;
+    email = decoded.email || "";
 
     if (!uid) {
       return res.status(401).json({ success: false, error: "UNAUTHORIZED", message: "User ID not found in token." });
@@ -3864,11 +3850,7 @@ app.post(["/api/auth/provision-portal-user", "/api/auth/provision-portal-user/"]
     } catch (e: any) {
       if (e.code === "auth/user-not-found") {
         // Create user in Firebase Auth with a secure, random cryptographic password so no human knows it
-        const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+~";
-        let cryptoPass = "";
-        for (let i = 0; i < 32; i++) {
-          cryptoPass += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
+        const cryptoPass = crypto.randomBytes(24).toString('hex');
 
         userRecord = await authAdmin.createUser({
           email: cleanEmail,
@@ -4015,11 +3997,7 @@ app.post("/api/auth/generate-activation-link", authenticateFirebaseToken, requir
     } catch (err: any) {
       if (err.code === "auth/user-not-found") {
         // Auto create in Auth if missing
-        const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+~";
-        let cryptoPass = "";
-        for (let i = 0; i < 32; i++) {
-          cryptoPass += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
+        const cryptoPass = crypto.randomBytes(24).toString('hex');
         await authAdmin.createUser({
           email: cleanEmail,
           password: cryptoPass,
@@ -4152,11 +4130,7 @@ app.post(["/api/auth/send-portal-activation-email", "/api/auth/send-portal-activ
     // CASE B: Target Owner/Tenant exists but Firebase account does not exist (Auto-provision)
     if (!authUser) {
       const expectedId = `usr-${targetType.toLowerCase()}-${targetRecordId}`;
-      const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+~";
-      let cryptoPass = "";
-      for (let i = 0; i < 32; i++) {
-        cryptoPass += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
+      const cryptoPass = crypto.randomBytes(24).toString('hex');
 
       const userRecord = await authAdmin.createUser({
         email: cleanEmail,
@@ -4273,11 +4247,7 @@ app.post(["/api/auth/sync-portal-users", "/api/auth/sync-portal-users/"], authen
         userRecord = await authAdmin.getUserByEmail(cleanEmail);
       } catch (e: any) {
         if (e.code === "auth/user-not-found") {
-          const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+~";
-          let cryptoPass = "";
-          for (let i = 0; i < 32; i++) {
-            cryptoPass += chars.charAt(Math.floor(Math.random() * chars.length));
-          }
+          const cryptoPass = crypto.randomBytes(24).toString('hex');
 
           userRecord = await authAdmin.createUser({
             email: cleanEmail,

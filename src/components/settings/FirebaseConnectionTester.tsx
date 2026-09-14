@@ -348,6 +348,16 @@ export const FirebaseConnectionTester: React.FC = () => {
               <RefreshCw className={`w-4 h-4 ${status === "CHECKING" ? "animate-spin" : ""}`} />
               <span>{language === "ar" ? "فحص الاتصال الآن" : "Test Now"}</span>
             </button>
+            <a
+              href={`https://console.firebase.google.com/project/${firebaseConfig.projectId}/firestore/databases/${firebaseConfig.firestoreDatabaseId || "(default)"}/data`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold inline-flex items-center gap-2 transition-all cursor-pointer border border-indigo-200/50"
+            >
+              <Database className="w-4 h-4" />
+              <span>{language === "ar" ? "وحدة التحكم بقاعدة البيانات" : "Open Database Console"}</span>
+              <ArrowUpRight className="w-3.5 h-3.5 opacity-70" />
+            </a>
 
             <button
               onClick={handleRecalculateStorage}

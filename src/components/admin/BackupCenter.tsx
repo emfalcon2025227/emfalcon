@@ -36,7 +36,7 @@ export const BackupCenter: React.FC = () => {
     setBackupSuccess(null);
     try {
       const token = await auth.currentUser?.getIdToken();
-      const res = await fetch("/api/backups/manual", {
+      const res = await fetch("/api/backups/manual", { credentials: "include",
         method: "POST",
         headers: { "Authorization": `Bearer ${token}` }
       });
@@ -66,7 +66,7 @@ export const BackupCenter: React.FC = () => {
     
     try {
       const token = await auth.currentUser?.getIdToken();
-      const res = await fetch("/api/backups/restore", {
+      const res = await fetch("/api/backups/restore", { credentials: "include",
         method: "POST",
         headers: { 
             "Authorization": `Bearer ${token}`,

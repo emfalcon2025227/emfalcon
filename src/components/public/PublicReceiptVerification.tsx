@@ -25,7 +25,7 @@ export const PublicReceiptVerification: React.FC<{ token: string }> = ({ token }
   useEffect(() => {
     document.title = language === "ar" ? "التحقق من الإيصال" : "Receipt Verification";
     
-    fetch(`/api/verify/receipt/${token}`)
+    fetch(`/api/verify/receipt/${token}`, { credentials: "include", credentials: "include" })
       .then((res) => res.json())
       .then((resData) => {
         if (resData.error) {

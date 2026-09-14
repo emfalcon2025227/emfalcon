@@ -589,7 +589,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } else {
       loadedUsers = loadedUsers.map(u => isSystemOwnerUser(u) ? { 
         ...u, 
-        id: "usr-01",
         username: "Mahmoud",
         email: "m_hamed@msn.com", 
         nameEn: "Mahmoud Mohamed Mahmoud Hamed",
@@ -920,7 +919,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         updated = updated.map(u => isSystemOwnerUser(u) ? { 
           ...u, 
-          id: "usr-01",
           username: "Mahmoud",
           email: "m_hamed@msn.com", 
           nameEn: "Mahmoud Mohamed Mahmoud Hamed",

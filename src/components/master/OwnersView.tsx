@@ -558,7 +558,7 @@ export const OwnersView: React.FC = () => {
       if (email && email.includes("@") && email !== editingOwner.email) {
         try {
           const token = await getAuthToken();
-          const res = await fetch("/api/auth/sync-email", {
+          const res = await fetch("/api/auth/sync-email", { credentials: "include",
             method: "POST",
             headers: {
               "Content-Type": "application/json",

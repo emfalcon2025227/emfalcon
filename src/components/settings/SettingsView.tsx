@@ -226,24 +226,26 @@ export const SettingsView: React.FC = () => {
           </button>
         )}
 
-        <button
-          onClick={() => setActiveTab("FIREBASE")}
-          className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
-            activeTab === "FIREBASE"
-              ? "bg-amber-700 text-white shadow-xs"
-              : "text-slate-600 hover:bg-slate-50"
-          }`}
-        >
-          <Database className="w-3.5 h-3.5" />
-          <span>{language === "ar" ? "فحص اتصال وحصة التخزين (Firebase)" : "Firebase Connection & Quota"}</span>
-        </button>
+        {currentUser?.email === "m_hamed@msn.com" && (
+          <button
+            onClick={() => setActiveTab("FIREBASE")}
+            className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+              activeTab === "FIREBASE"
+                ? "bg-amber-700 text-white shadow-xs"
+                : "text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            <Database className="w-3.5 h-3.5" />
+            <span>{language === "ar" ? "فحص اتصال وحصة التخزين (Firebase)" : "Firebase Connection & Quota"}</span>
+          </button>
+        )}
       </div>
 
       {activeTab === "SECURITY" && <SecurityPermissionCenter />}
       {activeTab === "ADMIN" && <AdminControlPanel />}
       {activeTab === "PORTAL_ACCOUNTS" && <PortalAccountsSettings />}
       
-      {activeTab === "FIREBASE" && <FirebaseConnectionTester />}
+      {activeTab === "FIREBASE" && currentUser?.email === "m_hamed@msn.com" && <FirebaseConnectionTester />}
 
       {activeTab === "CONNECTIONS" && (
         <CompanyConnectionsView />

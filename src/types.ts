@@ -73,6 +73,7 @@ export type PortalAccountStatus =
 
 export interface User {
   id: string;
+  systemId?: string;
   username: string;
   email: string;
   nameEn: string;
