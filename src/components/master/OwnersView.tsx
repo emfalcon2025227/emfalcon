@@ -571,7 +571,7 @@ export const OwnersView: React.FC = () => {
             }),
           });
           const data = await res.json();
-          if (!data.success && !data.clientManaged) {
+          if (!data.success) {
              alert(data.error || (language === "ar" ? "فشلت مزامنة البريد الإلكتروني مع نظام الدخول." : "Failed to synchronize email with authentication system."));
              return; // Stop update if sync fails
           }

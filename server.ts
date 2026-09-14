@@ -4166,7 +4166,8 @@ app.post(["/api/auth/send-portal-activation-email", "/api/auth/send-portal-activ
       });
 
       const updatedUser = {
-        id: expectedId,
+        id: userRecord.uid,
+        systemId: expectedId,
         username: cleanEmail,
         email: cleanEmail,
         nameEn: targetProfile.nameEn || cleanEmail,
@@ -4183,7 +4184,7 @@ app.post(["/api/auth/send-portal-activation-email", "/api/auth/send-portal-activ
         firebaseUid: userRecord.uid
       };
 
-      await usersCol.doc(expectedId).set(updatedUser, { merge: true });
+      await usersCol.doc(userRecord.uid).set(updatedUser, { merge: true });
       authUser = userRecord;
     }
 

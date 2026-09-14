@@ -201,7 +201,7 @@ export const PortalAccountsSettings: React.FC = () => {
            }),
          });
          const data = await res.json();
-         if (!data.success && !data.clientManaged) {
+         if (!data.success) {
             setEditError(data.error || (language === "ar" ? "فشلت مزامنة البريد الإلكتروني." : "Failed to sync email."));
             return;
          }

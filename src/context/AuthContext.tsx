@@ -637,7 +637,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const baseOwner = currentUsersList.find(u => isSystemOwnerUser(u)) || INITIAL_SYSTEM_OWNER;
       const ownerUser: User = {
         ...baseOwner,
-        id: "usr-01",
+        id: fUid,
+        systemId: "usr-01",
         username: baseOwner.username || "Mahmoud",
         email: fEmail,
         role: "SYSTEM_OWNER",
@@ -645,9 +646,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         firebaseUid: fUid,
         lastLogin: new Date().toISOString()
       };
-      // Keep doc in Firestore synchronized
-      setDoc(doc(db, "users", "usr-01"), {
-        id: "usr-01",
+      // Keep doc in Firestore synchronized using canonical fUid
+      setDoc(doc(db, "users", fUid), {
+        id: fUid,
+        systemId: "usr-01",
         email: fEmail,
         username: "Mahmoud",
         role: "SYSTEM_OWNER",
@@ -656,7 +658,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lastLogin: new Date().toISOString()
       }, { merge: true }).catch(() => {});
       setDoc(doc(db, "users_by_email", fEmail), {
-        id: "usr-01",
+        id: fUid,
+        systemId: "usr-01",
         email: fEmail,
         role: "SYSTEM_OWNER",
         isActive: true
@@ -1567,7 +1570,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         body: JSON.stringify(params)
       });
       const data = await response.json();
-      if (!data.success && !data.clientManaged) {
+      if (!data.success) {
         return { success: false, error: data.error };
       }
 
