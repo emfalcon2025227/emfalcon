@@ -798,11 +798,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       // Safely update users doc in Firestore if needed
+      const cleanProfile = sanitizeForFirestore(updatedProfile);
       setDoc(doc(db, "users", updatedProfile.id), {
-        ...sanitizeForFirestore(updatedProfile),
+        ...cleanProfile,
         firebaseUid: fUid,
         lastLogin: new Date().toISOString()
       }, { merge: true }).catch(() => {});
+
+      // Double-write user profile under actual firebase UID to ensure exists() checks in Firestore Rules resolve role perfectly
+      if (updatedProfile.id !== fUid) {
+        setDoc(doc(db, "users", fUid), {
+          ...cleanProfile,
+          firebaseUid: fUid,
+          id: updatedProfile.id, // Keep the custom profile ID as reference inside the document
+          lastLogin: new Date().toISOString()
+        }, { merge: true }).catch(() => {});
+      }
 
       // Safely update email mapping
       if (fEmail) {

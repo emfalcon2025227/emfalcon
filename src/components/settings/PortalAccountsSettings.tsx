@@ -25,6 +25,7 @@ import { Badge } from "../common/Badge";
 import { Modal } from "../common/Modal";
 import { QuickCommunicationButtons } from "../common/QuickCommunicationButtons";
 import { getAuthToken } from "../../utils/apiClient";
+import { matchAnyArabicSearch } from "../../utils/arabicTextNormalizer";
 
 export const PortalAccountsSettings: React.FC = () => {
   const [portalRoleFilter, setPortalRoleFilter] = useState<"ALL" | "OWNER" | "TENANT">("ALL");
@@ -94,16 +95,22 @@ export const PortalAccountsSettings: React.FC = () => {
 
   const filteredRows = useMemo(() => {
     return accountRows.filter(({ record, info, email }) => {
-      const search = searchTerm.toLowerCase();
-      const nameMatch = language === "ar" ? record.nameAr?.includes(searchTerm) : record.nameEn?.toLowerCase().includes(search);
-      const emailMatch = (email || "").toLowerCase().includes(search);
-      const codeMatch = (record.code || "").toLowerCase().includes(search);
+      const isMatch = matchAnyArabicSearch(
+        [
+          record.nameAr,
+          record.nameEn,
+          email,
+          record.code,
+          record.phone
+        ],
+        searchTerm
+      );
 
-      if (!nameMatch && !emailMatch && !codeMatch) return false;
+      if (!isMatch) return false;
       if (statusFilter === "ALL") return true;
       return info.status === statusFilter;
     });
-  }, [accountRows, searchTerm, statusFilter, language]);
+  }, [accountRows, searchTerm, statusFilter]);
 
   const handleSendActivation = async (targetId: string, name: string, email: string, portalRole: "OWNER" | "TENANT") => {
     setSendActivationModal({ isOpen: true, name, email, targetId, sending: true, error: null, success: false, activationLink: null });

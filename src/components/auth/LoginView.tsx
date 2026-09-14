@@ -38,6 +38,26 @@ export const LoginView: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isForgotOpen, setIsForgotOpen] = useState(false);
+  const [isInIframe, setIsInIframe] = useState(false);
+
+  React.useEffect(() => {
+    setIsInIframe(window.self !== window.top);
+
+    // Auto prefill email from URL if present (useful for activation / reset fallback links)
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const emailParam = params.get("activate");
+      const roleParam = params.get("role");
+      if (emailParam) {
+        setUsername(emailParam);
+        if (roleParam === "OWNER" || roleParam === "PROPERTY_OWNER") {
+          setLoginMode("OWNER");
+        } else if (roleParam === "TENANT") {
+          setLoginMode("TENANT");
+        }
+      }
+    }
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -325,6 +345,15 @@ export const LoginView: React.FC = () => {
               )}
               <span>{isGoogleLoading ? (language === "ar" ? "جاري المصادقة..." : "Authenticating...") : (language === "ar" ? "تسجيل الدخول بحساب Google" : "Sign in with Google")}</span>
             </button>
+
+            {isInIframe && (
+              <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] leading-relaxed font-bold text-amber-800 flex items-start gap-2 animate-in fade-in">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p>{language === "ar" ? "💡 تنبيه: لتسجيل الدخول عبر Google، يرجى فتح التطبيق في نافذة مستقلة/خارجية (من خلال زر فتح التطبيق في AI Studio) لتفادي قيود إطار العمل المدمج (Iframe)." : "💡 Tip: To use Google Sign-In, please open the application in a new window/tab (using the open icon in AI Studio) to bypass the sandbox iframe constraints."}</p>
+                </div>
+              </div>
+            )}
           </form>
         </div>
       </main>
