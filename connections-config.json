@@ -1,0 +1,24 @@
+{
+  "googleDrive": {
+    "connected": false,
+    "status": "NOT_CONFIGURED",
+    "scope": "https://www.googleapis.com/auth/drive.file",
+    "rootFolderName": "Emirates Falcon"
+  },
+  "whatsapp": {
+    "phoneNumberId": "",
+    "wabaId": "",
+    "apiVersion": "v17.0",
+    "enabled": true,
+    "status": "NOT_CONFIGURED"
+  },
+  "gmail": {
+    "smtpUser": "emfalcon2025227@gmail.com",
+    "smtpHost": "smtp.gmail.com",
+    "smtpPort": 465,
+    "encryption": "SSL",
+    "senderName": "Emirates Falcon System",
+    "enabled": true,
+    "status": "NOT_CONFIGURED"
+  }
+}

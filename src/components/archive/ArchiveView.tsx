@@ -34,11 +34,8 @@ import { CaseDocumentUploadModal } from "../cases/CaseDocumentUploadModal";
 import { DocumentPreviewModal, PreviewableDocument } from "../common/DocumentPreviewModal";
 import { useAuth } from "../../context/AuthContext";
 import {
-  googleSignIn,
-  googleLogout,
-  initAuth,
-  getGoogleUser,
-  getAccessToken,
+  getCentralDriveStatus,
+  CentralDriveStatus,
 } from "../../services/googleDriveService";
 import { matchAnyArabicSearch } from "../../utils/arabicTextNormalizer";
 
@@ -55,7 +52,8 @@ export const ArchiveView: React.FC = () => {
     syncArchiveItemToDrive,
     syncChequeToDrive,
   } = useData();
-  const { hasPermission } = useAuth();
+  const { hasPermission, currentUser } = useAuth();
+  const isAdmin = currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
   
   const canDelete = hasPermission("DELETE_RECORDS");
 
@@ -64,10 +62,9 @@ export const ArchiveView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState<string>("ALL");
 
-  // Google Drive Auth State
-  const [googleUser, setGoogleUser] = useState<any>(null);
-  const [isSigningIn, setIsSigningIn] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
+  // Central Google Drive Connection State
+  const [centralStatus, setCentralStatus] = useState<CentralDriveStatus | null>(null);
+  const [loadingStatus, setLoadingStatus] = useState(true);
 
   // Modals State
   const [selectedChequeForUpload, setSelectedChequeForUpload] = useState<Cheque | null>(null);
@@ -78,43 +75,23 @@ export const ArchiveView: React.FC = () => {
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [batchSyncing, setBatchSyncing] = useState(false);
 
-  // Initialize Auth listener
+  // Load Central Drive Status
+  const refreshCentralStatus = async () => {
+    setLoadingStatus(true);
+    try {
+      const status = await getCentralDriveStatus();
+      setCentralStatus(status);
+    } catch (e) {
+      console.warn("Could not check central drive status:", e);
+    } finally {
+      setLoadingStatus(false);
+    }
+  };
+
   useEffect(() => {
-    const unsubscribe = initAuth(
-      (user) => {
-        setGoogleUser(user);
-        setAuthError(null);
-      },
-      () => {
-        setGoogleUser(null);
-      }
-    );
-    return () => unsubscribe();
+    refreshCentralStatus();
   }, []);
 
-  const handleGoogleSignIn = async () => {
-    setIsSigningIn(true);
-    setAuthError(null);
-    try {
-      const res = await googleSignIn();
-      if (res?.user) {
-        setGoogleUser(res.user);
-      }
-    } catch (err: any) {
-      setAuthError(err.customMessageAr || err.message || "Failed to sign in with Google");
-    } finally {
-      setIsSigningIn(false);
-    }
-  };
-
-  const handleGoogleSignOut = async () => {
-    try {
-      await googleLogout();
-      setGoogleUser(null);
-    } catch (err: any) {
-      console.error("Sign out error:", err);
-    }
-  };
 
   // Sync single archive item to drive
   const handleSyncArchiveItem = async (id: string) => {
@@ -138,11 +115,11 @@ export const ArchiveView: React.FC = () => {
 
   // Batch sync all unsynced items
   const handleBatchSync = async () => {
-    if (!googleUser) {
+    if (!centralStatus?.connected) {
       alert(
         language === "ar"
-          ? "يرجى تسجيل الدخول بحساب Google أولاً لتفعيل المزامنة"
-          : "Please sign in with Google first to enable sync"
+          ? "مستودع الأرشيف السحابي المركزي غير متصل حالياً. يمكن لمسؤول النظام تهيئته لمرة واحدة من صفحة الإعدادات -> الربط والتكامل."
+          : "Central Google Drive storage is not connected. An administrator can configure it once in Settings -> Integrations."
       );
       return;
     }
@@ -269,7 +246,7 @@ export const ArchiveView: React.FC = () => {
         </div>
       </div>
 
-      {/* Google Drive Connection & Stats Banner */}
+      {/* Google Drive Central Archive Connection & Stats Banner */}
       <div className="bg-linear-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-4 sm:p-5 rounded-3xl shadow-xs border border-slate-700/60">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
@@ -279,70 +256,57 @@ export const ArchiveView: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-sm text-white">
-                  {language === "ar" ? "تكامل Google Drive المباشر" : "Google Drive Integration"}
+                  {language === "ar" ? "مستودع الأرشيف الإلكتروني المركزي (Google Drive)" : "Central Google Drive Archive Repository"}
                 </span>
-                {googleUser ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
+                {centralStatus?.connected ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
                     <CheckCircle2 className="w-3 h-3" />
-                    {language === "ar" ? "متصل ومفعل" : "Connected"}
+                    {language === "ar" ? "متصل مركزياً وجاهز" : "Connected & Active"}
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold">
-                    {language === "ar" ? "يتطلب تسجيل الدخول" : "Sign-in Required"}
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold">
+                    <AlertTriangle className="w-3 h-3" />
+                    {language === "ar" ? "المستودع المركزي غير متصل" : "Not Centrally Connected"}
                   </span>
                 )}
               </div>
               <p className="text-[11px] text-slate-300 mt-0.5">
-                {googleUser
-                  ? `${language === "ar" ? "الحساب المتصل:" : "Connected Account:"} ${googleUser.email || "Google Account"}`
+                {centralStatus?.connected
+                  ? `${language === "ar" ? "الحساب المتصل:" : "Central Account:"} ${centralStatus.email || "Google Workspace"} — ${language === "ar" ? "المجلد الجذري:" : "Root Folder:"} ${centralStatus.rootFolderName || "EMIRATES_FALCON_ARCHIVE"}`
                   : language === "ar"
-                  ? "سجّل الدخول بحساب Google لرفع الملفات ومستندات القضايا تلقائياً لمجلدك"
-                  : "Sign in with Google to automatically back up scans and court documents to your drive"}
+                  ? "تكامل مركزي دائم: يتم حفظ وتخزين الوثائق تلقائياً عبر حساب الشركة دون الحاجة لتسجيل دخول كل مستخدم"
+                  : "Central persistent archive: documents sync automatically without individual user Google logins"}
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {googleUser ? (
-              <div className="flex items-center gap-2">
-                <a
-                  href="https://drive.google.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 transition-colors"
-                >
-                  <FolderOpen className="w-4 h-4 text-blue-300" />
-                  <span>{language === "ar" ? "فتح مجلد Drive" : "Open Google Drive"}</span>
-                  <ExternalLink className="w-3 h-3 text-slate-300" />
-                </a>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={refreshCentralStatus}
+              disabled={loadingStatus}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 font-bold text-xs border border-white/15 transition-colors cursor-pointer"
+              title="Refresh Status"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loadingStatus ? "animate-spin" : ""}`} />
+              <span>{language === "ar" ? "تحديث الحالة" : "Refresh Status"}</span>
+            </button>
 
-                <button
-                  onClick={handleGoogleSignOut}
-                  className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-bold text-xs border border-rose-500/40 transition-colors cursor-pointer"
-                  title="Sign Out"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>{language === "ar" ? "خروج" : "Sign Out"}</span>
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={handleGoogleSignIn}
-                disabled={isSigningIn}
-                className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 font-bold text-xs shadow-md transition-all cursor-pointer hover:scale-[1.02]"
+            {centralStatus?.connected ? (
+              <a
+                href={centralStatus.rootFolderId ? `https://drive.google.com/drive/folders/${centralStatus.rootFolderId}` : "https://drive.google.com"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600/30 hover:bg-blue-600/40 text-blue-200 font-bold text-xs border border-blue-500/40 transition-colors"
               >
-                <HardDrive className="w-4 h-4" />
-                <span>
-                  {isSigningIn
-                    ? language === "ar"
-                      ? "جاري الاتصال..."
-                      : "Connecting..."
-                    : language === "ar"
-                    ? "الاتصال بالمساحة السحابية (Service Account)"
-                    : "Connect to Central Cloud Storage"}
-                </span>
-              </button>
-            )}
+                <FolderOpen className="w-4 h-4 text-blue-300" />
+                <span>{language === "ar" ? "فتح مجلد الأرشيف" : "Open Archive Folder"}</span>
+                <ExternalLink className="w-3 h-3 text-blue-300" />
+              </a>
+            ) : isAdmin ? (
+              <span className="text-[11px] bg-amber-500/10 border border-amber-500/30 text-amber-200 px-3 py-1.5 rounded-xl font-medium">
+                {language === "ar" ? "يمكنك الربط من: الإعدادات ← الربط والتكامل" : "Configure in: Settings → Integrations"}
+              </span>
+            ) : null}
           </div>
         </div>
 

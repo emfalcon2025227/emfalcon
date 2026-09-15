@@ -47,13 +47,14 @@ import {
 } from "../../services/communicationProviderService";
 import {
   runComprehensiveGoogleDriveDiagnostics,
-  googleSignIn,
-  googleQuickDirectConnect,
   googleLogout,
-  getGoogleUser,
+  getCentralDriveStatus,
+  CentralDriveStatus,
   DriveDiagnosticReport,
   DriveDiagnosticStep,
 } from "../../services/googleDriveService";
+import { authenticatedFetch } from "../../utils/apiClient";
+import { downloadDriveStartupBat } from "../../services/driveStartupBatchGenerator";
 import { scannerService } from "../../services/scannerService";
 import {
   downloadHPBridgeBatchLauncher,
@@ -71,12 +72,16 @@ export const CompanyConnectionsView: React.FC = () => {
   // Administrative check
   const isAdmin =
     currentUser?.role === "SUPER_ADMIN" ||
+    currentUser?.role === "ADMIN" ||
     currentUser?.role === "MANAGER" ||
     currentUser?.role === "SYSTEM_OWNER";
 
   // Google Drive Connection State
   const [driveReport, setDriveReport] = useState<DriveDiagnosticReport | null>(null);
+  const [centralDriveStatus, setCentralDriveStatus] = useState<CentralDriveStatus | null>(null);
   const [driveLoading, setDriveLoading] = useState(false);
+  const [isRepairing, setIsRepairing] = useState(false);
+  const [showStartupModal, setShowStartupModal] = useState(false);
 
   // Scanner Bridge State
   const [scannerBridgeStatus, setScannerBridgeStatus] = useState<{
@@ -224,25 +229,39 @@ export const CompanyConnectionsView: React.FC = () => {
     }
   };
 
+  const loadDriveStatus = async () => {
+    try {
+      const status = await getCentralDriveStatus();
+      setCentralDriveStatus(status);
+      return status;
+    } catch (e) {
+      console.warn("Could not load central drive status:", e);
+      return null;
+    }
+  };
+
   const runDriveDiagnostics = async () => {
     setDriveLoading(true);
-    addLog(t("جاري تشغيل الفحص التفصيلي (10 خطوات) لـ Google Drive...", "Starting 10-step detailed Google Drive diagnostics..."));
+    addLog(t("جاري تشغيل الفحص التفصيلي (10 خطوات) لـ Google Drive عبر الخادم المركزي...", "Starting 10-step server-side Google Drive diagnostics..."));
     try {
-      const report = await runComprehensiveGoogleDriveDiagnostics();
+      const [report, status] = await Promise.all([
+        runComprehensiveGoogleDriveDiagnostics(),
+        loadDriveStatus(),
+      ]);
       setDriveReport(report);
       
-      if (report.status === "REAL_UPLOAD_VERIFIED") {
+      if (report.status === "REAL_UPLOAD_VERIFIED" || report.status === "CONNECTED") {
         addLog(
           t(
-            `نجح فحص Google Drive! تم رفع ملف الفحص والتحقق من البيانات الفوقية بنجاح. معرّف الملف: ${report.fileId}`,
-            `Google Drive passed diagnostics! Test file uploaded and metadata verified. File ID: ${report.fileId}`
+            `نجح فحص Google Drive المركزي! الحساب: ${report.accountEmail || status?.email || "موثق"}. المجلد: ${status?.rootFolderName || "EMIRATES_FALCON_ARCHIVE"}`,
+            `Google Drive passed diagnostics! Account: ${report.accountEmail || status?.email || "Verified"}. Folder: ${status?.rootFolderName || "EMIRATES_FALCON_ARCHIVE"}`
           )
         );
       } else {
         addLog(
           t(
-            `فشل فحص Google Drive في الخطوة: ${report.steps.find(s => s.status === "FAIL")?.name || "غير محدد"}. خطأ: ${report.safeErrorMessage || "فشل الاتصال"}`,
-            `Google Drive failed at step: ${report.steps.find(s => s.status === "FAIL")?.name || "N/A"}. Error: ${report.safeErrorMessage || "Unknown"}`
+            `نتيجة فحص Google Drive: ${report.status}. التفاصيل: ${report.safeErrorMessage || "فحص غير مكتمل"}`,
+            `Google Drive check status: ${report.status}. Details: ${report.safeErrorMessage || "Incomplete"}`
           )
         );
       }
@@ -259,85 +278,124 @@ export const CompanyConnectionsView: React.FC = () => {
   }, []);
 
   const handleGoogleAuth = async () => {
+    if (!isAdmin) {
+      alert(t("فقط مسؤولو النظام مخولون بربط وتفويض مساحة التخزين المركزية.", "Only administrators can configure central company cloud storage."));
+      return;
+    }
+
     setDriveLoading(true);
-    addLog(t("بدء عملية المصادقة الآمنة عبر Google OAuth...", "Initiating secure Google OAuth flow..."));
+    addLog(t("طلب رابط تفويض Google Drive الموحد من الخادم...", "Requesting Central Google Drive OAuth authorization link from server..."));
     try {
-      const result = await googleSignIn();
-      if (result) {
-        addLog(
-          t(
-            `تمت المصادقة بنجاح لحساب: ${result.user.email}`,
-            `Authenticated successfully for: ${result.user.email}`
-          )
-        );
-        setStatusFeedback({
-          type: "success",
-          text: t(
-            "تم ربط حساب Google بنجاح! جاري بدء تشخيص النظام...",
-            "Google account connected successfully! Launching diagnostics..."
-          ),
-        });
-        await runDriveDiagnostics();
+      const res = await authenticatedFetch("/api/integrations/google-drive/connect");
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || "Failed to generate authorization URL");
+      }
+      const data = await res.json();
+      if (!data.authUrl) throw new Error("No authorization URL returned by server");
+
+      addLog(t("فتح نافذة تفويض Google بحساب الشركة...", "Opening Google OAuth consent window..."));
+
+      // Set up message listener for popup callback
+      const onMessage = async (evt: MessageEvent) => {
+        if (evt.data?.type === "GDRIVE_OAUTH_SUCCESS") {
+          window.removeEventListener("message", onMessage);
+          addLog(t(`تم الربط بنجاح بحساب: ${evt.data.email || "حساب الشركة"}`, `Connected successfully to account: ${evt.data.email || "Company Account"}`));
+          setStatusFeedback({
+            type: "success",
+            text: t("تم ربط Google Drive بنجاح وتشفير رمز التحديث على الخادم! جاري تشغيل الفحص الأمني...", "Google Drive connected and token encrypted server-side! Running diagnostic check..."),
+          });
+          await runDriveDiagnostics();
+        } else if (evt.data?.type === "GDRIVE_OAUTH_FAILED") {
+          window.removeEventListener("message", onMessage);
+          addLog(t(`فشل الربط: ${evt.data.error || "تم الرفض"}`, `OAuth failed: ${evt.data.error}`));
+          setStatusFeedback({
+            type: "error",
+            text: t("تعذر إكمال تفويض Google.", "Google authorization could not be completed."),
+          });
+        }
+      };
+      window.addEventListener("message", onMessage);
+
+      // Open popup
+      const popup = window.open(
+        data.authUrl,
+        "GoogleDriveCentralAuth",
+        "width=600,height=700,status=no,toolbar=no,menubar=no"
+      );
+      if (!popup) {
+        window.location.href = data.authUrl;
       }
     } catch (error: any) {
-      const isDomainError = error?.code === "auth/unauthorized-domain" || error?.message?.includes("unauthorized-domain");
-      if (isDomainError) {
-        const currentHost = typeof window !== "undefined" ? window.location.hostname : "";
-        setDomainHelpModal({
-          isOpen: true,
-          domain: currentHost,
-          copied: false,
-        });
-        addLog(t(`خطأ نطاق غير مصرح به في Firebase: ${currentHost}`, `Firebase Unauthorized Domain: ${currentHost}`));
-        setStatusFeedback({
-          type: "error",
-          text: t(`تنبيه أمني: النطاق (${currentHost}) بحاجة للإضافة في Firebase Console. انقر لعرض التفاصيل.`, `Security Notice: Domain (${currentHost}) needs to be added in Firebase Console. Click to view instructions.`),
-        });
-      } else {
-        addLog(t(`فشلت مصادقة Google: ${error.message}`, `Google authentication failed: ${error.message}`));
-        setStatusFeedback({
-          type: "error",
-          text: t("فشلت عملية المصادقة. يرجى مراجعة إعدادات متصفحك.", "Authentication failed. Please check browser configurations."),
-        });
-      }
-    } finally {
-      setDriveLoading(false);
-    }
-  };
-
-  const handleQuickConnect = async () => {
-    setDriveLoading(true);
-    addLog(t("تفعيل الربط المباشر السريع (وضع تجاوز النوافذ المنبثقة)...", "Activating direct quick connect (bypass popup mode)..."));
-    try {
-      const res = googleQuickDirectConnect();
-      addLog(t(`تم الربط بنجاح للحساب: ${res.user.email}`, `Connected successfully for: ${res.user.email}`));
+      addLog(t(`فشلت مصادقة Google: ${error.message}`, `Google authentication failed: ${error.message}`));
       setStatusFeedback({
-        type: "success",
-        text: t("تم ربط Google Drive بنجاح! جاري تشخيص النظام...", "Google Drive connected successfully! Running diagnostics..."),
+        type: "error",
+        text: error.message || t("فشلت عملية المصادقة. يرجى مراجعة إعدادات متصفحك.", "Authentication failed. Please check browser configurations."),
       });
-      await runDriveDiagnostics();
-    } catch (err: any) {
-      addLog(`Quick connect error: ${err.message}`);
     } finally {
       setDriveLoading(false);
     }
   };
 
   const handleGoogleDeauth = async () => {
+    if (!isAdmin) return;
     setDriveLoading(true);
-    addLog(t("جاري قطع الاتصال وإزالة صلاحيات Google OAuth...", "Disconnecting and clearing Google Drive tokens..."));
+    addLog(t("جاري قطع الاتصال وإزالة صلاحيات Google OAuth المشفرة من الخادم...", "Disconnecting and clearing encrypted Google Drive tokens on server..."));
     try {
-      await googleLogout();
-      setDriveReport(null);
-      addLog(t("تم فصل الاتصال بمستودع Google Drive للشركة.", "Company Google Drive storage disconnected."));
-      setStatusFeedback({
-        type: "info",
-        text: t("تم إلغاء ربط Google Drive بنجاح.", "Google Drive disconnected successfully."),
+      const res = await authenticatedFetch("/api/integrations/google-drive/disconnect", {
+        method: "POST",
       });
+      if (res.ok) {
+        await googleLogout();
+        setDriveReport(null);
+        setCentralDriveStatus(null);
+        addLog(t("تم فصل الاتصال بمستودع Google Drive للشركة وإلغاء الرموز المشفرة بنجاح.", "Company Google Drive storage disconnected and encrypted tokens purged."));
+        setStatusFeedback({
+          type: "info",
+          text: t("تم إلغاء ربط Google Drive بنجاح.", "Google Drive disconnected successfully."),
+        });
+        await runDriveDiagnostics();
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || "Failed to disconnect Google Drive");
+      }
     } catch (error: any) {
-      addLog(`Logout error: ${error.message}`);
+      addLog(`Disconnect error: ${error.message}`);
     } finally {
       setDriveLoading(false);
+    }
+  };
+
+  const handleRepairSafeIssues = async () => {
+    setIsRepairing(true);
+    addLog(t("بدء عملية الإصلاح الذاتي الآمن لمستودع Google Drive...", "Starting safe auto-repair for Google Drive..."));
+    try {
+      // 1. Purge client-side memory tokens
+      await googleLogout();
+      addLog(t("1. تم تنظيف الرموز المؤقتة في المتصفح.", "1. Temporary memory tokens purged."));
+      
+      // 2. Query token endpoint to force server-side validation/refresh
+      const tokenRes = await authenticatedFetch("/api/connections/drive-token");
+      if (tokenRes.ok) {
+        addLog(t("2. تم الاتصال بنجاح بخادم النظام والتحقق من الرمز المركزي.", "2. Server token verified successfully."));
+      }
+      
+      // 3. Re-run comprehensive diagnostics
+      addLog(t("3. جاري إعادة اختبار جميع قنوات الرفع والتحقق الفوقي...", "3. Re-testing drive upload & verification pipeline..."));
+      await runDriveDiagnostics();
+      
+      setStatusFeedback({
+        type: "success",
+        text: t("اكتملت عملية الفحص والإصلاح الذاتي بنجاح.", "Safe repair and diagnostic check completed successfully."),
+      });
+    } catch (err: any) {
+      addLog(t(`فشل الإصلاح: ${err.message}`, `Repair failed: ${err.message}`));
+      setStatusFeedback({
+        type: "error",
+        text: t("تعذر إكمال الإصلاح الآمن: " + err.message, "Could not complete repair: " + err.message),
+      });
+    } finally {
+      setIsRepairing(false);
     }
   };
 
@@ -660,29 +718,65 @@ export const CompanyConnectionsView: React.FC = () => {
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-slate-900">Google Drive</h4>
-                  <p className="text-[11px] text-slate-400">{t("مستودع الأرشفة الرقمي الموحد", "Central Document Repository")}</p>
+                  <p className="text-[11px] text-slate-400">{t("مستودع الأرشيف الإلكتروني المركزي الموحد", "Central Document Repository")}</p>
                 </div>
               </div>
 
-              {driveReport && renderStatusBadge(driveReport.status)}
+              {driveReport ? (
+                renderStatusBadge(driveReport.status)
+              ) : centralDriveStatus?.connected ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
+                  <CheckCircle2 className="w-3 h-3" />
+                  {t("متصل مركزياً", "Centrally Connected")}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-bold">
+                  {t("غير متصل", "Disconnected")}
+                </span>
+              )}
             </div>
 
             {/* Diagnostic Details */}
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 text-xs">
               <div className="flex justify-between items-center text-slate-500 pb-1.5 border-b border-slate-150">
                 <span>{t("الحساب الموثق للشركة:", "Company Account:")}</span>
-                <span className="font-bold text-slate-800 font-mono">
-                  emfalcon2025227@gmail.com
+                <span className="font-bold text-slate-800 font-mono text-[11px]">
+                  {centralDriveStatus?.email || driveReport?.accountEmail || "emfalcon2025227@gmail.com"}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center text-slate-500 pb-1.5 border-b border-slate-150">
+                <span>{t("المجلد الجذري للأرشيف:", "Root Archive Folder:")}</span>
+                <span className="font-bold text-amber-900 font-mono text-[11px] flex items-center gap-1">
+                  <span>{centralDriveStatus?.rootFolderName || "EMIRATES_FALCON_ARCHIVE"}</span>
+                  {centralDriveStatus?.rootFolderId && (
+                    <a
+                      href={`https://drive.google.com/drive/folders/${centralDriveStatus.rootFolderId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800"
+                      title={t("فتح المجلد في Google Drive", "Open folder in Google Drive")}
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
                 </span>
               </div>
               
               {/* Detailed 10 Steps Checklist */}
               <div className="space-y-1.5 pt-1">
-                <span className="block text-[11px] font-bold text-slate-600 mb-1">
-                  {t("خطوات التحقق الأمني المالي (10 خطوات):", "Verification Security Checklist (10 Steps):")}
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="block text-[11px] font-bold text-slate-600">
+                    {t("خطوات التحقق الأمني المالي (10 خطوات):", "Verification Security Checklist (10 Steps):")}
+                  </span>
+                  {driveReport && (
+                    <span className="text-[10px] font-mono text-slate-400">
+                      {driveReport.steps.filter(s => s.status === "PASS").length} / {driveReport.steps.length}
+                    </span>
+                  )}
+                </div>
                 {driveReport?.steps ? (
-                  <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                  <div className="space-y-1 max-h-44 overflow-y-auto pr-1">
                     {driveReport.steps.map((step, idx) => (
                       <div key={idx} className="flex items-start gap-1.5 text-[10px]">
                         {step.status === "PASS" ? (
@@ -712,7 +806,7 @@ export const CompanyConnectionsView: React.FC = () => {
                   </div>
                 ) : (
                   <p className="text-[10px] text-slate-400 italic">
-                    {t("قم بتسجيل الدخول لبدء فحص الـ 10 خطوات للتحقق من سلامة الأرشفة.", "Sign in to launch 10-step diagnostics to verify storage integration integrity.")}
+                    {t("انقر فوق فحص أو تفعيل لاختبار سلامة مستودع الأرشفة المركزي.", "Click check or activate to verify central storage integrity.")}
                   </p>
                 )}
               </div>
@@ -733,55 +827,108 @@ export const CompanyConnectionsView: React.FC = () => {
               )}
             </div>
 
-            {/* Explanatory Note on Recovery */}
-            {(!driveReport || driveReport.status !== "REAL_UPLOAD_VERIFIED") && (
-              <div className="p-3 bg-amber-50/50 border border-amber-200 rounded-2xl text-[11px] text-amber-800 leading-relaxed flex gap-2">
-                <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold">{t("الاتصال الآلي بالخادم (Server-to-Server):", "Automated Server Connection:")}</span>
-                  <p className="mt-0.5">
-                    {t(
-                      "يرجى الضغط على الزر أدناه لتفعيل الاتصال المباشر بين النظام ومساحة التخزين السحابية عبر Service Account. سيتم حفظ هذا الإعداد للشركة ولن يضطر المستخدمون لتسجيل الدخول الفردي.",
-                      "Click below to activate the direct Server-to-Server storage connection via Service Account. This is a centralized setup and end-users won't need to sign in individually."
-                    )}
-                  </p>
-                </div>
+            {/* Note on Central Architecture */}
+            <div className="p-3 bg-amber-50/60 border border-amber-200/80 rounded-2xl text-[11px] text-amber-900 leading-relaxed flex gap-2">
+              <ShieldCheck className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold">{t("ربط لمرة واحدة (One-Time Setup):", "One-Time Central Setup:")}</span>
+                <p className="mt-0.5 text-[10px] text-amber-800">
+                  {t(
+                    "يتم حفظ وتشفير رمز الوصول على الخادم بشكل آمن (AES-256). لا يحتاج أي مالك أو مستأجر أو موظف لإجراء مصادقة Google لاستخدام الأرشيف الإلكتروني.",
+                    "Access tokens are securely encrypted server-side (AES-256). No owner, tenant, or staff needs to sign into Google to use the archive."
+                  )}
+                </p>
               </div>
-            )}
+            </div>
           </div>
 
-          <div className="space-y-3 pt-4 border-t border-slate-100">
-            {driveReport?.status === "REAL_UPLOAD_VERIFIED" ? (
+          <div className="space-y-2 pt-4 border-t border-slate-100">
+            {centralDriveStatus?.connected || driveReport?.status === "REAL_UPLOAD_VERIFIED" ? (
               <div className="space-y-2">
                 <button
                   type="button"
                   onClick={runDriveDiagnostics}
-                  disabled={driveLoading}
+                  disabled={driveLoading || isRepairing}
                   className="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${driveLoading ? "animate-spin" : ""}`} />
                   <span>{t("إعادة تشغيل فحص الـ 10 خطوات", "Run 10-Step Diagnostics")}</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={handleGoogleDeauth}
-                  disabled={driveLoading}
-                  className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <span>{t("قطع الاتصال وتسجيل الخروج", "Disconnect Account")}</span>
-                </button>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={handleRepairSafeIssues}
+                    disabled={isRepairing || driveLoading}
+                    className="py-1.5 px-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    title={t("إصلاح الرموز وإعادة المزامنة التلقائية", "Auto-repair tokens and sync")}
+                  >
+                    <Zap className={`w-3.5 h-3.5 ${isRepairing ? "animate-spin text-amber-600" : "text-blue-600"}`} />
+                    <span>{isRepairing ? t("جاري الإصلاح...", "Repairing...") : t("إصلاح آمن", "Safe Repair")}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => downloadDriveStartupBat()}
+                    className="py-1.5 px-2 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    title={t("تحميل أداة الفحص التلقائي لويندوز", "Download Windows auto-check batch tool")}
+                  >
+                    <Download className="w-3.5 h-3.5 text-slate-500" />
+                    <span>{t("تنزيل ملف .bat", "Download .bat")}</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between pt-1 text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => setShowStartupModal(true)}
+                    className="text-amber-800 hover:text-amber-950 font-bold underline cursor-pointer"
+                  >
+                    {t("تعليمات بدء التشغيل مع ويندوز", "Windows Startup Guide")}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleGoogleDeauth}
+                    disabled={driveLoading || isRepairing}
+                    className="text-rose-600 hover:text-rose-800 font-bold transition-colors cursor-pointer"
+                  >
+                    {t("قطع الاتصال", "Disconnect")}
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="space-y-2">
                 <button
                   type="button"
                   onClick={handleGoogleAuth}
-                  disabled={driveLoading}
+                  disabled={driveLoading || isRepairing}
                   className="w-full py-2.5 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm shadow-amber-700/10"
                 >
                   <Play className="w-3.5 h-3.5" />
-                  <span>{t("تفعيل الاتصال المباشر بالسحابة", "Activate Cloud Connection")}</span>
+                  <span>{t("ربط حساب Google Drive للشركة (مرة واحدة)", "Connect Company Google Drive (One-Time)")}</span>
                 </button>
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={runDriveDiagnostics}
+                    disabled={driveLoading || isRepairing}
+                    className="py-1.5 px-2 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${driveLoading ? "animate-spin" : ""}`} />
+                    <span>{t("فحص الحالة", "Check Status")}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => downloadDriveStartupBat()}
+                    className="py-1.5 px-2 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <Download className="w-3 h-3 text-slate-500" />
+                    <span>{t("تنزيل .bat", "Download .bat")}</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1444,6 +1591,105 @@ export const CompanyConnectionsView: React.FC = () => {
                 className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
               >
                 {t("إغلاق", "Close")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Windows Startup Folder Instructions Modal */}
+      {showStartupModal && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-5 relative">
+            <button
+              type="button"
+              onClick={() => setShowStartupModal(false)}
+              className="absolute top-4 start-4 p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 pt-2">
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0 border border-blue-200">
+                <HardDrive className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="text-base font-black text-slate-900">
+                  {t("تشغيل الفحص تلقائياً مع بدء تشغيل ويندوز", "Automate Verification on Windows Startup")}
+                </h4>
+                <p className="text-xs text-slate-500">
+                  {t("دليل تفعيل EmiratesFalcon-GDrive-Startup.bat", "Setup Guide for Startup Auto-Check")}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs text-slate-700">
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-1.5">
+                <span className="font-bold text-slate-900 block">
+                  {t("الخطوة 1: تنزيل أداة التشخيص (.bat)", "Step 1: Download the Batch Script")}
+                </span>
+                <p className="text-slate-600">
+                  {t("انقر أدناه لتنزيل ملف التشغيل المباشر الخاص بشركة صقر الإمارات:", "Click below to download the official automation batch file:")}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => downloadDriveStartupBat()}
+                  className="mt-1 px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-xs"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>{t("تنزيل EmiratesFalcon-GDrive-Startup.bat", "Download EmiratesFalcon-GDrive-Startup.bat")}</span>
+                </button>
+              </div>
+
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-1.5">
+                <span className="font-bold text-slate-900 block">
+                  {t("الخطوة 2: فتح مجلد بدء التشغيل في ويندوز", "Step 2: Open Windows Startup Folder")}
+                </span>
+                <p className="text-slate-600">
+                  {t("اضغط على مفتاحي Win + R على لوحة المفاتيح واكتب الأمر التالي:", "Press Win + R, then type and run:")}
+                </p>
+                <div className="flex items-center gap-2 pt-0.5">
+                  <input
+                    type="text"
+                    readOnly
+                    value="shell:startup"
+                    className="flex-1 px-3 py-1.5 text-xs font-mono bg-white border border-slate-200 rounded-xl select-all font-bold"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText("shell:startup");
+                      alert(t("تم نسخ الأمر shell:startup", "Copied shell:startup"));
+                    }}
+                    className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>{t("نسخ", "Copy")}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-1 text-emerald-900">
+                <span className="font-bold flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  {t("الخطوة 3: النقل والتشغيل الدائم", "Step 3: Paste and Done")}
+                </span>
+                <p className="text-[11px] text-emerald-800 leading-relaxed">
+                  {t(
+                    "انقل الملف الذي تم تنزيله إلى المجلد المفتوح. سيقوم ويندوز بفحص مستودع Google Drive والتأكد من استجابة الخادم المركزي عند كل إقلاع للجهاز.",
+                    "Paste the downloaded file into the folder. Windows will automatically run the connectivity diagnostic on every computer boot."
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowStartupModal(false)}
+                className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+              >
+                {t("تم وفهمت الطريقة", "Done")}
               </button>
             </div>
           </div>

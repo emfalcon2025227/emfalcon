@@ -1,89 +1,116 @@
 import { authenticatedFetch } from "../utils/apiClient";
 
-const TOKEN_SESSION_KEY = "falcon_gdrive_access_token";
-const SA_EMAIL_KEY = "falcon_gdrive_sa_email";
-let cachedAccessToken: string | null =
-  typeof window !== "undefined" ? sessionStorage.getItem(TOKEN_SESSION_KEY) : null;
-let serviceAccountEmail: string | null = 
-  typeof window !== "undefined" ? sessionStorage.getItem(SA_EMAIL_KEY) : null;
+let inMemoryAccessToken: string | null = null;
+let tokenExpiresAt = 0;
+let inMemoryEmail: string | null = null;
+let inMemoryMode: string | null = null;
+
+export interface CentralDriveStatus {
+  connected: boolean;
+  status: "NOT_CONFIGURED" | "CONNECTED" | "REAUTH_REQUIRED" | "ERROR" | "OFFLINE";
+  email?: string;
+  mode?: "OAUTH" | "SERVICE_ACCOUNT" | "NONE";
+  clientId?: string;
+  scope?: string;
+  rootFolderName?: string;
+  rootFolderId?: string;
+  connectedAt?: string;
+  lastCheckedAt?: string;
+  latency?: number;
+  errorCode?: string;
+  safeErrorMessage?: string;
+  repairInstructions?: string;
+}
+
+export const getCentralDriveStatus = async (): Promise<CentralDriveStatus> => {
+  try {
+    const res = await authenticatedFetch("/api/integrations/google-drive/status");
+    if (res.ok) {
+      const data = await res.json();
+      return data;
+    }
+  } catch (err) {
+    console.warn("Could not query central drive status:", err);
+  }
+  return {
+    connected: false,
+    status: "OFFLINE",
+    safeErrorMessage: "تعذر الاتصال بخادم النظام.",
+  };
+};
 
 export const initAuth = (
   onAuthSuccess?: (user: any, token: string) => void,
   onAuthFailure?: () => void
 ) => {
-  // Try to pre-fetch or use cached token immediately to keep similar signature
-  getAccessToken().then(token => {
-    if (token && onAuthSuccess) {
-      onAuthSuccess({ email: serviceAccountEmail || "Service Account" }, token);
+  getCentralDriveStatus().then((status) => {
+    if (status.connected && status.status === "CONNECTED") {
+      getAccessToken().then((token) => {
+        if (token && onAuthSuccess) {
+          onAuthSuccess({ email: status.email || "Company Storage" }, token);
+        } else if (onAuthFailure) {
+          onAuthFailure();
+        }
+      });
     } else if (onAuthFailure) {
       onAuthFailure();
     }
   }).catch(() => {
     if (onAuthFailure) onAuthFailure();
   });
-  
-  // Return dummy unsubscribe
+
   return () => {};
 };
 
 export const googleQuickDirectConnect = (): { user: any; accessToken: string } => {
-  throw new Error("Direct connect mockup removed for production.");
+  throw new Error("Direct connect mockup removed. Use central Google Drive integration.");
 };
 
 export const googleSignIn = async (): Promise<{ user: any; accessToken: string } | null> => {
+  const token = await getAccessToken(true);
+  if (token) {
+    return {
+      user: { email: inMemoryEmail || "Company Storage" },
+      accessToken: token,
+    };
+  }
+  return null;
+};
+
+export const getAccessToken = async (forceRefresh = false): Promise<string | null> => {
+  const now = Date.now();
+  if (!forceRefresh && inMemoryAccessToken && tokenExpiresAt > now + 60 * 1000) {
+    return inMemoryAccessToken;
+  }
+
   try {
     const res = await authenticatedFetch("/api/connections/drive-token");
     if (res.ok) {
       const data = await res.json();
       if (data.success && data.accessToken) {
-        cachedAccessToken = data.accessToken;
-        serviceAccountEmail = data.serviceAccountEmail;
-        if (typeof window !== "undefined") {
-          sessionStorage.setItem(TOKEN_SESSION_KEY, data.accessToken);
-          if (data.serviceAccountEmail) sessionStorage.setItem(SA_EMAIL_KEY, data.serviceAccountEmail);
-        }
-        return { user: { email: data.serviceAccountEmail }, accessToken: data.accessToken };
+        inMemoryAccessToken = data.accessToken;
+        // Access tokens typically expire in 3600 seconds
+        tokenExpiresAt = now + 50 * 60 * 1000;
+        inMemoryEmail = data.serviceAccountEmail || data.email || null;
+        inMemoryMode = data.mode || null;
+        return data.accessToken;
       }
     }
-    return null;
-  } catch (error: any) {
-    console.warn("Google Sign-In error (Service Account fallback):", error);
-    throw error;
-  }
-};
-
-export const getAccessToken = async (): Promise<string | null> => {
-  if (cachedAccessToken) {
-    // Basic verification, token might be expired though, usually expires in 1hr
-    return cachedAccessToken;
-  }
-  if (typeof window !== "undefined") {
-    const stored = sessionStorage.getItem(TOKEN_SESSION_KEY);
-    if (stored) {
-      cachedAccessToken = stored;
-      return stored;
-    }
-  }
-  // Try to fetch seamlessly if not cached
-  try {
-    const signInRes = await googleSignIn();
-    return signInRes?.accessToken || null;
   } catch (err) {
-    return null;
+    console.warn("Failed to retrieve central drive access token:", err);
   }
+  return null;
 };
 
 export const getGoogleUser = (): any | null => {
-  return serviceAccountEmail ? { email: serviceAccountEmail } : null;
+  return inMemoryEmail ? { email: inMemoryEmail } : null;
 };
 
 export const googleLogout = async () => {
-  cachedAccessToken = null;
-  serviceAccountEmail = null;
-  if (typeof window !== "undefined") {
-    sessionStorage.removeItem(TOKEN_SESSION_KEY);
-    sessionStorage.removeItem(SA_EMAIL_KEY);
-  }
+  inMemoryAccessToken = null;
+  tokenExpiresAt = 0;
+  inMemoryEmail = null;
+  inMemoryMode = null;
 };
 
 export interface DriveDiagnosticStep {
@@ -94,7 +121,7 @@ export interface DriveDiagnosticStep {
 }
 
 export interface DriveDiagnosticReport {
-  status: "NOT_CONFIGURED" | "CONFIGURED" | "AUTHENTICATED" | "VERIFIED" | "REAL_UPLOAD_VERIFIED" | "ERROR" | "REAUTH_REQUIRED";
+  status: "NOT_CONFIGURED" | "CONNECTED" | "REAL_UPLOAD_VERIFIED" | "ERROR" | "REAUTH_REQUIRED";
   lastCheckedAt?: string;
   latency?: number;
   errorCode?: string;
@@ -105,16 +132,42 @@ export interface DriveDiagnosticReport {
   folderId?: string;
   filePath?: string;
   uploadTime?: string;
+  accountEmail?: string;
+  rootFolderName?: string;
+  rootFolderId?: string;
 }
 
 export const runComprehensiveGoogleDriveDiagnostics = async (): Promise<DriveDiagnosticReport> => {
-  const steps: DriveDiagnosticStep[] = [];
-  return {
-    status: "REAL_UPLOAD_VERIFIED",
-    lastCheckedAt: new Date().toISOString(),
-    steps,
-  };
+  try {
+    const res = await authenticatedFetch("/api/integrations/google-drive/test", {
+      method: "POST",
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        ...data,
+        status: data.success ? "REAL_UPLOAD_VERIFIED" : (data.status || "ERROR"),
+      };
+    }
+    const errData = await res.json().catch(() => ({}));
+    return {
+      status: "ERROR",
+      safeErrorMessage: errData.error || errData.safeErrorMessage || "فشل تشخيص الاتصال بالخادم",
+      steps: [
+        { name: "Server Diagnostic", status: "FAIL", details: errData.error || "Server response not OK" }
+      ]
+    };
+  } catch (e: any) {
+    return {
+      status: "ERROR",
+      safeErrorMessage: e.message || "Network error while running diagnostics",
+      steps: [
+        { name: "Network Connection", status: "FAIL", details: e.message }
+      ]
+    };
+  }
 };
+
 
 export const getOrCreateDriveFolder = async (
   folderName: string,
@@ -283,6 +336,39 @@ export const uploadFileToGoogleDrive = async (params: {
       webContentLink: resData.webContentLink,
     };
   } catch (err: any) {
+    // Fallback: try server-side upload endpoint
+    try {
+      let base64 = params.base64OrBlobUrl;
+      if (base64.startsWith("blob:")) {
+        const resp = await fetch(base64);
+        const b = await resp.blob();
+        base64 = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(b);
+        });
+      }
+      const serverRes = await authenticatedFetch("/api/integrations/google-drive/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: params.fileName,
+          mimeType: params.mimeType,
+          fileBase64: base64,
+          drivePath: params.drivePath,
+          folderName: params.folderName,
+          description: params.description,
+        }),
+      });
+      if (serverRes.ok) {
+        const serverData = await serverRes.json();
+        if (serverData.success) {
+          return serverData;
+        }
+      }
+    } catch (serverErr) {
+      console.warn("Server upload fallback failed:", serverErr);
+    }
     return { success: false, error: err.message || "Failed to upload to Google Drive" };
   }
 };
@@ -349,6 +435,22 @@ export const updateExistingDriveFile = async (params: {
 };
 
 export const fetchDriveFileBlob = async (fileId: string): Promise<{ blob: Blob; url: string; mimeType: string } | null> => {
+  if (!fileId || fileId.startsWith("pending_")) return null;
+
+  // 1. Try server proxy endpoint (authenticated ERP user, zero Google credentials required on client)
+  try {
+    const proxyRes = await authenticatedFetch(`/api/integrations/google-drive/file/${fileId}`);
+    if (proxyRes.ok) {
+      const mimeType = proxyRes.headers.get("content-type") || "application/octet-stream";
+      const blob = await proxyRes.blob();
+      const typedBlob = new Blob([blob], { type: mimeType });
+      return { blob: typedBlob, url: URL.createObjectURL(typedBlob), mimeType };
+    }
+  } catch (proxyErr) {
+    console.warn("Proxy drive stream failed, attempting direct token fetch fallback:", proxyErr);
+  }
+
+  // 2. Direct client fallback if accessToken is active
   try {
     const token = await getAccessToken();
     if (!token) return null;
@@ -371,3 +473,4 @@ export const fetchDriveFileBlob = async (fileId: string): Promise<{ blob: Blob; 
     return null;
   }
 };
+

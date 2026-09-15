@@ -39,21 +39,29 @@ export const CloudConnectivityProvider: React.FC<{ children: React.ReactNode }> 
       window.addEventListener("offline", handleOffline);
 
       // Listen to a non-existent or dummy doc just to check fromCache metadata
-      const unsubscribe = onSnapshot(
-        doc(db, "_system_health", "ping"),
-        { includeMetadataChanges: true },
-        (snap) => {
-          if (snap.metadata.fromCache) {
-             setGlobalState("OFFLINE");
-          } else {
-             setGlobalState("ONLINE");
-          }
-        },
-        (error) => {
-          console.warn("Firestore connection error:", error);
-          setGlobalState("OFFLINE");
+      let unsubscribeHealth = () => {};
+      try {
+        if (db && typeof doc === "function") {
+          const pingRef = doc(db, "_system_health", "ping");
+          unsubscribeHealth = onSnapshot(
+            pingRef,
+            { includeMetadataChanges: true },
+            (snap) => {
+              if (snap.metadata.fromCache) {
+                 setGlobalState("OFFLINE");
+              } else {
+                 setGlobalState("ONLINE");
+              }
+            },
+            (error) => {
+              console.warn("Firestore connection check note:", error?.message || error);
+              setGlobalState("OFFLINE");
+            }
+          );
         }
-      );
+      } catch (e) {
+        console.warn("Could not attach Cloud Firestore health listener:", e);
+      }
 
       // In development, strict mode might re-run this, but our isInitialized flag protects it.
     }

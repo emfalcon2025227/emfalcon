@@ -23,11 +23,16 @@ function initOrGetFirestore(): Firestore {
         : {},
       databaseId
     );
-  } catch {
+  } catch (err1) {
     try {
       return getFirestore(app, databaseId);
-    } catch {
-      return getFirestore(app);
+    } catch (err2) {
+      try {
+        return getFirestore(app);
+      } catch (err3) {
+        console.warn("Firestore initialization fallback:", err3);
+        return getFirestore();
+      }
     }
   }
 }

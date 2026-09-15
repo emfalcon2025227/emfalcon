@@ -10,6 +10,19 @@ import nodemailer from "nodemailer";
 import PDFDocument from "pdfkit";
 import { createWorker } from "tesseract.js";
 import cron from "node-cron";
+import {
+  getGoogleDriveConfig,
+  updateGoogleDriveConfig,
+  generateConnectAuthUrl,
+  handleOAuthCallback,
+  disconnectGoogleDrive,
+  getValidAccessToken,
+  testArchiveConnection,
+  getDriveFileStream,
+  uploadFileToDriveServerSide,
+  DEFAULT_GOOGLE_CLIENT_ID,
+  STANDARD_DRIVE_SCOPE,
+} from "./src/server-utils/googleDriveIntegrationService";
 
 dotenv.config();
 
@@ -3218,37 +3231,265 @@ app.post("/api/connections/config", authenticateFirebaseToken, requireAdmin, (re
   }
 });
 
-app.get("/api/connections/drive-token", authenticateFirebaseToken, async (req, res) => {
+// ==============================================================================
+// GOOGLE DRIVE CENTRAL INTEGRATION ENDPOINTS
+// ==============================================================================
+
+// 1. Get Central Connection Status
+app.get("/api/integrations/google-drive/status", async (req, res) => {
   try {
-    const base64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
-    if (!base64) {
-      return res.status(500).json({ success: false, error: "Service account not configured on server." });
-    }
-    const serviceAccount = JSON.parse(Buffer.from(base64, "base64").toString("utf8"));
-    const auth = new GoogleAuth({
-      credentials: {
-        client_email: serviceAccount.client_email,
-        private_key: serviceAccount.private_key,
-      },
-      scopes: [
-        "https://www.googleapis.com/auth/drive",
-        "https://www.googleapis.com/auth/drive.file"
-      ],
-    });
-    
-    const client = await auth.getClient();
-    const token = await client.getAccessToken();
-    
-    return res.json({ 
-      success: true, 
-      accessToken: token.token, 
-      serviceAccountEmail: serviceAccount.client_email 
+    const config = getGoogleDriveConfig();
+    return res.json({
+      success: true,
+      ...config,
     });
   } catch (err: any) {
-    console.error("Failed to generate Drive token:", err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
+
+// 2. Generate Central Admin Connect Authorization URL (One-Time Setup)
+app.get("/api/integrations/google-drive/connect", authenticateFirebaseToken, requireAdmin, async (req, res) => {
+  try {
+    const origin = req.headers.origin || `${req.protocol}://${req.get("host")}`;
+    const customRedirectUri = (req.query.redirect_uri as string) || undefined;
+    const { authUrl, state } = generateConnectAuthUrl({
+      adminUid: req.user.uid,
+      origin,
+      customRedirectUri,
+    });
+    return res.json({ success: true, authUrl, state });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 3. Central Google OAuth Redirect Callback Endpoint
+app.get("/api/integrations/google-drive/callback", async (req, res) => {
+  const { code, state, error } = req.query;
+
+  if (error) {
+    const errorHtml = `
+      <!DOCTYPE html>
+      <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="utf-8" />
+        <title>فشل الربط | Google Drive</title>
+        <style>
+          body { font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #0f172a; color: #fff; }
+          .card { background: #1e293b; padding: 2.5rem; border-radius: 1.5rem; max-width: 480px; text-align: center; border: 1px solid #ef4444; }
+          h2 { color: #f87171; margin-top: 0; }
+          p { color: #94a3b8; font-size: 0.95rem; line-height: 1.6; }
+          button { background: #334155; color: #fff; border: 0; padding: 0.75rem 1.5rem; border-radius: 0.75rem; font-weight: bold; cursor: pointer; margin-top: 1rem; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h2>تم إلغاء أو رفض عملية الربط</h2>
+          <p>أبلغ خادم Google بالرمز: <code>${String(error)}</code>. لم يتم حفظ أي بيانات اعتماد.</p>
+          <button onclick="window.close()">إغلاق النافذة</button>
+        </div>
+        <script>
+          if (window.opener) {
+            window.opener.postMessage({ type: 'GDRIVE_OAUTH_FAILED', error: '${String(error)}' }, '*');
+          }
+        </script>
+      </body>
+      </html>
+    `;
+    return res.status(400).send(errorHtml);
+  }
+
+  if (!code || !state) {
+    return res.status(400).send("Missing code or state parameter.");
+  }
+
+  try {
+    const result = await handleOAuthCallback(String(code), String(state));
+    const successHtml = `
+      <!DOCTYPE html>
+      <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="utf-8" />
+        <title>تم الربط بنجاح | صقر الإمارات</title>
+        <style>
+          body { font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #0f172a; color: #fff; }
+          .card { background: #1e293b; padding: 2.5rem; border-radius: 1.5rem; max-width: 480px; text-align: center; border: 1px solid #10b981; }
+          h2 { color: #34d399; margin-top: 0; }
+          p { color: #94a3b8; font-size: 0.95rem; line-height: 1.6; }
+          .badge { display: inline-block; background: #064e3b; color: #6ee7b7; padding: 0.35rem 0.85rem; border-radius: 9999px; font-weight: bold; font-size: 0.85rem; margin-bottom: 1rem; }
+          button { background: #059669; color: #fff; border: 0; padding: 0.75rem 1.75rem; border-radius: 0.75rem; font-weight: bold; cursor: pointer; margin-top: 1rem; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div class="badge">صقر الإمارات — الربط المركزي الموحد</div>
+          <h2>تم ربط Google Drive بنجاح!</h2>
+          <p>تم حفظ رمز التحديث الدائم وتشفيره مركزياً على الخادم بأمان (AES-256-GCM). الحساب المتصل: <strong>${result.email || "حساب الشركة"}</strong></p>
+          <p style="font-size:0.85rem; color:#64748b;">يمكن لجميع مستخدمي النظام الآن استخدام الأرشيف الإلكتروني بدون تسجيل دخول Google.</p>
+          <button onclick="handleClose()">متابعة والعودة للنظام</button>
+        </div>
+        <script>
+          function handleClose() {
+            if (window.opener) {
+              window.opener.postMessage({ type: 'GDRIVE_OAUTH_SUCCESS', email: '${result.email || ""}' }, '*');
+              window.close();
+            } else {
+              window.location.href = '/#settings';
+            }
+          }
+          // Auto close after 2.5 seconds if opened as popup
+          setTimeout(handleClose, 2500);
+        </script>
+      </body>
+      </html>
+    `;
+    return res.send(successHtml);
+  } catch (cbErr: any) {
+    console.error("[OAuth Callback Handler Error]:", cbErr.message);
+    const failHtml = `
+      <!DOCTYPE html>
+      <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="utf-8" />
+        <title>خطأ في استكمال الربط</title>
+        <style>
+          body { font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #0f172a; color: #fff; }
+          .card { background: #1e293b; padding: 2.5rem; border-radius: 1.5rem; max-width: 480px; text-align: center; border: 1px solid #ef4444; }
+          h2 { color: #f87171; margin-top: 0; }
+          p { color: #94a3b8; font-size: 0.95rem; line-height: 1.6; }
+          button { background: #334155; color: #fff; border: 0; padding: 0.75rem 1.5rem; border-radius: 0.75rem; font-weight: bold; cursor: pointer; margin-top: 1rem; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h2>تعذر استكمال المصادقة</h2>
+          <p>${cbErr.message || "حدث خطأ غير متوقع أثناء تبادل الرموز مع Google."}</p>
+          <button onclick="window.close()">إغلاق النافذة</button>
+        </div>
+        <script>
+          if (window.opener) {
+            window.opener.postMessage({ type: 'GDRIVE_OAUTH_FAILED', error: '${cbErr.message}' }, '*');
+          }
+        </script>
+      </body>
+      </html>
+    `;
+    return res.status(500).send(failHtml);
+  }
+});
+
+// 4. Disconnect Central Google Drive Integration (Admin Only)
+app.post("/api/integrations/google-drive/disconnect", authenticateFirebaseToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await disconnectGoogleDrive();
+    console.log(`[Audit Log] GDRIVE_DISCONNECTED executed by Admin (${req.user.uid})`);
+    return res.json({ success: true, ...result });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5. Test Central Google Drive Connection & Diagnostics (Admin Only)
+app.post("/api/integrations/google-drive/test", authenticateFirebaseToken, requireAdmin, async (req, res) => {
+  try {
+    const report = await testArchiveConnection();
+    return res.json(report);
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      latency: 0,
+      safeErrorMessage: err.message,
+      steps: [
+        { name: "Execution", status: "FAIL", details: err.message }
+      ]
+    });
+  }
+});
+
+// 6. Stream Central Archive File directly to authorized ERP user
+app.get("/api/integrations/google-drive/file/:fileId", authenticateFirebaseToken, async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    if (!fileId || fileId.startsWith("pending_")) {
+      return res.status(400).json({ success: false, error: "Invalid fileId provided." });
+    }
+
+    const { stream, mimeType, name, size } = await getDriveFileStream(fileId);
+
+    res.setHeader("Content-Type", mimeType);
+    res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(name)}"`);
+    if (size) {
+      res.setHeader("Content-Length", size);
+    }
+    res.setHeader("Cache-Control", "private, max-age=3600");
+
+    stream.pipe(res);
+  } catch (err: any) {
+    console.error(`[Drive Stream Proxy Error for ${req.params.fileId}]:`, err.message);
+    return res.status(500).json({
+      success: false,
+      error: "FAILED_TO_STREAM_FILE",
+      message: err.message || "تعذر جلب الملف من مستودع Google Drive المركزي.",
+    });
+  }
+});
+
+// 7. Upload Archive File Server-Side into Central Google Drive
+app.post("/api/integrations/google-drive/upload", authenticateFirebaseToken, requireStaff, async (req, res) => {
+  try {
+    const { fileName, mimeType, fileBase64, drivePath, folderName, description } = req.body;
+    if (!fileName || !fileBase64) {
+      return res.status(400).json({ success: false, error: "Missing fileName or fileBase64" });
+    }
+
+    let cleanBase64 = String(fileBase64);
+    if (cleanBase64.includes("base64,")) {
+      cleanBase64 = cleanBase64.split("base64,")[1];
+    }
+    cleanBase64 = cleanBase64.replace(/[\r\n\s]/g, "");
+
+    const buffer = Buffer.from(cleanBase64, "base64");
+    const result = await uploadFileToDriveServerSide({
+      fileName,
+      mimeType: mimeType || "application/octet-stream",
+      contentBuffer: buffer,
+      drivePath,
+      folderName,
+      description,
+    });
+
+    return res.json(result);
+  } catch (err: any) {
+    console.error("[Drive Server Upload Error]:", err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 8. Backward-Compatible /api/connections/drive-token using Central Token
+app.get("/api/connections/drive-token", authenticateFirebaseToken, async (req, res) => {
+  try {
+    const tokenInfo = await getValidAccessToken();
+    return res.json({
+      success: true,
+      accessToken: tokenInfo.accessToken,
+      mode: tokenInfo.mode,
+      serviceAccountEmail: tokenInfo.email,
+      email: tokenInfo.email,
+    });
+  } catch (err: any) {
+    const config = getGoogleDriveConfig();
+    return res.json({
+      success: false,
+      status: config.status,
+      error: err.message,
+      errorCode: config.errorCode || "NOT_CONFIGURED",
+      repairInstructions: config.repairInstructions,
+    });
+  }
+});
+
 
 // Helper for DNS checking
 const dnsResolve = (host: string): Promise<string[]> => {

@@ -722,3 +722,122 @@ export async function testArchiveConnection(): Promise<DriveTestReport> {
     steps,
   };
 }
+
+// ---------------------------------------------------------------------------
+// 10. File Streaming & Proxy Download
+// ---------------------------------------------------------------------------
+export async function getDriveFileStream(fileId: string): Promise<{
+  stream: NodeJS.ReadableStream;
+  mimeType: string;
+  name: string;
+  size?: number;
+}> {
+  const tokenInfo = await getValidAccessToken();
+  const oauth2 = new google.auth.OAuth2();
+  oauth2.setCredentials({ access_token: tokenInfo.accessToken });
+  const drive = google.drive({ version: "v3", auth: oauth2 });
+
+  const metaRes = await drive.files.get({
+    fileId,
+    fields: "id, name, mimeType, size",
+  });
+
+  const fileMeta = metaRes.data;
+  const mimeType = fileMeta.mimeType || "application/octet-stream";
+  const name = fileMeta.name || `file_${fileId}`;
+  const size = fileMeta.size ? parseInt(String(fileMeta.size), 10) : undefined;
+
+  const res = await drive.files.get(
+    { fileId, alt: "media" },
+    { responseType: "stream" }
+  );
+
+  return {
+    stream: res.data as any,
+    mimeType,
+    name,
+    size,
+  };
+}
+
+// Helper to ensure nested folder path in Drive
+export async function ensureDrivePath(
+  drive: any,
+  drivePath: string,
+  rootParentId: string = "root"
+): Promise<string> {
+  const parts = drivePath.split("/").filter(Boolean);
+  let currentId = rootParentId;
+  for (const part of parts) {
+    currentId = await ensureDriveFolder(drive, part, currentId);
+  }
+  return currentId;
+}
+
+// ---------------------------------------------------------------------------
+// 11. Server-Side File Upload to Central Drive
+// ---------------------------------------------------------------------------
+export async function uploadFileToDriveServerSide(params: {
+  fileName: string;
+  mimeType: string;
+  contentBuffer: Buffer;
+  drivePath?: string;
+  folderName?: string;
+  parentFolderId?: string;
+  description?: string;
+}): Promise<{
+  success: boolean;
+  fileId?: string;
+  webViewLink?: string;
+  webContentLink?: string;
+  error?: string;
+}> {
+  try {
+    const tokenInfo = await getValidAccessToken();
+    const oauth2 = new google.auth.OAuth2();
+    oauth2.setCredentials({ access_token: tokenInfo.accessToken });
+    const drive = google.drive({ version: "v3", auth: oauth2 });
+
+    const config = getGoogleDriveConfig();
+    const rootId = config.rootFolderId || (await ensureDriveFolder(drive, "Emirates Falcon", "root"));
+
+    let targetFolderId = params.parentFolderId || rootId;
+    if (params.drivePath) {
+      targetFolderId = await ensureDrivePath(drive, params.drivePath, rootId);
+    } else if (params.folderName) {
+      targetFolderId = await ensureDriveFolder(drive, params.folderName, rootId);
+    }
+
+    const { Readable } = await import("stream");
+    const bufferStream = new Readable();
+    bufferStream.push(params.contentBuffer);
+    bufferStream.push(null);
+
+    const res = await drive.files.create({
+      requestBody: {
+        name: params.fileName,
+        mimeType: params.mimeType,
+        parents: [targetFolderId],
+        description: params.description,
+      },
+      media: {
+        mimeType: params.mimeType,
+        body: bufferStream,
+      },
+      fields: "id, name, webViewLink, webContentLink",
+    });
+
+    return {
+      success: true,
+      fileId: res.data.id || undefined,
+      webViewLink: res.data.webViewLink || `https://drive.google.com/file/d/${res.data.id}/view`,
+      webContentLink: res.data.webContentLink || undefined,
+    };
+  } catch (err: any) {
+    console.error("[Drive Server Upload Error]:", err.message);
+    return {
+      success: false,
+      error: err.message,
+    };
+  }
+}
