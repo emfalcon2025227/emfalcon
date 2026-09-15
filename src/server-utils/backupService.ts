@@ -1,4 +1,4 @@
-import { initializeApp, cert } from 'firebase-admin/app';
+import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 // Google Drive REST/Client interface without heavyweight googleapis bundle
 declare const google: any;
@@ -14,6 +14,10 @@ let firebaseInitialized = false;
 
 export function initFirebaseAdmin() {
     if (firebaseInitialized) return true;
+    if (getApps().length > 0) {
+        firebaseInitialized = true;
+        return true;
+    }
     try {
         const base64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
         if (!base64) {

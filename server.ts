@@ -60,66 +60,72 @@ try {
 import { initializeApp as initAdminApp, getApps as getAdminApps, cert as adminCert } from "firebase-admin/app";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
-
-import { initializeApp as initClientApp, getApps as getClientApps } from "firebase/app";
-import { getFirestore as getClientFirestore, doc as clientDoc, getDoc as clientGetDoc } from "firebase/firestore";
 import firebaseAppletConfig from "./firebase-applet-config.json";
 
 let firestoreAdminDb: any = null;
 let adminAuthClient: any = null;
-let clientFirestoreDb: any = null;
+
+function getAdminApp() {
+  const existingApps = getAdminApps();
+  if (existingApps.length > 0) {
+    return existingApps[0];
+  }
+
+  const base64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+  if (base64) {
+    try {
+      const jsonStr = Buffer.from(base64, "base64").toString("utf8");
+      const serviceAccount = JSON.parse(jsonStr);
+      return initAdminApp({
+        credential: adminCert(serviceAccount),
+        projectId: serviceAccount.project_id || firebaseAppletConfig.projectId,
+      });
+    } catch (e: any) {
+      console.error("[Firebase Admin] Service account initialization error, falling back to projectId:", e?.message || e);
+    }
+  }
+
+  // Fallback: Initialize using projectId to enable admin.auth().verifyIdToken()
+  try {
+    return initAdminApp({
+      projectId: firebaseAppletConfig.projectId,
+    });
+  } catch (e: any) {
+    console.error("[Firebase Admin] Initialization failed with projectId:", e?.message || e);
+    return null;
+  }
+}
 
 function getFirestoreAdmin() {
+  if (firestoreAdminDb) return firestoreAdminDb;
   const base64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
   if (!base64) {
     return null;
   }
-  if (firestoreAdminDb) return firestoreAdminDb;
+
+  const app = getAdminApp();
+  if (!app) return null;
+
   try {
     const dbId = firebaseAppletConfig.firestoreDatabaseId;
-    if (!getAdminApps().length) {
-      const serviceAccount = JSON.parse(Buffer.from(base64, "base64").toString("utf8"));
-      initAdminApp({ credential: adminCert(serviceAccount) });
-    }
-    firestoreAdminDb = dbId ? getAdminFirestore(dbId) : getAdminFirestore();
+    firestoreAdminDb = dbId ? getAdminFirestore(app, dbId) : getAdminFirestore(app);
     return firestoreAdminDb;
-  } catch (e) {
-    console.warn("[Firebase Admin] Lazy init skipped or unavailable:", e);
+  } catch (e: any) {
+    console.error("[Firebase Admin Firestore] Service retrieval error:", e?.message || e);
     return null;
   }
 }
 
 function getAdminAuthClient() {
   if (adminAuthClient) return adminAuthClient;
+  const app = getAdminApp();
+  if (!app) return null;
 
-  const base64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
-  
   try {
-    if (!getAdminApps().length) {
-      if (base64) {
-        const serviceAccount = JSON.parse(Buffer.from(base64, "base64").toString("utf8"));
-        initAdminApp({ credential: adminCert(serviceAccount) });
-      } else {
-        // Initialize without credentials using projectId. This is sufficient for verifyIdToken.
-        initAdminApp({ projectId: firebaseAppletConfig.projectId });
-      }
-    }
-    adminAuthClient = getAdminAuth();
+    adminAuthClient = getAdminAuth(app);
     return adminAuthClient;
-  } catch (e) {
-    console.warn("[Firebase Admin Auth] Lazy auth init skipped or unavailable:", e);
-    return null;
-  }
-}
-
-function getClientFirestoreDb() {
-  if (clientFirestoreDb) return clientFirestoreDb;
-  try {
-    const app = getClientApps().length ? getClientApps()[0] : initClientApp(firebaseAppletConfig, "server-client-app");
-    clientFirestoreDb = getClientFirestore(app, firebaseAppletConfig.firestoreDatabaseId);
-    return clientFirestoreDb;
-  } catch (e) {
-    console.warn("[Client Firestore Server] Init error:", e);
+  } catch (e: any) {
+    console.error("[Firebase Admin Auth] Service retrieval error:", e?.message || e);
     return null;
   }
 }
@@ -258,6 +264,14 @@ declare global {
 
 async function resolveUserRole(uid: string, email?: string, token?: string): Promise<{ role: string; ownerId?: string; tenantId?: string; name?: string }> {
   try {
+    const cleanEmail = (email || "").trim().toLowerCase();
+    if (cleanEmail === "emfalcon2025227@gmail.com" || cleanEmail === "m_hamed@msn.com") {
+      return {
+        role: "SYSTEM_OWNER",
+        name: "Mahmoud Mohamed Mahmoud Hamed",
+      };
+    }
+
     const adminDb = getFirestoreAdmin();
     if (adminDb) {
       // 1. Try by doc ID
@@ -265,7 +279,7 @@ async function resolveUserRole(uid: string, email?: string, token?: string): Pro
       if (directDoc.exists) {
         const d = directDoc.data();
         return {
-          role: d?.role || "ADMIN",
+          role: d?.role || "GUEST",
           ownerId: d?.ownerId,
           tenantId: d?.tenantId,
           name: d?.nameAr || d?.nameEn || d?.name || d?.username,
@@ -277,7 +291,7 @@ async function resolveUserRole(uid: string, email?: string, token?: string): Pro
       if (!qUid.empty) {
         const d = qUid.docs[0].data();
         return {
-          role: d?.role || "ADMIN",
+          role: d?.role || "GUEST",
           ownerId: d?.ownerId,
           tenantId: d?.tenantId,
           name: d?.nameAr || d?.nameEn || d?.name || d?.username,
@@ -291,7 +305,7 @@ async function resolveUserRole(uid: string, email?: string, token?: string): Pro
         if (!qEmail.empty) {
           const d = qEmail.docs[0].data();
           return {
-            role: d?.role || "ADMIN",
+            role: d?.role || "GUEST",
             ownerId: d?.ownerId,
             tenantId: d?.tenantId,
             name: d?.nameAr || d?.nameEn || d?.name || d?.username,
@@ -309,7 +323,7 @@ async function resolveUserRole(uid: string, email?: string, token?: string): Pro
           const json = await restRes.json();
           const fields = json.fields || {};
           return {
-            role: fields.role?.stringValue || "ADMIN",
+            role: fields.role?.stringValue || "GUEST",
             ownerId: fields.ownerId?.stringValue,
             tenantId: fields.tenantId?.stringValue,
             name: fields.nameAr?.stringValue || fields.nameEn?.stringValue || fields.name?.stringValue || fields.username?.stringValue,
@@ -325,8 +339,8 @@ async function resolveUserRole(uid: string, email?: string, token?: string): Pro
     console.warn("[Auth RBAC] Failed to query user document:", err);
   }
 
-  // Default fallback: if user authenticated via Firebase Auth successfully
-  return { role: "ADMIN" };
+  // Secure default fallback: never grant ADMIN on missing/unverified roles
+  return { role: "GUEST" };
 }
 
 async function authenticateFirebaseToken(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -1401,64 +1415,65 @@ function generateHeuristicRiskAssessment(tenants: any[] = [], bouncedCheques: an
 app.get("/api/health", async (req, res) => {
   try {
     const dbAdmin = getFirestoreAdmin();
-    let owners = [];
-    let tenants = [];
-    let users = [];
-    let source = "none";
+    const authAdmin = getAdminAuthClient();
+    const isFirebaseAdminInitialized = Boolean(dbAdmin && authAdmin);
+    const firebaseAdminStatus = isFirebaseAdminInitialized ? "initialized" : "not initialized";
     const envPresent = Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64);
 
+    let dbDiagnostics: any = {
+      firebaseAdmin: firebaseAdminStatus,
+      envPresent,
+      projectId: firebaseAppletConfig.projectId,
+      firestoreDatabaseId: firebaseAppletConfig.firestoreDatabaseId,
+    };
+
     if (dbAdmin) {
-      source = "admin";
-      const ownersSnap = await dbAdmin.collection("owners").get();
-      ownersSnap.forEach(doc => {
-        owners.push({ id: doc.id, nameAr: doc.data().nameAr, nameEn: doc.data().nameEn, email: doc.data().email });
-      });
-      const tenantsSnap = await dbAdmin.collection("tenants").get();
-      tenantsSnap.forEach(doc => {
-        tenants.push({ id: doc.id, nameAr: doc.data().nameAr, nameEn: doc.data().nameEn, email: doc.data().email });
-      });
-      const usersSnap = await dbAdmin.collection("users").get();
-      usersSnap.forEach(doc => {
-        users.push({ id: doc.id, email: doc.data().email, role: doc.data().role, ownerId: doc.data().ownerId, tenantId: doc.data().tenantId, firebaseUid: doc.data().firebaseUid });
-      });
-    } else {
-      source = "client-sdk";
-      // Import client side collection and getDocs dynamically or use direct imports from firebase/firestore
-      const { collection, getDocs } = await import("firebase/firestore");
-      const clientDb = getClientFirestoreDb();
-      if (clientDb) {
-        const ownersSnap = await getDocs(collection(clientDb, "owners"));
-        ownersSnap.forEach(doc => {
+      let owners: any[] = [];
+      let tenants: any[] = [];
+      let users: any[] = [];
+      try {
+        const ownersSnap = await dbAdmin.collection("owners").get();
+        ownersSnap.forEach((doc: any) => {
           owners.push({ id: doc.id, nameAr: doc.data().nameAr, nameEn: doc.data().nameEn, email: doc.data().email });
         });
-        const tenantsSnap = await getDocs(collection(clientDb, "tenants"));
-        tenantsSnap.forEach(doc => {
+        const tenantsSnap = await dbAdmin.collection("tenants").get();
+        tenantsSnap.forEach((doc: any) => {
           tenants.push({ id: doc.id, nameAr: doc.data().nameAr, nameEn: doc.data().nameEn, email: doc.data().email });
         });
-        const usersSnap = await getDocs(collection(clientDb, "users"));
-        usersSnap.forEach(doc => {
+        const usersSnap = await dbAdmin.collection("users").get();
+        usersSnap.forEach((doc: any) => {
           users.push({ id: doc.id, email: doc.data().email, role: doc.data().role, ownerId: doc.data().ownerId, tenantId: doc.data().tenantId, firebaseUid: doc.data().firebaseUid });
         });
+        dbDiagnostics.ownersCount = owners.length;
+        dbDiagnostics.owners = owners;
+        dbDiagnostics.tenantsCount = tenants.length;
+        dbDiagnostics.tenants = tenants;
+        dbDiagnostics.usersCount = users.length;
+        dbDiagnostics.users = users;
+      } catch (queryErr: any) {
+        dbDiagnostics.queryError = queryErr?.message || "Failed to query collections";
       }
+    } else {
+      dbDiagnostics.details = envPresent
+        ? "FIREBASE_SERVICE_ACCOUNT_BASE64 is present but Admin SDK failed to initialize."
+        : "FIREBASE_SERVICE_ACCOUNT_BASE64 is not set in server environment. Firebase Admin SDK requires service account credentials.";
     }
+
     res.json({
       status: "ok",
       service: "Emirates Falcon Real Estate API",
       time: new Date().toISOString(),
+      firebaseAdmin: firebaseAdminStatus,
       aiReady: Boolean(process.env.GEMINI_API_KEY && isValidGeminiApiKey(process.env.GEMINI_API_KEY)),
       envPresent,
-      source,
-      dbDiagnostics: {
-        ownersCount: owners.length,
-        owners,
-        tenantsCount: tenants.length,
-        tenants,
-        usersCount: users.length,
-        users
-      }
+      dbDiagnostics,
     });
   } catch (err: any) {
-    res.status(500).json({ status: "error", error: err.message });
+    res.status(500).json({
+      status: "error",
+      firebaseAdmin: "not initialized",
+      error: err?.message || "Health check error"
+    });
   }
 });
 
@@ -1542,27 +1557,13 @@ app.get("/api/verify/receipt/:token", async (req, res) => {
         }
       }
     } else {
-      const cDb = getClientFirestoreDb();
-      if (cDb) {
-        const docSnap = await clientGetDoc(clientDoc(cDb, 'collections', token));
-        if (docSnap.exists()) {
-          receipt = docSnap.data();
-          if (receipt?.tenantId) {
-            const tenantSnap = await clientGetDoc(clientDoc(cDb, 'tenants', receipt.tenantId));
-            if (tenantSnap.exists()) {
-              const tenantData = tenantSnap.data();
-              const rawName = tenantData?.nameEn || tenantData?.nameAr || "";
-              const parts = rawName.split(" ");
-              if (parts.length > 0) {
-                maskedTenantName = parts[0] + " " + (parts[1] ? parts[1].charAt(0) + ".****" : "****");
-              }
-            }
-          }
-        }
-      }
+      console.warn("[Receipt Verify] Firebase Admin is unavailable to verify receipt token:", token);
     }
 
     if (!receipt) {
+      if (!adminDb) {
+        return res.status(503).json({ valid: false, error: "FIREBASE_ADMIN_UNAVAILABLE", message: "Central verification system is not initialized on the server." });
+      }
       return res.status(404).json({ valid: false, error: "NOT_FOUND" });
     }
 
