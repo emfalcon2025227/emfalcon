@@ -13,9 +13,6 @@
     "test:forensic": "tsx src/tests/runForensicValidation.ts"
   },
   "dependencies": {
-    "@firebase/app": "^0.16.2",
-    "@firebase/auth": "^1.13.6",
-    "@firebase/firestore": "^4.17.2",
     "@google/genai": "^2.21.0",
     "@tailwindcss/vite": "^4.0.0",
     "autoprefixer": "^10.4.20",
@@ -27,8 +24,9 @@
     "event-target-shim": "^6.0.2",
     "express": "^4.21.2",
     "extend": "^3.0.2",
-    "firebase": "^10.14.1",
+    "firebase": "^12.19.0",
     "firebase-admin": "^12.7.0",
+    "googleapis": "^180.0.0",
     "html2canvas-pro": "^1.5.8",
     "json-bigint": "^1.0.0",
     "jspdf": "^2.5.2",

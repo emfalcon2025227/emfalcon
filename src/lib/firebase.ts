@@ -1,9 +1,9 @@
-import { initializeApp } from "firebase/app";
-import { initializeFirestore, setLogLevel } from "firebase/firestore";
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { initializeFirestore, getFirestore, setLogLevel, Firestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import firebaseConfig from "../../firebase-applet-config.json";
 
-export const app = initializeApp(firebaseConfig);
+export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
 // In browser and sandboxed iframe environments, default WebChannel streaming transport
 // often gets blocked or buffered by the reverse proxy on its first attempt, logging:
@@ -11,15 +11,28 @@ export const app = initializeApp(firebaseConfig);
 // Using initializeFirestore with experimentalForceLongPolling enables immediate, robust long-polling transport.
 const isBrowser = typeof window !== "undefined";
 
-export const db = initializeFirestore(
-  app,
-  isBrowser
-    ? {
-        experimentalForceLongPolling: true,
-      }
-    : {},
-  firebaseConfig.firestoreDatabaseId || "(default)"
-);
+function initOrGetFirestore(): Firestore {
+  const databaseId = firebaseConfig.firestoreDatabaseId || "(default)";
+  try {
+    return initializeFirestore(
+      app,
+      isBrowser
+        ? {
+            experimentalForceLongPolling: true,
+          }
+        : {},
+      databaseId
+    );
+  } catch {
+    try {
+      return getFirestore(app, databaseId);
+    } catch {
+      return getFirestore(app);
+    }
+  }
+}
+
+export const db: Firestore = initOrGetFirestore();
 
 export const auth = getAuth(app);
 

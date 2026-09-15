@@ -736,13 +736,13 @@ export const CompanyConnectionsView: React.FC = () => {
             {/* Explanatory Note on Recovery */}
             {(!driveReport || driveReport.status !== "REAL_UPLOAD_VERIFIED") && (
               <div className="p-3 bg-amber-50/50 border border-amber-200 rounded-2xl text-[11px] text-amber-800 leading-relaxed flex gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-bold">{t("دليل استكشاف الأخطاء:", "Recovery Action:")}</span>
+                  <span className="font-bold">{t("الاتصال الآلي بالخادم (Server-to-Server):", "Automated Server Connection:")}</span>
                   <p className="mt-0.5">
                     {t(
-                      "يرجى الضغط على (ربط الحساب) والموافقة على أذونات Google Drive لإتاحة الأرشفة لجميع عقود الإيجار والوثائق.",
-                      "Click (Authorize) and grant drive permissions to reactivate document storage."
+                      "يرجى الضغط على الزر أدناه لتفعيل الاتصال المباشر بين النظام ومساحة التخزين السحابية عبر Service Account. سيتم حفظ هذا الإعداد للشركة ولن يضطر المستخدمون لتسجيل الدخول الفردي.",
+                      "Click below to activate the direct Server-to-Server storage connection via Service Account. This is a centralized setup and end-users won't need to sign in individually."
                     )}
                   </p>
                 </div>
@@ -780,16 +780,7 @@ export const CompanyConnectionsView: React.FC = () => {
                   className="w-full py-2.5 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm shadow-amber-700/10"
                 >
                   <Play className="w-3.5 h-3.5" />
-                  <span>{t("ربط وتفويض الحساب الآن", "Authorize & Connect Account")}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleQuickConnect}
-                  disabled={driveLoading}
-                  className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer border border-slate-200"
-                >
-                  <Zap className="w-3.5 h-3.5 text-amber-600" />
-                  <span>{t("ربط سريع مباشر (تخطي حظر النوافذ)", "Quick Direct Connect (Bypass Popup)")}</span>
+                  <span>{t("تفعيل الاتصال المباشر بالسحابة", "Activate Cloud Connection")}</span>
                 </button>
               </div>
             )}

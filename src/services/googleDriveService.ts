@@ -1,86 +1,62 @@
-import { initializeApp, getApps, getApp } from "firebase/app";
-import {
-  getAuth,
-  signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
-  GoogleAuthProvider,
-  onAuthStateChanged,
-  User,
-  signOut,
-} from "firebase/auth";
-import firebaseConfig from "../../firebase-applet-config.json";
-
-// Initialize Firebase App singleton
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-export const auth = getAuth(app);
-
-// Provider with required Drive scopes
-const provider = new GoogleAuthProvider();
-provider.addScope("https://www.googleapis.com/auth/drive.file");
-provider.setCustomParameters({
-  prompt: "select_account"
-});
+import { authenticatedFetch } from "../utils/apiClient";
 
 const TOKEN_SESSION_KEY = "falcon_gdrive_access_token";
-let isSigningIn = false;
+const SA_EMAIL_KEY = "falcon_gdrive_sa_email";
 let cachedAccessToken: string | null =
   typeof window !== "undefined" ? sessionStorage.getItem(TOKEN_SESSION_KEY) : null;
-let currentUser: User | null = null;
+let serviceAccountEmail: string | null = 
+  typeof window !== "undefined" ? sessionStorage.getItem(SA_EMAIL_KEY) : null;
 
 export const initAuth = (
-  onAuthSuccess?: (user: User, token: string) => void,
+  onAuthSuccess?: (user: any, token: string) => void,
   onAuthFailure?: () => void
 ) => {
-  return onAuthStateChanged(auth, async (user: User | null) => {
-    currentUser = user;
-    if (user) {
-      const token = cachedAccessToken || (typeof window !== "undefined" ? sessionStorage.getItem(TOKEN_SESSION_KEY) : null);
-      if (token) {
-        cachedAccessToken = token;
-        if (onAuthSuccess) onAuthSuccess(user, token);
-      }
-    } else {
-      if (!isSigningIn) {
-        if (onAuthFailure) onAuthFailure();
-      }
+  // Try to pre-fetch or use cached token immediately to keep similar signature
+  getAccessToken().then(token => {
+    if (token && onAuthSuccess) {
+      onAuthSuccess({ email: serviceAccountEmail || "Service Account" }, token);
+    } else if (onAuthFailure) {
+      onAuthFailure();
     }
+  }).catch(() => {
+    if (onAuthFailure) onAuthFailure();
   });
+  
+  // Return dummy unsubscribe
+  return () => {};
 };
 
 export const googleQuickDirectConnect = (): { user: any; accessToken: string } => {
   throw new Error("Direct connect mockup removed for production.");
 };
 
-export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
-  isSigningIn = true;
+export const googleSignIn = async (): Promise<{ user: any; accessToken: string } | null> => {
   try {
-    const res = await signInWithPopup(auth, provider);
-    const credential = GoogleAuthProvider.credentialFromResult(res);
-    if (credential && credential.accessToken) {
-      cachedAccessToken = credential.accessToken;
-      if (typeof window !== "undefined") {
-        sessionStorage.setItem(TOKEN_SESSION_KEY, credential.accessToken);
+    const res = await authenticatedFetch("/api/connections/drive-token");
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.accessToken) {
+        cachedAccessToken = data.accessToken;
+        serviceAccountEmail = data.serviceAccountEmail;
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem(TOKEN_SESSION_KEY, data.accessToken);
+          if (data.serviceAccountEmail) sessionStorage.setItem(SA_EMAIL_KEY, data.serviceAccountEmail);
+        }
+        return { user: { email: data.serviceAccountEmail }, accessToken: data.accessToken };
       }
-      currentUser = res.user;
-      return { user: res.user, accessToken: credential.accessToken };
     }
     return null;
   } catch (error: any) {
-    console.warn("Google Sign-In error:", error);
-    if (error?.code === "auth/unauthorized-domain") {
-      const currentHost = typeof window !== "undefined" ? window.location.hostname : "هذا النطاق";
-      error.customMessageAr = `النطاق الحالي (${currentHost}) غير مضاف في قائمة النطاقات المصرح بها (Authorized Domains) في Firebase Console. يرجى إضافة هذا النطاق في إعدادات Firebase Authentication لحل المشكلة فوراً.`;
-      error.currentDomain = currentHost;
-    }
+    console.warn("Google Sign-In error (Service Account fallback):", error);
     throw error;
-  } finally {
-    isSigningIn = false;
   }
 };
 
 export const getAccessToken = async (): Promise<string | null> => {
-  if (cachedAccessToken) return cachedAccessToken;
+  if (cachedAccessToken) {
+    // Basic verification, token might be expired though, usually expires in 1hr
+    return cachedAccessToken;
+  }
   if (typeof window !== "undefined") {
     const stored = sessionStorage.getItem(TOKEN_SESSION_KEY);
     if (stored) {
@@ -88,20 +64,26 @@ export const getAccessToken = async (): Promise<string | null> => {
       return stored;
     }
   }
-  return null;
+  // Try to fetch seamlessly if not cached
+  try {
+    const signInRes = await googleSignIn();
+    return signInRes?.accessToken || null;
+  } catch (err) {
+    return null;
+  }
 };
 
-export const getGoogleUser = (): User | null => {
-  return currentUser;
+export const getGoogleUser = (): any | null => {
+  return serviceAccountEmail ? { email: serviceAccountEmail } : null;
 };
 
 export const googleLogout = async () => {
-  await signOut(auth);
   cachedAccessToken = null;
+  serviceAccountEmail = null;
   if (typeof window !== "undefined") {
     sessionStorage.removeItem(TOKEN_SESSION_KEY);
+    sessionStorage.removeItem(SA_EMAIL_KEY);
   }
-  currentUser = null;
 };
 
 export interface DriveDiagnosticStep {

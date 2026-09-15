@@ -4,6 +4,7 @@ import fs from "fs";
 import * as crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleAuth } from "google-auth-library";
 import dotenv from "dotenv";
 import nodemailer from "nodemailer";
 import PDFDocument from "pdfkit";
@@ -3217,6 +3218,38 @@ app.post("/api/connections/config", authenticateFirebaseToken, requireAdmin, (re
   }
 });
 
+app.get("/api/connections/drive-token", authenticateFirebaseToken, async (req, res) => {
+  try {
+    const base64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+    if (!base64) {
+      return res.status(500).json({ success: false, error: "Service account not configured on server." });
+    }
+    const serviceAccount = JSON.parse(Buffer.from(base64, "base64").toString("utf8"));
+    const auth = new GoogleAuth({
+      credentials: {
+        client_email: serviceAccount.client_email,
+        private_key: serviceAccount.private_key,
+      },
+      scopes: [
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+    });
+    
+    const client = await auth.getClient();
+    const token = await client.getAccessToken();
+    
+    return res.json({ 
+      success: true, 
+      accessToken: token.token, 
+      serviceAccountEmail: serviceAccount.client_email 
+    });
+  } catch (err: any) {
+    console.error("Failed to generate Drive token:", err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Helper for DNS checking
 const dnsResolve = (host: string): Promise<string[]> => {
   return new Promise((resolve) => {
@@ -4897,7 +4930,7 @@ async function startServer() {
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
-        hmr: process.env.DISABLE_HMR === "true" ? false : undefined,
+        hmr: false,
       },
       appType: "spa",
     });
@@ -4913,6 +4946,10 @@ async function startServer() {
 
   server.on("error", (err: any) => {
     console.error("Server listen error:", err);
+    if (err && err.code === "EADDRINUSE") {
+      console.error(`Port ${PORT} is already in use. Exiting process.`);
+      process.exit(1);
+    }
   });
 
   process.on("SIGTERM", () => {
