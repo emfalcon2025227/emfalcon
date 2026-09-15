@@ -35,13 +35,14 @@ import { FirebaseConnectionTester } from "./FirebaseConnectionTester";
 import { SecurityPermissionCenter } from "./SecurityPermissionCenter";
 import { MessageTemplatesSettings } from "./MessageTemplatesSettings";
 import { ShieldCheck } from "lucide-react";
+import { CentralSystemConfigCenter } from "../admin/CentralSystemConfigCenter";
 
 export const SettingsView: React.FC = () => {
   const { t, language } = useLanguage();
   const { riskWeights, updateRiskWeights, auditLogs } = useData();
   const { users, currentUser, deleteUser, hasPermission } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<"COMPANY" | "SECURITY" | "RISK" | "TEMPLATES" | "AUDIT" | "USERS" | "ADMIN" | "PORTAL_ACCOUNTS" | "CONNECTIONS" | "FIREBASE">("COMPANY");
+  const [activeTab, setActiveTab] = useState<"COMPANY" | "SECURITY" | "RISK" | "TEMPLATES" | "AUDIT" | "USERS" | "ADMIN" | "PORTAL_ACCOUNTS" | "CONNECTIONS" | "FIREBASE" | "SYSTEM_CONFIG">("COMPANY");
   const [userToDeleteConfirm, setUserToDeleteConfirm] = useState<any | null>(null);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
@@ -239,7 +240,25 @@ export const SettingsView: React.FC = () => {
             <span>{language === "ar" ? "فحص اتصال وحصة التخزين (Firebase)" : "Firebase Connection & Quota"}</span>
           </button>
         )}
+
+        {(currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "SYSTEM_OWNER" || currentUser?.role === "MANAGER") && (
+          <button
+            onClick={() => setActiveTab("SYSTEM_CONFIG")}
+            className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
+              activeTab === "SYSTEM_CONFIG"
+                ? "bg-indigo-700 text-white shadow-xs"
+                : "text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            <Sliders className="w-3.5 h-3.5" />
+            <span>{language === "ar" ? "مركز إعدادات وأسرار النظام" : "Central System Config"}</span>
+          </button>
+        )}
       </div>
+
+      {activeTab === "SYSTEM_CONFIG" && (
+        <CentralSystemConfigCenter onNavigateBack={() => setActiveTab("COMPANY")} />
+      )}
 
       {activeTab === "SECURITY" && <SecurityPermissionCenter />}
       {activeTab === "ADMIN" && <AdminControlPanel />}

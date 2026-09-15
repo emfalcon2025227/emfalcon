@@ -31,6 +31,7 @@ import {
   Download,
   Copy,
   Zap,
+  ExternalLink,
 } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 import { useAuth } from "../../context/AuthContext";
@@ -72,7 +73,6 @@ export const CompanyConnectionsView: React.FC = () => {
   // Administrative check
   const isAdmin =
     currentUser?.role === "SUPER_ADMIN" ||
-    currentUser?.role === "ADMIN" ||
     currentUser?.role === "MANAGER" ||
     currentUser?.role === "SYSTEM_OWNER";
 

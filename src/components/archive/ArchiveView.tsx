@@ -20,6 +20,7 @@ import {
   LogOut,
   ShieldCheck,
   AlertCircle,
+  AlertTriangle,
   FolderOpen,
   Image as ImageIcon,
   HardDrive,
@@ -53,7 +54,7 @@ export const ArchiveView: React.FC = () => {
     syncChequeToDrive,
   } = useData();
   const { hasPermission, currentUser } = useAuth();
-  const isAdmin = currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
+  const isAdmin = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "SYSTEM_OWNER" || currentUser?.role === "MANAGER";
   
   const canDelete = hasPermission("DELETE_RECORDS");
 
@@ -65,6 +66,7 @@ export const ArchiveView: React.FC = () => {
   // Central Google Drive Connection State
   const [centralStatus, setCentralStatus] = useState<CentralDriveStatus | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // Modals State
   const [selectedChequeForUpload, setSelectedChequeForUpload] = useState<Cheque | null>(null);

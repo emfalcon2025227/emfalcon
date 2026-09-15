@@ -23,6 +23,14 @@ import {
   DEFAULT_GOOGLE_CLIENT_ID,
   STANDARD_DRIVE_SCOPE,
 } from "./src/server-utils/googleDriveIntegrationService";
+import {
+  getSystemConfigurationMatrix,
+  updateSystemConfiguration,
+  runComprehensiveDiagnostics,
+  performSafeRepair,
+  exportNonSecretConfiguration,
+  getConfigAuditLogs,
+} from "./src/server-utils/centralConfigManager";
 
 dotenv.config();
 
@@ -3227,6 +3235,85 @@ app.post("/api/connections/config", authenticateFirebaseToken, requireAdmin, (re
     console.log(`[Audit Log] CONNECTION_CONFIGURED executed by admin. Services updated: ${[whatsapp ? 'WhatsApp' : '', gmail ? 'Gmail' : ''].filter(Boolean).join(', ')}`);
 
     return res.json({ success: true, message: "Configuration persisted successfully server-side." });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ==============================================================================
+// CENTRAL SYSTEM CONFIGURATION, DIAGNOSTICS & SAFE REPAIR ENDPOINTS (ADMIN ONLY)
+// ==============================================================================
+
+// 1. Get Complete Non-Secret System Configuration Matrix
+app.get("/api/admin/system-config", authenticateFirebaseToken, requireAdmin, (req, res) => {
+  try {
+    const origin = req.headers.origin || `${req.protocol}://${req.get("host")}`;
+    const matrix = getSystemConfigurationMatrix(origin);
+    return res.json({
+      success: true,
+      ...matrix,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 2. Safe Update for Configuration & Secrets
+app.post("/api/admin/system-config", authenticateFirebaseToken, requireAdmin, async (req, res) => {
+  try {
+    const adminEmail = req.user?.email || "system_admin";
+    const result = await updateSystemConfiguration(req.body, adminEmail);
+    return res.json(result);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 3. Run Real Comprehensive System Diagnostics
+app.post("/api/admin/diagnostics/run-all", authenticateFirebaseToken, requireAdmin, async (req, res) => {
+  try {
+    const origin = req.headers.origin || `${req.protocol}://${req.get("host")}`;
+    const results = await runComprehensiveDiagnostics(origin);
+    return res.json({
+      success: true,
+      results,
+      executedAt: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 4. Perform Safe Repair (Strictly Zero Data Loss)
+app.post("/api/admin/diagnostics/safe-repair", authenticateFirebaseToken, requireAdmin, async (req, res) => {
+  try {
+    const origin = req.headers.origin || `${req.protocol}://${req.get("host")}`;
+    const adminEmail = req.user?.email || "system_admin";
+    const result = await performSafeRepair(origin, adminEmail);
+    return res.json(result);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5. Export Non-Secret System Configuration (JSON)
+app.get("/api/admin/system-config/export", authenticateFirebaseToken, requireAdmin, (req, res) => {
+  try {
+    const origin = req.headers.origin || `${req.protocol}://${req.get("host")}`;
+    const exportData = exportNonSecretConfiguration(origin);
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Content-Disposition", `attachment; filename="emirates-falcon-system-config-${Date.now()}.json"`);
+    return res.send(JSON.stringify(exportData, null, 2));
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 6. Get Admin Configuration Audit Logs
+app.get("/api/admin/system-config/audit-logs", authenticateFirebaseToken, requireAdmin, (req, res) => {
+  try {
+    const logs = getConfigAuditLogs();
+    return res.json({ success: true, logs });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
   }
