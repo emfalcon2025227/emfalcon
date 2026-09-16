@@ -422,9 +422,7 @@ export function sha256(ascii: string): string {
 
 export const isSystemOwnerUser = (user?: { id?: string; email?: string; username?: string; role?: string } | null): boolean => {
   if (!user) return false;
-  const email = (user.email || "").trim().toLowerCase();
-  const role = user.role || "";
-  return role === "SYSTEM_OWNER" && email === "m_hamed@msn.com";
+  return user.role === "SYSTEM_OWNER";
 };
 
 export interface EffectivePermissionResult {

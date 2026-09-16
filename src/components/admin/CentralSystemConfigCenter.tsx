@@ -777,6 +777,16 @@ export const CentralSystemConfigCenter: React.FC<CentralSystemConfigCenterProps>
             </button>
 
             <button
+              onClick={() => {
+                prompt("لفتح مجلد بدء التشغيل في ويندوز، انسخ المسار التالي وافتحه في Run (Win + R):", "shell:startup");
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold border border-slate-700 transition-all"
+            >
+              <HardDrive className="w-4 h-4" />
+              <span>فتح مجلد بدء التشغيل (Open Startup Folder)</span>
+            </button>
+
+            <button
               onClick={handleSafeRepair}
               disabled={repairing}
               className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition-all"
@@ -1025,13 +1035,9 @@ export const CentralSystemConfigCenter: React.FC<CentralSystemConfigCenterProps>
                   <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
                     مفتاح واجهة الذكاء الاصطناعي (GEMINI_API_KEY)
                   </label>
-                  <input
-                    type="password"
-                    value={formData.geminiApiKey}
-                    onChange={(e) => setFormData({ ...formData, geminiApiKey: e.target.value })}
-                    placeholder="AIzaSy... (اترك فارغاً للاحتفاظ بالسر الحالي)"
-                    className="w-full text-xs font-mono p-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg"
-                  />
+                  <div className="w-full text-xs font-mono p-2.5 bg-slate-100 dark:bg-slate-800/50 text-slate-500 border border-slate-300 dark:border-slate-700 rounded-lg">
+                    [Managed by Server Environment] تدار من قبل بيئة الخادم ولا يمكن حفظها من هنا
+                  </div>
                 </div>
               </div>
 

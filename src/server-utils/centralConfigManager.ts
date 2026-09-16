@@ -131,12 +131,8 @@ export function getSystemConfigurationMatrix(originUrl: string) {
   };
 
   const calculatedCallbackUri = `${originUrl}/api/integrations/google-drive/callback`;
-  const configuredRedirectUri =
-    process.env.GOOGLE_REDIRECT_URI ||
-    driveConfig.repairInstructions?.includes("URI:")
-      ? calculatedCallbackUri
-      : calculatedCallbackUri;
-  const oauthMatch = true;
+  const configuredRedirectUri = process.env.GOOGLE_REDIRECT_URI || "";
+  const oauthMatch = configuredRedirectUri === calculatedCallbackUri;
 
   // Hashes/Flags
   const hasFirebaseServiceAccount = Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64);
@@ -468,20 +464,20 @@ export function getSystemConfigurationMatrix(originUrl: string) {
     // --- SECURITY & VAULT ---
     {
       id: "ENCRYPTION_SECRET",
-      service: "Security Vault",
+      service: "Vault",
       category: "SECURITY",
       key: "ENCRYPTION_SECRET",
-      labelAr: "مفتاح تشفير الخزنة المركزية (AES-256-GCM)",
-      labelEn: "AES-256-GCM Vault Encryption Secret",
+      labelAr: "مفتاح تشفير الخزنة الآمنة",
+      labelEn: "Vault Encryption Key",
       type: "Secret",
       required: true,
-      status: "CONFIGURED",
+      status: hasEncryptionSecret ? "CONFIGURED" : "NOT_CONFIGURED",
       currentSource: hasEncryptionSecret ? "Server Environment" : "Default Fallback",
-      displayValue: "••••••••••••••••",
+      displayValue: hasEncryptionSecret ? "••••••••••••••••" : undefined,
       isSecret: true,
-      isConfigured: true,
-      descriptionAr: "مفتاح تشفير الأسرار والرموز في الخادم لمنع قراءتها حتى في الملفات الثابتة",
-      descriptionEn: "Master server-side salt key encrypting stored refresh tokens and passwords at rest",
+      isConfigured: hasEncryptionSecret,
+      descriptionAr: "مفتاح التشفير الرئيسي لتأمين الأسرار في الخزنة. لا يمكن تغييره بدون فقدان البيانات المشفرة.",
+      descriptionEn: "Master encryption key for the secure vault. Modifying it will break decryption of existing secrets.",
       testAvailable: true,
     },
   ];
