@@ -2,6 +2,10 @@ import fs from "fs";
 import path from "path";
 import tls from "tls";
 import firebaseAppletConfig from "../../firebase-applet-config.json";
+import { initializeApp as initAdminApp, getApps as getAdminApps, cert as adminCert, applicationDefault } from "firebase-admin/app";
+import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
+import { getAuth as getAdminAuth } from "firebase-admin/auth";
+import nodemailer from "nodemailer";
 import {
   loadStoredSecrets,
   getGoogleDriveConfig,
@@ -679,22 +683,65 @@ export async function runComprehensiveDiagnostics(originUrl: string): Promise<Di
     });
   }
 
-  // 2. Firebase Admin & Auth
+  // 2. Firebase Admin, Auth & Firestore (REAL TEST)
   const tFirebaseStart = Date.now();
+  let firebaseAdminPass = false;
+  let firestorePass = false;
+  let adminApp: any = null;
+
   try {
-    const hasBase64 = Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64);
-    const latency = Date.now() - tFirebaseStart;
+    const existingApps = getAdminApps();
+    if (existingApps.length > 0) {
+      adminApp = existingApps[0];
+    } else {
+      if (process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.GOOGLE_CLOUD_PROJECT || process.env.GCP_PROJECT) {
+        try {
+          adminApp = initAdminApp({
+            credential: applicationDefault(),
+            projectId: firebaseAppletConfig.projectId,
+          });
+        } catch (e: any) {}
+      }
+      if (!adminApp && process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
+        try {
+          const jsonStr = Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, "base64").toString("utf8");
+          const serviceAccount = JSON.parse(jsonStr);
+          adminApp = initAdminApp({
+            credential: adminCert(serviceAccount),
+            projectId: serviceAccount.project_id || firebaseAppletConfig.projectId,
+          });
+        } catch (e: any) {}
+      }
+      if (!adminApp) {
+        try {
+          adminApp = initAdminApp({
+            credential: applicationDefault(),
+            projectId: firebaseAppletConfig.projectId,
+          });
+        } catch (e: any) {}
+      }
+    }
+
+    if (!adminApp) throw new Error("Firebase Admin SDK failed to initialize - no valid credentials found (ADC, GOOGLE_APPLICATION_CREDENTIALS, or FIREBASE_SERVICE_ACCOUNT_BASE64).");
+    
+    // Test Auth
+    const auth = getAdminAuth(adminApp);
+    // Simple fast read test for Auth if possible, but just initializing successfully with creds is a strong signal. We'll list one user to be sure.
+    await auth.listUsers(1);
+    firebaseAdminPass = true;
+
     results.push({
       serviceId: "FIREBASE_ADMIN",
       serviceNameAr: "نظام مصادقة Firebase وحساب الخدمة",
       serviceNameEn: "Firebase Admin & Auth Service",
       category: "Firebase",
       status: "PASS",
-      latencyMs: latency,
+      latencyMs: Date.now() - tFirebaseStart,
       lastChecked: nowIso,
-      messageAr: `محرك التحقق المركزي نشط ومقترن بالمشروع ${firebaseAppletConfig.projectId} (${hasBase64 ? "حساب خدمة معتمد" : "وضع التحقق المركزي النشط"})`,
-      messageEn: `Firebase Auth verification ready on project ${firebaseAppletConfig.projectId}`,
+      messageAr: "تم التحقق من Firebase Admin و Auth بنجاح.",
+      messageEn: "Firebase Admin Auth initialized and verified successfully.",
     });
+
   } catch (err: any) {
     results.push({
       serviceId: "FIREBASE_ADMIN",
@@ -704,29 +751,35 @@ export async function runComprehensiveDiagnostics(originUrl: string): Promise<Di
       status: "FAIL",
       latencyMs: Date.now() - tFirebaseStart,
       lastChecked: nowIso,
-      messageAr: `تعذر تهيئة Firebase Admin: ${err.message}`,
-      messageEn: `Firebase Admin initialization failed: ${err.message}`,
-      safeRecoveryActionAr: "مراجعة إعدادات projectId في firebase-applet-config.json",
-      safeRecoveryActionEn: "Verify projectId configuration in firebase-applet-config.json",
+      messageAr: `تعذر تهيئة Firebase Admin أو مصادقته: ${err.message}`,
+      messageEn: `Firebase Admin initialization/auth failed: ${err.message}`,
+      safeRecoveryActionAr: "تحقق من صلاحيات Base64 أو ADC (Default Credentials)",
+      safeRecoveryActionEn: "Check Base64 permissions or ADC credentials",
     });
   }
 
   // 3. Firestore Database Connection
   const tFirestoreStart = Date.now();
   try {
-    const latency = Date.now() - tFirestoreStart;
+    if (!adminApp) throw new Error("Cannot test Firestore without Firebase Admin SDK initialization.");
+    const dbId = firebaseAppletConfig.firestoreDatabaseId;
+    const db = dbId ? getAdminFirestore(adminApp, dbId) : getAdminFirestore(adminApp);
+    
+    // READ-ONLY TEST
+    const testDoc = await db.collection("system_config").limit(1).get();
+    
     results.push({
       serviceId: "FIRESTORE_DB",
       serviceNameAr: "قاعدة بيانات Firestore المركزية",
       serviceNameEn: "Firestore Database Connection",
       category: "Database",
       status: "PASS",
-      latencyMs: latency,
+      latencyMs: Date.now() - tFirestoreStart,
       lastChecked: nowIso,
-      messageAr: `قاعدة البيانات ${firebaseAppletConfig.firestoreDatabaseId} متصلة وتستقبل الطلبات المصرحة`,
-      messageEn: `Firestore database ${firebaseAppletConfig.firestoreDatabaseId} online`,
+      messageAr: `تم الاتصال بنجاح. القراءة من Firestore (Database ID: ${dbId || "(default)"}) تعمل بشكل سليم.`,
+      messageEn: `Read test successful. Latency: ${Date.now() - tFirestoreStart}ms (Database ID: ${dbId || "(default)"})`,
     });
-  } catch (err: any) {
+  } catch(err: any) {
     results.push({
       serviceId: "FIRESTORE_DB",
       serviceNameAr: "قاعدة بيانات Firestore المركزية",
@@ -735,14 +788,11 @@ export async function runComprehensiveDiagnostics(originUrl: string): Promise<Di
       status: "FAIL",
       latencyMs: Date.now() - tFirestoreStart,
       lastChecked: nowIso,
-      messageAr: `خطأ في اتصال Firestore: ${err.message}`,
-      messageEn: `Firestore connectivity error: ${err.message}`,
-      safeRecoveryActionAr: "التحقق من قواعد الأمان firestore.rules",
-      safeRecoveryActionEn: "Audit firestore.rules and user permissions",
+      messageAr: `فشل اختبار القراءة من Firestore: ${err.message}`,
+      messageEn: `Firestore read test failed: ${err.message}`,
     });
-  }
-
   // 4. Google OAuth & Redirect Match
+  }
   const tOAuthStart = Date.now();
   try {
     const calcCallback = `${originUrl}/api/integrations/google-drive/callback`;
@@ -842,24 +892,35 @@ export async function runComprehensiveDiagnostics(originUrl: string): Promise<Di
     });
   }
 
-  // 7. Gmail SMTP Connection Check (Non-destructive socket test)
+  // 7. Gmail SMTP Connection Check (Actual Authentication Test)
   const tSmtpStart = Date.now();
+  let configs: any = {};
+  if (fs.existsSync(CONFIG_FILE_PATH)) {
+    try { configs = JSON.parse(fs.readFileSync(CONFIG_FILE_PATH, "utf8")); } catch(e) {}
+  }
   const secrets = loadStoredSecrets();
   const hasSmtp = Boolean(secrets.smtpAppPassword);
+  const smtpUser = configs.gmail?.smtpUser || "emfalcon2025227@gmail.com";
+  const smtpHost = configs.gmail?.smtpHost || "smtp.gmail.com";
+  const smtpPort = configs.gmail?.smtpPort || 465;
+
   if (hasSmtp) {
     try {
-      // Test socket connectivity to smtp.gmail.com:465 with 3s timeout
-      await new Promise<void>((resolve, reject) => {
-        const socket = tls.connect(465, "smtp.gmail.com", { rejectUnauthorized: false }, () => {
-          socket.end();
-          resolve();
-        });
-        socket.setTimeout(3000, () => {
-          socket.destroy();
-          reject(new Error("SMTP socket connection timed out after 3000ms"));
-        });
-        socket.on("error", (err) => reject(err));
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465, // true for 465, false for other ports
+        auth: {
+          user: smtpUser,
+          pass: secrets.smtpAppPassword,
+        },
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 5000,
       });
+
+      // Verify connection configuration (this performs the SMTP handshake and authentication)
+      await transporter.verify();
 
       results.push({
         serviceId: "GMAIL_SMTP",
@@ -869,8 +930,8 @@ export async function runComprehensiveDiagnostics(originUrl: string): Promise<Di
         status: "PASS",
         latencyMs: Date.now() - tSmtpStart,
         lastChecked: nowIso,
-        messageAr: "تم اختبار الاتصال الآمن بخادم smtp.gmail.com:465 بنجاح وقناة الإرسال جاهزة",
-        messageEn: "SSL Handshake to smtp.gmail.com:465 successful. Outbound mail channel ready.",
+        messageAr: `تم الاتصال بنجاح. مصادقة SMTP لحساب (${smtpUser}) تمت بنجاح.`,
+        messageEn: `SMTP Authentication successful for ${smtpUser}.`,
       });
     } catch (err: any) {
       results.push({
@@ -878,13 +939,13 @@ export async function runComprehensiveDiagnostics(originUrl: string): Promise<Di
         serviceNameAr: "خدمة إرسال البريد (Gmail SMTP)",
         serviceNameEn: "Gmail SMTP Outbound Service",
         category: "Communications",
-        status: "WARNING",
+        status: "FAIL",
         latencyMs: Date.now() - tSmtpStart,
         lastChecked: nowIso,
-        messageAr: `فحص مقبس خادم البريد: ${err.message}`,
-        messageEn: `SMTP socket notice: ${err.message}`,
-        safeRecoveryActionAr: "التحقق من كلمة مرور التطبيق ومنفذ 465",
-        safeRecoveryActionEn: "Verify Gmail App Password and outbound port 465 access",
+        messageAr: `فشل مصادقة SMTP: ${err.message}`,
+        messageEn: `SMTP Authentication failed: ${err.message}`,
+        safeRecoveryActionAr: "التحقق من كلمة مرور التطبيق وصحة بريد المستخدم",
+        safeRecoveryActionEn: "Verify Gmail App Password and username",
       });
     }
   } else {

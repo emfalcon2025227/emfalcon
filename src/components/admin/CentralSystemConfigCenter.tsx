@@ -43,6 +43,7 @@ import {
   SystemConfigMatrixResponse,
 } from "../../services/systemConfigurationService";
 import { downloadDriveStartupBat } from "../../services/driveStartupBatchGenerator";
+import { authenticatedFetch } from "../../utils/apiClient";
 
 interface CentralSystemConfigCenterProps {
   onNavigateBack?: () => void;

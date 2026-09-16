@@ -60,27 +60,40 @@ export interface DriveTestReport {
 // 1. Encryption & Decryption at Rest (AES-256-GCM)
 // ---------------------------------------------------------------------------
 const ENCRYPTION_ALGORITHM = "aes-256-gcm";
-const ENCRYPTION_SALT =
-  process.env.ENCRYPTION_SECRET ||
-  process.env.FIREBASE_PROJECT_ID ||
-  "emirates-falcon-secure-gdrive-vault-2026";
-const ENCRYPTION_KEY = crypto
-  .createHash("sha256")
-  .update(ENCRYPTION_SALT)
-  .digest();
+
+function getActiveEncryptionKey(): Buffer | null {
+  if (process.env.ENCRYPTION_SECRET && process.env.ENCRYPTION_SECRET.trim() !== "") {
+    return crypto.createHash("sha256").update(process.env.ENCRYPTION_SECRET).digest();
+  }
+  return null;
+}
+
+function getLegacyEncryptionKeys(): Buffer[] {
+  const keys: Buffer[] = [];
+  if (process.env.FIREBASE_PROJECT_ID) {
+    keys.push(crypto.createHash("sha256").update(process.env.FIREBASE_PROJECT_ID).digest());
+  }
+  keys.push(crypto.createHash("sha256").update("emirates-falcon-secure-gdrive-vault-2026").digest());
+  return keys;
+}
 
 export function encryptSecret(plainText: string): string {
   if (!plainText) return "";
+  const key = getActiveEncryptionKey();
+  if (!key) {
+    console.error("[Vault] ENCRYPTION_SECRET is missing. Cannot encrypt safely.");
+    throw new Error("ENCRYPTION_SECRET is not configured. Cannot securely encrypt data.");
+  }
   try {
     const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, ENCRYPTION_KEY, iv);
+    const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, key, iv);
     let encrypted = cipher.update(plainText, "utf8", "hex");
     encrypted += cipher.final("hex");
     const authTag = cipher.getAuthTag();
     return `enc_gcm_v1:${iv.toString("hex")}:${authTag.toString("hex")}:${encrypted}`;
   } catch (err: any) {
     console.error("[Vault] Encryption error:", err.message);
-    return plainText;
+    throw new Error("Encryption failed, halting to prevent plaintext exposure.");
   }
 }
 
@@ -90,21 +103,30 @@ export function decryptSecret(cipherText: string): string {
     // Legacy / unencrypted fallback
     return cipherText;
   }
-  try {
-    const parts = cipherText.split(":");
-    if (parts.length !== 4) return "";
-    const iv = Buffer.from(parts[1], "hex");
-    const authTag = Buffer.from(parts[2], "hex");
-    const encrypted = parts[3];
-    const decipher = crypto.createDecipheriv(ENCRYPTION_ALGORITHM, ENCRYPTION_KEY, iv);
-    decipher.setAuthTag(authTag);
-    let decrypted = decipher.update(encrypted, "hex", "utf8");
-    decrypted += decipher.final("utf8");
-    return decrypted;
-  } catch (err: any) {
-    console.error("[Vault] Decryption error:", err.message);
-    return "";
+  
+  const keysToTry: Buffer[] = [];
+  const active = getActiveEncryptionKey();
+  if (active) keysToTry.push(active);
+  keysToTry.push(...getLegacyEncryptionKeys());
+
+  for (const key of keysToTry) {
+    try {
+      const parts = cipherText.split(":");
+      if (parts.length !== 4) continue;
+      const iv = Buffer.from(parts[1], "hex");
+      const authTag = Buffer.from(parts[2], "hex");
+      const encrypted = parts[3];
+      const decipher = crypto.createDecipheriv(ENCRYPTION_ALGORITHM, key, iv);
+      decipher.setAuthTag(authTag);
+      let decrypted = decipher.update(encrypted, "hex", "utf8");
+      decrypted += decipher.final("utf8");
+      return decrypted;
+    } catch (err: any) {
+      // Ignore and try next key
+    }
   }
+  console.error("[Vault] Decryption failed for all available keys.");
+  return "";
 }
 
 // ---------------------------------------------------------------------------
@@ -485,32 +507,10 @@ export async function getValidAccessToken(): Promise<{
   }
 
   // Mode 2: Service Account Fallback (if configured in environment)
-  const saBase64 =
-    process.env.GDRIVE_SERVICE_ACCOUNT_BASE64 || process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
-  if (saBase64) {
-    try {
-      const serviceAccount = JSON.parse(Buffer.from(saBase64, "base64").toString("utf8"));
-      const auth = new GoogleAuth({
-        credentials: {
-          client_email: serviceAccount.client_email,
-          private_key: serviceAccount.private_key,
-        },
-        scopes: [STANDARD_DRIVE_SCOPE, "https://www.googleapis.com/auth/drive"],
-      });
-      const client = await auth.getClient();
-      const token = await client.getAccessToken();
-      if (token.token) {
-        return {
-          accessToken: token.token,
-          email: serviceAccount.client_email,
-          mode: "SERVICE_ACCOUNT",
-        };
-      }
-    } catch (saErr: any) {
-      console.warn("[Token Resolver] Service account fallback error:", saErr.message);
-    }
-  }
-
+  // [LEGACY COMPATIBILITY ONLY] As per strict rules, Central OAuth must be the only active production path.
+  // We do NOT use SA as an active fallback when OAuth fails or is missing.
+  // Throw error requiring OAuth configuration.
+  
   throw new Error("GOOGLE_DRIVE_NOT_CONFIGURED");
 }
 
@@ -534,11 +534,8 @@ export async function testArchiveConnection(): Promise<DriveTestReport> {
   const secrets = loadStoredSecrets();
   const config = getGoogleDriveConfig();
   const hasOAuth = Boolean(secrets.googleDriveRefreshToken);
-  const hasSA = Boolean(
-    process.env.GDRIVE_SERVICE_ACCOUNT_BASE64 || process.env.FIREBASE_SERVICE_ACCOUNT_BASE64
-  );
 
-  if (!hasOAuth && !hasSA) {
+  if (!hasOAuth) {
     steps[0] = {
       name: "OAuth Credentials Availability",
       status: "FAIL",
@@ -633,13 +630,38 @@ export async function testArchiveConnection(): Promise<DriveTestReport> {
   let rootFolderId = config.rootFolderId || "";
   const rootFolderName = config.rootFolderName || "Emirates Falcon";
   try {
-    rootFolderId = await ensureDriveFolder(driveClient, rootFolderName, "root");
-    steps[3] = {
-      name: "Root Archive Folder Check",
-      status: "PASS",
-      latency: Date.now() - t4,
-      details: `المجلد الرئيسي موجود ومتاح: "${rootFolderName}" (${rootFolderId})`,
-    };
+    // Only search, DO NOT CREATE
+    const query = `name = '${rootFolderName}' and 'root' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+    const res = await driveClient.files.list({
+      q: query,
+      spaces: "drive",
+      fields: "files(id, name)",
+    });
+
+    if (res.data.files && res.data.files.length > 0) {
+      rootFolderId = res.data.files[0].id!;
+      steps[3] = {
+        name: "Root Archive Folder Check",
+        status: "PASS",
+        latency: Date.now() - t4,
+        details: `المجلد الرئيسي موجود ومتاح: "${rootFolderName}" (${rootFolderId})`,
+      };
+    } else {
+      steps[3] = {
+        name: "Root Archive Folder Check",
+        status: "FAIL",
+        latency: Date.now() - t4,
+        details: `ROOT_FOLDER_NOT_FOUND`,
+      };
+      return {
+        success: false,
+        status: "ERROR",
+        latency: Date.now() - tStart,
+        steps,
+        safeErrorMessage: `مجلد الأرشيف الرئيسي (${rootFolderName}) غير موجود.`,
+        repairInstructions: "يرجى إنشاء المجلد (Emirates Falcon) يدوياً في حساب Google Drive المركزي.",
+      };
+    }
   } catch (err: any) {
     steps[3] = {
       name: "Root Archive Folder Check",
@@ -658,27 +680,45 @@ export async function testArchiveConnection(): Promise<DriveTestReport> {
 
   // Step 5: Archive Readability (harmless list files within root folder, limit 5)
   const t5 = Date.now();
+  let fileList: any[] = [];
   try {
     const listRes = await driveClient.files.list({
-      q: `'${rootFolderId}' in parents and trashed = false`,
+      q: `'${rootFolderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`,
       spaces: "drive",
       fields: "files(id, name, mimeType)",
       pageSize: 5,
     });
 
-    const fileCount = listRes.data.files?.length || 0;
-    steps[4] = {
-      name: "Archive Readability",
-      status: "PASS",
-      latency: Date.now() - t5,
-      details: `تم التحقق من قراءة محتويات المجلد بنجاح (المحتويات المفهرسة حالياً: ${fileCount} عنصر). تم التحقق بدون إنشاء ملفات تجريبية وهمية.`,
-    };
+    fileList = listRes.data.files || [];
+    
+    // Test getting file metadata if files exist (Real Preview test)
+    if (fileList.length > 0) {
+      const testFileId = fileList[0].id;
+      await driveClient.files.get({
+        fileId: testFileId,
+        fields: "id, name, mimeType, size",
+      });
+      
+      steps[4] = {
+        name: "Archive Readability",
+        status: "PASS",
+        latency: Date.now() - t5,
+        details: `تم التحقق من قراءة محتويات المجلد واسترداد بيانات ملف موجود بنجاح (المحتويات المفهرسة: ${fileList.length} عنصر). لا يتم إنشاء ملفات وهمية.`,
+      };
+    } else {
+      steps[4] = {
+        name: "Archive Readability",
+        status: "PASS",
+        latency: Date.now() - t5,
+        details: `تم التحقق من مجلد الأرشيف (فارغ حالياً، لا يوجد ملفات لاختبار التنزيل/المعاينة). لا يتم إنشاء ملفات وهمية.`,
+      };
+    }
   } catch (err: any) {
     steps[4] = {
       name: "Archive Readability",
       status: "FAIL",
       latency: Date.now() - t5,
-      details: `فشل قراءة محتويات المجلد: ${err.message}`,
+      details: `فشل قراءة محتويات المجلد أو استرداد بيانات الملف: ${err.message}`,
     };
     return {
       success: false,

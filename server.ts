@@ -65,7 +65,7 @@ try {
   console.warn("Failed to load gemini-key.json fallback", e);
 }
 
-import { initializeApp as initAdminApp, getApps as getAdminApps, cert as adminCert } from "firebase-admin/app";
+import { initializeApp as initAdminApp, getApps as getAdminApps, cert as adminCert, applicationDefault } from "firebase-admin/app";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import firebaseAppletConfig from "./firebase-applet-config.json";
@@ -79,6 +79,19 @@ function getAdminApp() {
     return existingApps[0];
   }
 
+  // 1. ADC / GOOGLE_APPLICATION_CREDENTIALS
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.GOOGLE_CLOUD_PROJECT || process.env.GCP_PROJECT) {
+    try {
+      return initAdminApp({
+        credential: applicationDefault(),
+        projectId: firebaseAppletConfig.projectId,
+      });
+    } catch (e: any) {
+      console.error("[Firebase Admin] ADC initialization failed:", e.message);
+    }
+  }
+
+  // 2. FIREBASE_SERVICE_ACCOUNT_BASE64
   const base64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
   if (base64) {
     try {
@@ -89,19 +102,21 @@ function getAdminApp() {
         projectId: serviceAccount.project_id || firebaseAppletConfig.projectId,
       });
     } catch (e: any) {
-      console.error("[Firebase Admin] Service account initialization error, falling back to projectId:", e?.message || e);
+      console.error("[Firebase Admin] Service account initialization error:", e?.message || e);
     }
   }
 
-  // Fallback: Initialize using projectId to enable admin.auth().verifyIdToken()
+  // 3. Cloud Run / Compute Engine auto-discovery (handled by applicationDefault() usually, but if not set explicitly)
   try {
-    return initAdminApp({
-      projectId: firebaseAppletConfig.projectId,
-    });
-  } catch (e: any) {
-    console.error("[Firebase Admin] Initialization failed with projectId:", e?.message || e);
-    return null;
+     return initAdminApp({
+        credential: applicationDefault(),
+        projectId: firebaseAppletConfig.projectId,
+     });
+  } catch(e: any) {
+     console.error("[Firebase Admin] Final fallback to applicationDefault failed:", e.message);
   }
+
+  throw new Error("No valid Firebase Admin credentials found.");
 }
 
 function getFirestoreAdmin() {
