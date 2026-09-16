@@ -93,7 +93,7 @@ export async function testWhatsAppConnectionOnServer(): Promise<{
       status: data.status || (res.success ? "VERIFIED" : "ERROR"),
       lastCheckedAt: data.lastCheckedAt,
       latency: data.latency,
-      errorCode: data.errorCode || (res.success ? undefined : "CONNECTION_FAILED"),
+      errorCode: data.errorCode || (res.success ? undefined : (res.error || "CONNECTION_FAILED")),
       safeErrorMessage: data.safeErrorMessage || res.error,
       repairInstructions: data.repairInstructions,
     };
@@ -134,7 +134,7 @@ export async function testGmailConnectionOnServer(): Promise<{
       status: data.status || (res.success ? "VERIFIED" : "ERROR"),
       lastCheckedAt: data.lastCheckedAt,
       latency: data.latency,
-      errorCode: data.errorCode || (res.success ? undefined : "CONNECTION_FAILED"),
+      errorCode: data.errorCode || (res.success ? undefined : (res.error || "CONNECTION_FAILED")),
       safeErrorMessage: data.safeErrorMessage || res.error,
       repairInstructions: data.repairInstructions,
       steps: data.steps,
