@@ -1,41 +1,53 @@
 const fs = require('fs');
-let code = fs.readFileSync('src/context/AuthContext.tsx', 'utf8');
 
-code = code.replace(`  const syncPortalAccounts = async (owners: Owner[], tenants: Tenant[]) => {
-    try {
-      const response = await authenticatedFetch('/api/auth/sync-portal-users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ owners, tenants })
-      });
-      const data = await response.json();
-      if (data.success && typeof data.createdCount === 'number') {
-        // Also refresh local users state if needed or merge saved users
-        return data.createdCount;
-      }
-      const count = syncAllService(owners, tenants, users, saveUser);
-      return count;
-    } catch (e) {
-      console.warn("[AuthContext] syncPortalAccounts network error, falling back to local service:", e);
-      const count = syncAllService(owners, tenants, users, saveUser);
-      return count;
-    }
-  };`, `  const syncPortalAccounts = async (owners: Owner[], tenants: Tenant[]) => {
-    try {
-      const response = await authenticatedFetch('/api/auth/sync-portal-users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ owners, tenants })
-      });
-      const data = await response.json();
-      if (data.success && typeof data.createdCount === 'number') {
-        return data.createdCount;
-      }
-      return 0;
-    } catch (e) {
-      console.warn("[AuthContext] syncPortalAccounts network error:", e);
-      return 0;
-    }
-  };`);
+let authContext = fs.readFileSync('src/context/AuthContext.tsx', 'utf8');
+const lines = authContext.split('\n');
 
-fs.writeFileSync('src/context/AuthContext.tsx', code);
+const startIdx = lines.findIndex(l => l.includes('const resolveUserProfile = async'));
+const endIdx = lines.findIndex((l, idx) => idx > startIdx && l.includes('return updatedProfile;'));
+
+if (startIdx !== -1 && endIdx !== -1) {
+  const newLogic = `  const resolveUserProfile = async (fUser: FirebaseUser, currentUsersList: User[]): Promise<User | null> => {
+    const fUid = fUser.uid;
+
+    let match: User | null = null;
+
+    // 1. Direct doc lookup by uid (Canonical Identity)
+    try {
+      const docById = await getDoc(doc(db, "users", fUid));
+      if (docById.exists()) {
+        match = docById.data() as User;
+      }
+    } catch (err: any) {
+      console.warn("[AuthContext] Direct user doc lookup error:", err?.message);
+    }
+
+    // 2. Fallback query by firebaseUid
+    if (!match) {
+      try {
+        const qUid = query(collection(db, "users"), where("firebaseUid", "==", fUid));
+        const snapUid = await getDocs(qUid);
+        if (!snapUid.empty) {
+          match = snapUid.docs[0].data() as User;
+        }
+      } catch (err: any) {
+        console.warn("[AuthContext] firebaseUid query error:", err?.message);
+      }
+    }
+
+    if (!match) {
+      console.warn("[AuthContext] No canonical user profile found for verified UID:", fUid);
+      return null;
+    }
+
+    // Keep doc in Firestore synchronized ONLY for lastLogin to avoid migration
+    setDoc(doc(db, "users", match.id), { lastLogin: new Date().toISOString() }, { merge: true }).catch(() => {});
+
+    return match;`;
+  
+  lines.splice(startIdx, endIdx - startIdx + 1, newLogic);
+  fs.writeFileSync('src/context/AuthContext.tsx', lines.join('\n'));
+  console.log("Patched resolveUserProfile properly");
+} else {
+  console.log("Could not find bounds", startIdx, endIdx);
+}

@@ -570,7 +570,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem("ef_users");
+    const saved = null;
     let loadedUsers: User[] = [INITIAL_SYSTEM_OWNER];
     if (saved) {
       try {
@@ -604,7 +604,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [userPermissionOverrides, setUserPermissionOverrides] = useState<UserPermissionOverride[]>(() => {
-    const saved = localStorage.getItem("ef_user_overrides");
+    const saved = null;
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -621,225 +621,78 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [authError, setAuthError] = useState<string | null>(null);
 
   const [loginMode, setLoginMode] = useState<"STAFF" | "TENANT" | "OWNER" | null>(() => {
-    return localStorage.getItem("ef_login_mode") as "STAFF" | "TENANT" | "OWNER" | null;
+    return null as "STAFF" | "TENANT" | "OWNER" | null;
   });
 
   const clearAuthError = () => setAuthError(null);
 
   // Dedicated Asynchronous Profile Resolution Logic
   const resolveUserProfile = async (fUser: FirebaseUser, currentUsersList: User[]): Promise<User | null> => {
-    const fEmail = (fUser.email || "").trim().toLowerCase();
     const fUid = fUser.uid;
 
-    // Fast-pass check for system owners
-    if (fEmail === "m_hamed@msn.com" || fEmail === "emfalcon2025227@gmail.com") {
-      const baseOwner = currentUsersList.find(u => isSystemOwnerUser(u)) || INITIAL_SYSTEM_OWNER;
-      const ownerUser: User = {
-        ...baseOwner,
-        id: fUid,
-        systemId: "usr-01",
-        username: baseOwner.username || "Mahmoud",
-        email: fEmail,
-        role: "SYSTEM_OWNER",
-        isActive: true,
-        firebaseUid: fUid,
-        lastLogin: new Date().toISOString()
-      };
-      // Keep doc in Firestore synchronized using canonical fUid
-      setDoc(doc(db, "users", fUid), {
-        id: fUid,
-        systemId: "usr-01",
-        email: fEmail,
-        username: "Mahmoud",
-        role: "SYSTEM_OWNER",
-        isActive: true,
-        firebaseUid: fUid,
-        lastLogin: new Date().toISOString()
-      }, { merge: true }).catch(() => {});
-      setDoc(doc(db, "users_by_email", fEmail), {
-        id: fUid,
-        systemId: "usr-01",
-        email: fEmail,
-        role: "SYSTEM_OWNER",
-        isActive: true
-      }, { merge: true }).catch(() => {});
-      return ownerUser;
-    }
+    let match: User | null = null;
 
-    // 1. Check current in-memory / local state by firebaseUid
-    let match = currentUsersList.find(u => u.firebaseUid && u.firebaseUid === fUid);
-
-    // 2. Check current in-memory / local state by email
-    if (!match && fEmail) {
-      const emailMatch = currentUsersList.find(u => (u.email || "").trim().toLowerCase() === fEmail);
-      if (emailMatch && emailMatch.role !== "OWNER" && emailMatch.role !== "TENANT") {
-        match = emailMatch;
+    // 1. Direct doc lookup by uid (Canonical Identity)
+    try {
+      const docById = await getDoc(doc(db, "users", fUid));
+      if (docById.exists()) {
+        match = docById.data() as User;
       }
+    } catch (err: any) {
+      console.warn("[AuthContext] Direct user doc lookup error:", err?.message);
     }
 
-    // 3. If not found in local memory, query Firestore direct document / collection
+    // 2. Fallback query by firebaseUid
     if (!match) {
       try {
-        // 3a. Direct doc lookup by uid
-        const docById = await getDoc(doc(db, "users", fUid));
-        if (docById.exists()) {
-          match = docById.data() as User;
+        const qUid = query(collection(db, "users"), where("firebaseUid", "==", fUid));
+        const snapUid = await getDocs(qUid);
+        if (!snapUid.empty) {
+          match = snapUid.docs[0].data() as User;
         }
       } catch (err: any) {
-        console.warn("[AuthContext] Direct user doc lookup notice:", err?.message);
-      }
-
-      // 3b. Query collection by firebaseUid
-      if (!match) {
-        try {
-          const qUid = query(collection(db, "users"), where("firebaseUid", "==", fUid));
-          const snapUid = await getDocs(qUid);
-          if (!snapUid.empty) {
-            match = snapUid.docs[0].data() as User;
-          }
-        } catch (err: any) {
-          console.warn("[AuthContext] Query users by firebaseUid notice:", err?.message);
-        }
-      }
-
-      // 3c. Query collection by email
-      if (!match && fEmail) {
-        try {
-          const qEmail = query(collection(db, "users"), where("email", "==", fEmail));
-          const snapEmail = await getDocs(qEmail);
-          if (!snapEmail.empty) {
-            const emailMatch = snapEmail.docs[0].data() as User;
-            if (emailMatch.role !== "OWNER" && emailMatch.role !== "TENANT") {
-              match = emailMatch;
-            }
-          }
-        } catch (err: any) {
-          console.warn("[AuthContext] Query users by email notice:", err?.message);
-        }
-      }
-
-      // 3d. Check users_by_email lookup document
-      if (!match && fEmail) {
-        try {
-          const emailMapDoc = await getDoc(doc(db, "users_by_email", fEmail));
-          if (emailMapDoc.exists()) {
-            const mapData = emailMapDoc.data();
-            if (mapData?.id) {
-              const uDoc = await getDoc(doc(db, "users", mapData.id));
-              if (uDoc.exists()) {
-                const uDocData = uDoc.data() as User;
-                if (uDocData.role !== "OWNER" && uDocData.role !== "TENANT") {
-                  match = uDocData;
-                }
-              }
-            }
-          }
-        } catch (err: any) {
-          console.warn("[AuthContext] Email map lookup notice:", err?.message);
-        }
+        console.warn("[AuthContext] firebaseUid query error:", err?.message);
       }
     }
 
-    // 4. If still not found in users, query Firestore owners and tenants collections for database reconciliation
-    if (!match && fEmail) {
-      try {
-        const qOwner = query(collection(db, "owners"), where("email", "==", fEmail));
-        const snapOwner = await getDocs(qOwner);
-        if (!snapOwner.empty) {
-          const matchedOwner = snapOwner.docs[0].data() as Owner;
-          match = {
-            id: `usr-owner-${matchedOwner.id}`,
-            username: fEmail,
-            email: fEmail,
-            nameEn: matchedOwner.nameEn || fEmail,
-            nameAr: matchedOwner.nameAr || fEmail,
-            phone: matchedOwner.phone || "",
-            role: "OWNER",
-            ownerId: matchedOwner.id,
-            isActive: true,
-            firebaseUid: fUid,
-            createdAt: new Date().toISOString()
-          };
-        }
-      } catch (err: any) {
-        console.warn("[AuthContext] Firestore owners reconciliation lookup notice:", err?.message);
-      }
-
-      if (!match) {
-        try {
-          const qTenant = query(collection(db, "tenants"), where("email", "==", fEmail));
-          const snapTenant = await getDocs(qTenant);
-          if (!snapTenant.empty) {
-            const matchedTenant = snapTenant.docs[0].data() as Tenant;
-            match = {
-              id: `usr-tenant-${matchedTenant.id}`,
-              username: fEmail,
-              email: fEmail,
-              nameEn: matchedTenant.nameEn || fEmail,
-              nameAr: matchedTenant.nameAr || fEmail,
-              phone: matchedTenant.phone || "",
-              role: "TENANT",
-              tenantId: matchedTenant.id,
-              isActive: true,
-              firebaseUid: fUid,
-              createdAt: new Date().toISOString()
-            };
-          }
-        } catch (err: any) {
-          console.warn("[AuthContext] Firestore tenants reconciliation lookup notice:", err?.message);
-        }
-      }
-    }
-
-    // 5. Post-match linking & Firestore synchronization
-    if (match) {
-      const legacyId = match.id;
-      const updatedProfile: User = {
-        ...match,
-        id: fUid, // Canonical ID is the Firebase Auth UID
-        firebaseUid: fUid,
-        lastLogin: new Date().toISOString()
-      };
-
-      // Store systemId / legacy ID reference if it was different
-      if (legacyId && legacyId !== fUid) {
-        (updatedProfile as any).systemId = legacyId;
-      }
-
-      const cleanProfile = sanitizeForFirestore(updatedProfile);
-
-      // Write EXACTLY ONE document to users/{fUid}
-      setDoc(doc(db, "users", fUid), {
-        ...cleanProfile,
-        firebaseUid: fUid,
-        lastLogin: new Date().toISOString()
-      }, { merge: true }).catch(() => {});
-
-      // Delete the old legacy document to avoid duplicate identity entries
-      if (legacyId && legacyId !== fUid) {
-        deleteDoc(doc(db, "users", legacyId)).catch(() => {});
-      }
-
-      // Safely update email mapping
-      if (fEmail) {
-        setDoc(doc(db, "users_by_email", fEmail), {
+    if (!match) {
+      // Security Bootstrapping: Only allow known admin emails to automatically provision as SYSTEM_OWNER
+      // if no canonical profile exists yet.
+      const fEmail = (fUser.email || "").trim().toLowerCase();
+      if (fEmail === "m_hamed@msn.com" || fEmail === "emfalcon2025227@gmail.com") {
+        match = {
           id: fUid,
+          systemId: "usr-01",
+          username: fEmail === "m_hamed@msn.com" ? "Mahmoud" : "Admin",
+          nameEn: fEmail === "m_hamed@msn.com" ? "Mahmoud Mohamed" : "System Admin",
+          nameAr: fEmail === "m_hamed@msn.com" ? "محمود محمد" : "مدير النظام",
           email: fEmail,
-          role: updatedProfile.role,
-          isActive: updatedProfile.isActive
-        }, { merge: true }).catch(() => {});
+          role: "SYSTEM_OWNER",
+          isActive: true,
+          firebaseUid: fUid,
+          lastLogin: new Date().toISOString()
+        };
+        // Persist the bootstrapped identity to Firestore canonically
+        setDoc(doc(db, "users", fUid), match, { merge: true }).catch(err => {
+          console.error("[AuthContext] Failed to bootstrap SYSTEM_OWNER:", err);
+        });
       }
-
-      return updatedProfile;
     }
 
-    return null;
+    if (!match) {
+      console.warn("[AuthContext] No canonical user profile found for verified UID:", fUid);
+      return null;
+    }
+
+    // Keep doc in Firestore synchronized ONLY for lastLogin to avoid migration
+    setDoc(doc(db, "users", match.id), { lastLogin: new Date().toISOString() }, { merge: true }).catch(() => {});
+
+    return match;
   };
 
   // Listen to Firebase Auth state changes and resolve user profile
   useEffect(() => {
     let isMounted = true;
-
     const unsubscribe = onAuthStateChanged(auth, async (fUser) => {
       if (!isMounted) return;
 
@@ -984,7 +837,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     try {
-      localStorage.setItem("ef_users", JSON.stringify(users));
+      // localStorage.setItem("ef_users", JSON.stringify(users));
     } catch (e) {
       console.warn("[AuthContext] Unable to save users to localStorage:", e);
     }
@@ -992,7 +845,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     try {
-      localStorage.setItem("ef_user_overrides", JSON.stringify(userPermissionOverrides));
+      // localStorage.setItem("ef_user_overrides", JSON.stringify(userPermissionOverrides));
     } catch (e) {
       console.warn("[AuthContext] Unable to save userPermissionOverrides to localStorage:", e);
     }

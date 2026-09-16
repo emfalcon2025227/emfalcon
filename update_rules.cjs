@@ -1,4 +1,6 @@
-rules_version = '2';
+const fs = require('fs');
+
+const rules = `rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -21,13 +23,7 @@ service cloud.firestore {
 
     // System owner check
     function isSystemOwner() {
-      return isSignedIn() && (
-        (request.auth.token.email != null && (
-          request.auth.token.email == 'm_hamed@msn.com' ||
-          request.auth.token.email == 'emfalcon2025227@gmail.com'
-        )) ||
-        getUserRole() == 'SYSTEM_OWNER'
-      );
+      return getUserRole() == 'SYSTEM_OWNER';
     }
 
     // Role hierarchies
@@ -430,3 +426,7 @@ service cloud.firestore {
     }
   }
 }
+`;
+
+fs.writeFileSync('firestore.rules', rules);
+console.log("Updated firestore.rules");

@@ -272,82 +272,38 @@ declare global {
 
 async function resolveUserRole(uid: string, email?: string, token?: string): Promise<{ role: string; ownerId?: string; tenantId?: string; name?: string }> {
   try {
-    const cleanEmail = (email || "").trim().toLowerCase();
-    if (cleanEmail === "emfalcon2025227@gmail.com" || cleanEmail === "m_hamed@msn.com") {
-      return {
-        role: "SYSTEM_OWNER",
-        name: "Mahmoud Mohamed Mahmoud Hamed",
-      };
+    const adminDb = getFirestoreAdmin();
+    if (!adminDb) {
+      console.error("[Auth RBAC] Firestore Admin not initialized. Failing closed.");
+      return { role: "GUEST" };
     }
 
-    const adminDb = getFirestoreAdmin();
-    if (adminDb) {
-      // 1. Try by doc ID
-      const directDoc = await adminDb.collection("users").doc(uid).get();
-      if (directDoc.exists) {
-        const d = directDoc.data();
-        return {
-          role: d?.role || "GUEST",
-          ownerId: d?.ownerId,
-          tenantId: d?.tenantId,
-          name: d?.nameAr || d?.nameEn || d?.name || d?.username,
-        };
-      }
+    // 1. Strict identity by Canonical UID
+    const directDoc = await adminDb.collection("users").doc(uid).get();
+    let userData = null;
 
-      // 2. Try query by firebaseUid
+    if (directDoc.exists) {
+      userData = directDoc.data();
+    } else {
+      // 2. Legacy fallback by firebaseUid field
       const qUid = await adminDb.collection("users").where("firebaseUid", "==", uid).limit(1).get();
       if (!qUid.empty) {
-        const d = qUid.docs[0].data();
-        return {
-          role: d?.role || "GUEST",
-          ownerId: d?.ownerId,
-          tenantId: d?.tenantId,
-          name: d?.nameAr || d?.nameEn || d?.name || d?.username,
-        };
-      }
-
-      // 3. Try query by email
-      if (email) {
-        const cleanEmail = email.trim().toLowerCase();
-        const qEmail = await adminDb.collection("users").where("email", "==", cleanEmail).limit(1).get();
-        if (!qEmail.empty) {
-          const d = qEmail.docs[0].data();
-          return {
-            role: d?.role || "GUEST",
-            ownerId: d?.ownerId,
-            tenantId: d?.tenantId,
-            name: d?.nameAr || d?.nameEn || d?.name || d?.username,
-          };
-        }
-      }
-    } else if (token) {
-      // Fallback: Use REST API to query Firestore acting as the user when Admin SDK is unavailable
-      const dbId = firebaseAppletConfig.firestoreDatabaseId || "(default)";
-      const projectId = firebaseAppletConfig.projectId;
-      const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${dbId}/documents/users/${uid}`;
-      try {
-        const restRes = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-        if (restRes.ok) {
-          const json = await restRes.json();
-          const fields = json.fields || {};
-          return {
-            role: fields.role?.stringValue || "GUEST",
-            ownerId: fields.ownerId?.stringValue,
-            tenantId: fields.tenantId?.stringValue,
-            name: fields.nameAr?.stringValue || fields.nameEn?.stringValue || fields.name?.stringValue || fields.username?.stringValue,
-          };
-        } else {
-          console.warn("[Auth RBAC] REST API fallback failed with status:", restRes.status);
-        }
-      } catch (restErr) {
-        console.warn("[Auth RBAC] REST API fallback error:", restErr);
+        userData = qUid.docs[0].data();
       }
     }
-  } catch (err) {
-    console.warn("[Auth RBAC] Failed to query user document:", err);
-  }
 
-  // Secure default fallback: never grant ADMIN on missing/unverified roles
+    if (userData) {
+      return {
+        role: userData.role || "GUEST",
+        ownerId: userData.ownerId,
+        tenantId: userData.tenantId,
+        name: userData.nameAr || userData.nameEn || userData.name || userData.username,
+      };
+    }
+  } catch (err) {
+    console.error("[Auth RBAC] Failed to query user document:", err);
+  }
+  // Secure default fallback: never grant elevated roles
   return { role: "GUEST" };
 }
 
