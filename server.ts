@@ -4336,7 +4336,13 @@ ${activationLink}
     });
   } catch (err: any) {
     console.error("[Portal Provisioning Server] Provision error:", err);
-    return res.status(500).json({ success: false, error: err?.message || "Failed to provision portal user" });
+    const errorMessage = err?.message || "Failed to provision portal user";
+    const isPermissionError = errorMessage.includes("insufficient permission") || errorMessage.includes("PERMISSION_DENIED");
+    
+    return res.status(isPermissionError ? 403 : 500).json({ 
+      success: false, 
+      error: isPermissionError ? "خطأ في صلاحيات الخادم (IAM Permission Denied): لا يملك الخادم صلاحية كافية لإنشاء مستخدمين في Firebase Auth. يرجى توفير FIREBASE_SERVICE_ACCOUNT_BASE64 في الإعدادات." : errorMessage 
+    });
   }
 });
 

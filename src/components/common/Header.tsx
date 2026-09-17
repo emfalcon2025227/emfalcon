@@ -89,12 +89,13 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Center: Quick Search Bar */}
+        {/* Center: Quick Search Bar (Disabled to prevent DB search) */}
         {!isPortalMode && (
           <div className="hidden md:flex flex-1 max-w-md mx-4">
             <button
-              onClick={onOpenGlobalSearch}
-              className="w-full flex items-center justify-start px-3.5 py-2 text-xs text-slate-400 bg-slate-100/80 hover:bg-slate-100 rounded-xl border border-slate-200/80 transition-colors text-start cursor-pointer gap-2"
+              disabled
+              className="w-full flex items-center justify-start px-3.5 py-2 text-xs text-slate-400 bg-slate-100/50 opacity-50 cursor-not-allowed rounded-xl border border-slate-200 transition-colors text-start gap-2"
+              title={language === "ar" ? "البحث معطل حالياً (منع البحث في قاعدة البيانات)" : "Search is currently disabled"}
             >
               <Search className="w-4 h-4 text-slate-400" />
               <span>{t("searchPlaceholder")}</span>
