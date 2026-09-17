@@ -79,17 +79,9 @@ function getAdminApp() {
     return existingApps[0];
   }
 
-  // 1. Try ADC without early logic based on environment vars
-  try {
-    return initAdminApp({
-      credential: applicationDefault(),
-      projectId: firebaseAppletConfig.projectId,
-    });
-  } catch (e: any) {
-    console.error("[Firebase Admin] ADC initialization failed or lacks permissions:", e.message);
-  }
-
-  // 2. FIREBASE_SERVICE_ACCOUNT_BASE64
+  // ONLY use FIREBASE_SERVICE_ACCOUNT_BASE64 to guarantee production IAM permissions
+  // ADC is structurally insufficient for Firebase Admin inside this restricted environment
+  // 1. FIREBASE_SERVICE_ACCOUNT_BASE64
   const base64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
   if (base64) {
     try {
