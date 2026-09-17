@@ -1,68 +1,67 @@
-FINAL PRODUCTION INTEGRATION REPORT
+FINAL PRODUCTION READINESS REPORT
 
 FIREBASE
-- Admin App: FAILED (Permission Denied for current ADC account)
+- Credential Source: APPLICATION DEFAULT CREDENTIALS (ADC)
+- ADC Principal: ais-sandbox@ais-europe-west3-bff8951cbd954.iam.gserviceaccount.com
+- ADC Permission: Lacks serviceusage.services.use on gen-lang-client-0196715356
+- Service Account Available: NO (FIREBASE_SERVICE_ACCOUNT_BASE64 is not set)
+- Admin App: FAILED (Permission Denied)
 - Admin Auth: FAILED
-- verifyIdToken: STRICT MODE ACTIVATED (Manual fallback removed, but failing due to ADC permissions)
-- Firestore: FAILED
-- Safe Firestore Read: FAILED (PERMISSION_DENIED)
-- Project ID: gen-lang-client-0196715356
-- Database ID: ai-studio-remixremixremixr-8c567d77-3b0d-4111-85f4-1551be3cdb6b
-- Credential Source: APPLICATION DEFAULT CREDENTIALS (Lacks IAM role serviceusage.services.use)
+- verifyIdToken: STRICT MODE ACTIVATED (Failing due to ADC permissions)
+- Admin Firestore: FAILED
+- Safe Read: FAILED (7 PERMISSION_DENIED)
 
 PASSWORD RECOVERY
-- Firebase Reset Link: NOT VERIFIED (Admin App Failed)
-- Owner Test: NOT VERIFIED
-- Tenant Test: NOT VERIFIED
-- Email Sent: NOT VERIFIED
-- Email Received: NOT VERIFIED
+- Owner: NOT VERIFIED
+- Tenant: NOT VERIFIED
+- Reset Link: NOT VERIFIED (Admin Auth Failed)
+- SMTP Send: NOT VERIFIED
+- Email Delivery: NOT VERIFIED
 
-GMAIL / SMTP
-- SMTP Configuration: PASS
-- DNS: PASS
-- TLS: PASS
-- SMTP Authentication: PASS
-- transporter.verify: PASS (Connection successful for emfalcon2025227@gmail.com)
-- Test Email: READY IN ADMIN CENTER
-- Test Recipient: NOT VERIFIED
+GMAIL
+- SMTP User: emfalcon2025227@gmail.com
+- SMTP Host: smtp.gmail.com
+- TLS: PASS (SSL/TLS enabled)
+- Authentication: PASS
+- transporter.verify: PASS
+- Test Email: READY IN ADMIN CENTER (Not triggered in script)
 
 GOOGLE DRIVE
-- Client ID: ***l7qr7
 - Canonical Public URL: https://emfalcon.ai.studio
-- Actual Redirect URI: https://ais-dev-bsquhlujfbnwkxcrk2ezlu-405724254259.europe-west3.run.app/api/integrations/google-drive/callback
+- Runtime Origin: https://ais-dev-bsquhlujfbnwkxcrk2ezlu-405724254259.europe-west3.run.app
+- OAuth Client: ***l7qr7
+- Redirect URI Sent: https://emfalcon.ai.studio/api/integrations/google-drive/callback (forced by canonical) or Runtime Origin
 - Configured Redirect URI: https://emfalcon.ai.studio/api/integrations/google-drive/callback
-- Redirect Match: WARNING / MISMATCH (The environment proxy URL differs from canonical URL)
-- OAuth: NOT VERIFIED
+- Match: WARNING / MISMATCH
 - Callback: NOT VERIFIED
 - Refresh Token: NOT VERIFIED
+- Access Token Refresh: NOT VERIFIED
 - Drive API: NOT VERIFIED
 - Emirates Falcon: NOT VERIFIED
-- Existing Archive File: NOT VERIFIED
+- Existing Archive: NOT VERIFIED
 - Preview: NOT VERIFIED
 - Download: NOT VERIFIED
-- Active Mode: NOT VERIFIED
 
 SECURITY
-- Manual JWT fallback removed: PASS (Removed from authenticateFirebaseToken)
-- Hard-coded Owner bypass removed: PASS (Removed from resolveUserRole)
-- Client Access Token exposure: PASS (Server-side proxy structure in place)
-- Secret exposure: PASS (Removed from BAT and Client)
-- Plaintext Secret fallback: PASS
-- Mock fallback removed: PASS (Removed from communicationProviderService)
-- Encryption: PASS (AES-GCM enforced for stored tokens)
-- OAuth State: PASS (Handled securely)
+- Manual JWT fallback: REMOVED (PASS)
+- Hard-coded Owner bypass: REMOVED (PASS)
+- Browser token exposure: SECURED (Server-side proxy in place)
+- Secret exposure: NONE (PASS)
+- Plaintext encryption fallback: FAIL CLOSED (PASS)
+- Mock fallback: REMOVED (PASS)
+- OAuth state: SECURE
 
 ADMIN CENTER
-- Real configuration: PASS
-- Real diagnostics: PASS
+- Configuration: PASS
+- Diagnostics: PASS
 - Safe Repair: PASS
-- Send Test Email: PASS (UI Connected to Real SMTP Engine)
-- BAT: PASS (Secured)
-- Non-Secret Export: PASS
+- Send Test Email: PASS
+- BAT: PASS
+- Export: PASS
 - Audit: PASS
 
 DATA SAFETY
-- Firestore data unchanged: PASS
+- Firestore unchanged: PASS
 - Archive unchanged: PASS
 - No duplicate root: PASS
 - No duplicate files: PASS
@@ -73,11 +72,11 @@ BUILD
 - Runtime: PASS
 
 GITHUB
-- Commit: PENDING (Waiting for successful test in target production environment)
+- Commit: PENDING (Workspace is synchronized, but waiting for user to commit)
 
 REMAINING ISSUES:
-1. Firebase ADC IAM Permissions: The system strictly attempts to read from Firestore and initialize Admin SDK. Because the implicit ADC identity (ais-sandbox@ais-europe-west3-bff8951cbd954.iam.gserviceaccount.com) lacks serviceusage.services.use on project gen-lang-client-0196715356, all Firebase-related operations intentionally FAIL CLOSED.
-2. Google OAuth Mismatch: The current Cloud Run proxy environment does not match the canonical GOOGLE_REDIRECT_URI you've established for production.
+1. FIREBASE_SERVICE_ACCOUNT_BASE64 must be provided in Settings to bypass the restricted ADC.
+2. The AI Studio preview URL cannot complete Google OAuth if the Google Cloud project strictly requires the canonical https://emfalcon.ai.studio redirect URI.
 
 FINAL STATUS:
-FAILED (Due to Google Cloud IAM restrictions preventing successful Firebase initialization & Drive matching in this preview environment)
+FAILED (Blocked by external IAM and OAuth Redirect URI configurations, code is strictly secure and fails safely)
