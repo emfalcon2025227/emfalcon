@@ -79,16 +79,14 @@ function getAdminApp() {
     return existingApps[0];
   }
 
-  // 1. ADC / GOOGLE_APPLICATION_CREDENTIALS
-  if (process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.GOOGLE_CLOUD_PROJECT || process.env.GCP_PROJECT) {
-    try {
-      return initAdminApp({
-        credential: applicationDefault(),
-        projectId: firebaseAppletConfig.projectId,
-      });
-    } catch (e: any) {
-      console.error("[Firebase Admin] ADC initialization failed:", e.message);
-    }
+  // 1. Try ADC without early logic based on environment vars
+  try {
+    return initAdminApp({
+      credential: applicationDefault(),
+      projectId: firebaseAppletConfig.projectId,
+    });
+  } catch (e: any) {
+    console.error("[Firebase Admin] ADC initialization failed or lacks permissions:", e.message);
   }
 
   // 2. FIREBASE_SERVICE_ACCOUNT_BASE64
@@ -106,14 +104,14 @@ function getAdminApp() {
     }
   }
 
-  // 3. Cloud Run / Compute Engine auto-discovery (handled by applicationDefault() usually, but if not set explicitly)
+  // 3. Fallback (Compute Engine ADC fallback if possible)
   try {
      return initAdminApp({
         credential: applicationDefault(),
         projectId: firebaseAppletConfig.projectId,
      });
   } catch(e: any) {
-     console.error("[Firebase Admin] Final fallback to applicationDefault failed:", e.message);
+     console.error("[Firebase Admin] Final fallback failed:", e.message);
   }
 
   throw new Error("No valid Firebase Admin credentials found.");

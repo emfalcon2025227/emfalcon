@@ -685,50 +685,33 @@ export async function runComprehensiveDiagnostics(originUrl: string): Promise<Di
 
   // 2. Firebase Admin, Auth & Firestore (REAL TEST)
   const tFirebaseStart = Date.now();
-  let firebaseAdminPass = false;
-  let firestorePass = false;
   let adminApp: any = null;
-
   try {
     const existingApps = getAdminApps();
     if (existingApps.length > 0) {
       adminApp = existingApps[0];
     } else {
-      if (process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.GOOGLE_CLOUD_PROJECT || process.env.GCP_PROJECT) {
-        try {
-          adminApp = initAdminApp({
-            credential: applicationDefault(),
-            projectId: firebaseAppletConfig.projectId,
-          });
-        } catch (e: any) {}
-      }
-      if (!adminApp && process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
-        try {
+      // Just check if we can initialize via ADC or Base64 as server.ts does
+      if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
           const jsonStr = Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, "base64").toString("utf8");
           const serviceAccount = JSON.parse(jsonStr);
           adminApp = initAdminApp({
             credential: adminCert(serviceAccount),
             projectId: serviceAccount.project_id || firebaseAppletConfig.projectId,
           });
-        } catch (e: any) {}
-      }
-      if (!adminApp) {
-        try {
+      } else {
           adminApp = initAdminApp({
             credential: applicationDefault(),
             projectId: firebaseAppletConfig.projectId,
           });
-        } catch (e: any) {}
       }
     }
-
-    if (!adminApp) throw new Error("Firebase Admin SDK failed to initialize - no valid credentials found (ADC, GOOGLE_APPLICATION_CREDENTIALS, or FIREBASE_SERVICE_ACCOUNT_BASE64).");
+    
+    if (!adminApp) throw new Error("Firebase Admin SDK failed to initialize.");
     
     // Test Auth
     const auth = getAdminAuth(adminApp);
-    // Simple fast read test for Auth if possible, but just initializing successfully with creds is a strong signal. We'll list one user to be sure.
     await auth.listUsers(1);
-    firebaseAdminPass = true;
 
     results.push({
       serviceId: "FIREBASE_ADMIN",
@@ -741,7 +724,6 @@ export async function runComprehensiveDiagnostics(originUrl: string): Promise<Di
       messageAr: "تم التحقق من Firebase Admin و Auth بنجاح.",
       messageEn: "Firebase Admin Auth initialized and verified successfully.",
     });
-
   } catch (err: any) {
     results.push({
       serviceId: "FIREBASE_ADMIN",
@@ -753,7 +735,7 @@ export async function runComprehensiveDiagnostics(originUrl: string): Promise<Di
       lastChecked: nowIso,
       messageAr: `تعذر تهيئة Firebase Admin أو مصادقته: ${err.message}`,
       messageEn: `Firebase Admin initialization/auth failed: ${err.message}`,
-      safeRecoveryActionAr: "تحقق من صلاحيات Base64 أو ADC (Default Credentials)",
+      safeRecoveryActionAr: "تحقق من صلاحيات Base64 أو ADC",
       safeRecoveryActionEn: "Check Base64 permissions or ADC credentials",
     });
   }
@@ -791,22 +773,30 @@ export async function runComprehensiveDiagnostics(originUrl: string): Promise<Di
       messageAr: `فشل اختبار القراءة من Firestore: ${err.message}`,
       messageEn: `Firestore read test failed: ${err.message}`,
     });
-  // 4. Google OAuth & Redirect Match
   }
+
+  // 4. Google OAuth & Redirect Match
   const tOAuthStart = Date.now();
   try {
     const calcCallback = `${originUrl}/api/integrations/google-drive/callback`;
     const latency = Date.now() - tOAuthStart;
+    const configuredRedirect = process.env.GOOGLE_REDIRECT_URI || "https://emfalcon.ai.studio/api/integrations/google-drive/callback";
+    const matchStatus = (calcCallback === configuredRedirect) ? "PASS" : "WARNING";
+    
     results.push({
       serviceId: "GOOGLE_OAUTH",
       serviceNameAr: "مصادقة Google OAuth وإعادة التوجيه",
       serviceNameEn: "Google OAuth & Redirect URI Match",
       category: "Google Drive",
-      status: "PASS",
+      status: matchStatus,
       latencyMs: latency,
       lastChecked: nowIso,
-      messageAr: `رابط إعادة التوجيه متطابق تماماً (${calcCallback}) وجاهز للتفويض`,
-      messageEn: `Redirect URI matched with origin (${calcCallback})`,
+      messageAr: matchStatus === "PASS" 
+        ? `رابط إعادة التوجيه متطابق تماماً (${calcCallback}) وجاهز للتفويض`
+        : `تطابق غير صالح (MISMATCH): Configured: ${configuredRedirect} - Actual: ${calcCallback}`,
+      messageEn: matchStatus === "PASS"
+        ? `Redirect URI matched with origin (${calcCallback})`
+        : `REDIRECT_URI_MISMATCH - Configured: ${configuredRedirect} - Actual: ${calcCallback}`,
     });
   } catch (err: any) {
     results.push({
