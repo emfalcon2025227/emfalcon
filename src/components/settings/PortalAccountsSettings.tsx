@@ -24,7 +24,7 @@ import { User, Owner, Tenant, PortalAccountStatus } from "../../types";
 import { Badge } from "../common/Badge";
 import { Modal } from "../common/Modal";
 import { QuickCommunicationButtons } from "../common/QuickCommunicationButtons";
-import { getAuthToken } from "../../utils/apiClient";
+import { getAuthToken, authenticatedFetch } from "../../utils/apiClient";
 import { matchAnyArabicSearch } from "../../utils/arabicTextNormalizer";
 
 export const PortalAccountsSettings: React.FC = () => {
@@ -132,13 +132,8 @@ export const PortalAccountsSettings: React.FC = () => {
       }
 
       // Now dispatch the secure activation link
-      const token = await getAuthToken();
-      const res = await fetch("/api/auth/send-portal-activation-email", { credentials: "include",
+      const res = await authenticatedFetch("/api/auth/send-portal-activation-email", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token || ""}`,
-        },
         body: JSON.stringify({
           email,
           name,
@@ -187,13 +182,8 @@ export const PortalAccountsSettings: React.FC = () => {
     // Attempt to sync email securely
     if (editEmail !== editingEmailTarget.email) {
        try {
-         const token = await getAuthToken();
-         const res = await fetch("/api/auth/sync-email", { credentials: "include",
+         const res = await authenticatedFetch("/api/auth/sync-email", {
            method: "POST",
-           headers: {
-             "Content-Type": "application/json",
-             Authorization: `Bearer ${token || ""}`,
-           },
            body: JSON.stringify({
              targetId: editingEmailTarget.id,
              role: portalRole,

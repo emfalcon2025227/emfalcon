@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { ShieldCheck, XCircle, AlertCircle, RefreshCcw, Building2 } from "lucide-react";
 import { useLanguage } from "../../context/LanguageContext";
 import QRCode from "react-qr-code";
+import { authenticatedFetch } from "../../utils/apiClient";
 
 interface VerificationData {
   valid: boolean;
@@ -25,7 +26,7 @@ export const PublicReceiptVerification: React.FC<{ token: string }> = ({ token }
   useEffect(() => {
     document.title = language === "ar" ? "التحقق من الإيصال" : "Receipt Verification";
     
-    fetch(`/api/verify/receipt/${token}`, { credentials: "include" })
+    authenticatedFetch(`/api/verify/receipt/${token}`)
       .then((res) => res.json())
       .then((resData) => {
         if (resData.error) {

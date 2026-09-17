@@ -152,7 +152,7 @@ export const AIAssistantChat: React.FC<AIAssistantChatProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch("/api/health", { credentials: "include" })
+    authenticatedFetch("/api/health")
       .then((res) => res.json())
       .then((data) => {
         if (data && typeof data.aiReady === "boolean" && !data.aiReady) {

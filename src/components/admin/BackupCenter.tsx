@@ -5,6 +5,7 @@ import { useLanguage } from "../../context/LanguageContext";
 import { useData } from "../../context/DataContext";
 import { auth, db } from "../../lib/firebase";
 import { collection, query, orderBy, onSnapshot, limit } from "firebase/firestore";
+import { authenticatedFetch } from "../../utils/apiClient";
 
 export const BackupCenter: React.FC = () => {
   const { language } = useLanguage();
@@ -35,13 +36,11 @@ export const BackupCenter: React.FC = () => {
     setErrorMsg(null);
     setBackupSuccess(null);
     try {
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch("/api/backups/manual", { credentials: "include",
+      const res = await authenticatedFetch("/api/backups/manual", {
         method: "POST",
-        headers: { "Authorization": `Bearer ${token}` }
       });
       const data = await res.json();
-      if (!data.success) throw new Error(data.error);
+      if (!data.success) throw new Error(data.message || data.error || (language === "ar" ? "تعذر إنشاء النسخة الاحتياطية." : "Failed to create backup."));
       
       setBackupSuccess(
         language === "ar" 
@@ -65,22 +64,17 @@ export const BackupCenter: React.FC = () => {
     setBackupSuccess(null);
     
     try {
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch("/api/backups/restore", { credentials: "include",
+      const res = await authenticatedFetch("/api/backups/restore", {
         method: "POST",
-        headers: { 
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json"
-        },
         body: JSON.stringify({ backupId: selectedBackup.id })
       });
       const data = await res.json();
-      if (!data.success) throw new Error(data.error);
+      if (!data.success) throw new Error(data.message || data.error || (language === "ar" ? "تعذر استعادة النسخة الاحتياطية." : "Failed to restore backup."));
       
       setBackupSuccess(
         language === "ar" 
-        ? `تمت استعادة النسخة الاحتياطية بنجاح. نسخة قبل الاستعادة: ${data.result.preRestoreId}` 
-        : `Restore successful. Pre-Restore Backup ID: ${data.result.preRestoreId}`
+        ? `تمت استعادة النسخة الاحتياطية بنجاح. نسخة قبل الاستعادة: ${data.result?.preRestoreId || data.preRestoreId || ''}` 
+        : `Restore successful. Pre-Restore Backup ID: ${data.result?.preRestoreId || data.preRestoreId || ''}`
       );
       setSelectedBackup(null);
       setRestoreConfirmText("");

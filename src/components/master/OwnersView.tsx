@@ -15,7 +15,7 @@ import { Owner360Workspace } from "./Owner360Workspace";
 import { getBilingualSuggestion, getLocalBilingualSuggestion } from "../../utils/bilingualNaming";
 import { SmartDocumentCaptureModal } from "../ai/SmartDocumentCaptureModal";
 import { DocumentPreviewModal } from "../common/DocumentPreviewModal";
-import { getAuthToken } from "../../utils/apiClient";
+import { getAuthToken, authenticatedFetch } from "../../utils/apiClient";
 
 
 export const OwnersView: React.FC = () => {
@@ -557,13 +557,8 @@ export const OwnersView: React.FC = () => {
     if (editingOwner) {
       if (email && email.includes("@") && email !== editingOwner.email) {
         try {
-          const token = await getAuthToken();
-          const res = await fetch("/api/auth/sync-email", { credentials: "include",
+          const res = await authenticatedFetch("/api/auth/sync-email", {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token || ""}`,
-            },
             body: JSON.stringify({
               targetId: editingOwner.id,
               role: "OWNER",

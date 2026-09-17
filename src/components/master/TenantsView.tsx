@@ -15,7 +15,7 @@ import { matchAnyArabicSearch, normalizeArabicText } from "../../utils/arabicTex
 import { getBilingualSuggestion, getLocalBilingualSuggestion } from "../../utils/bilingualNaming";
 import { SmartDocumentCaptureModal } from "../ai/SmartDocumentCaptureModal";
 import { DocumentPreviewModal } from "../common/DocumentPreviewModal";
-import { getAuthToken } from "../../utils/apiClient";
+import { getAuthToken, authenticatedFetch } from "../../utils/apiClient";
 
 
 interface TenantsViewProps {
@@ -604,13 +604,8 @@ export const TenantsView: React.FC<TenantsViewProps> = ({ onSelectTenant }) => {
       if (editingTenant) {
         if (email && email.includes("@") && email !== editingTenant.email) {
           try {
-            const token = await getAuthToken();
-            const res = await fetch("/api/auth/sync-email", { credentials: "include",
+            const res = await authenticatedFetch("/api/auth/sync-email", {
               method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token || ""}`,
-              },
               body: JSON.stringify({
                 targetId: editingTenant.id,
                 role: "TENANT",

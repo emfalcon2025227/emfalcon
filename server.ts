@@ -5211,7 +5211,24 @@ function startPaymentReminderScheduler() {
   console.log("[Scheduler] Automated payment reminder scheduled for 09:00 AM daily");
 }
 
-// Global API Error Handler Middleware (Prevents Stack Trace & Internal Info Leakage)
+// Central Backup Endpoints
+app.post("/api/backups/manual", authenticateFirebaseToken, requireAdmin, async (req, res) => {
+  return res.status(503).type("application/json").json({
+    success: false,
+    error: "SERVICE_UNAVAILABLE",
+    message: "خدمة النسخ الاحتياطي اليدوي تتطلب ضبط بيانات اعتماد Google Drive الخدمية في بيئة التشغيل.",
+  });
+});
+
+app.post("/api/backups/restore", authenticateFirebaseToken, requireAdmin, async (req, res) => {
+  return res.status(503).type("application/json").json({
+    success: false,
+    error: "SERVICE_UNAVAILABLE",
+    message: "خدمة استعادة النسخ الاحتياطية تتطلب تهيئة بيئة التشغيل المتقدمة.",
+  });
+});
+
+// 3. Global API Error Handler Middleware (Prevents Stack Trace & Internal Info Leakage)
 app.use("/api", (err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error(`[API Uncaught Exception] [${req.method}] ${req.originalUrl}:`, err);
 
@@ -5222,11 +5239,21 @@ app.use("/api", (err: any, req: express.Request, res: express.Response, next: ex
   const statusCode = typeof err?.status === "number" && err.status >= 400 && err.status < 600 ? err.status : 500;
   const isProduction = process.env.NODE_ENV === "production";
 
-  return res.status(statusCode).json({
+  return res.status(statusCode).type("application/json").json({
     success: false,
     error: isProduction ? "INTERNAL_SERVER_ERROR" : (err?.message || "An unexpected error occurred"),
     message: isProduction ? "حدث خطأ غير متوقع في الخادم أثناء معالجة الطلب." : err?.message,
     statusCode,
+  });
+});
+
+// 4. API 404 JSON handling (Strictly catches ALL unmatched /api/* requests so they NEVER fall through to HTML/SPA)
+app.all(["/api", "/api/*"], (req: express.Request, res: express.Response) => {
+  return res.status(404).type("application/json").json({
+    success: false,
+    error: "API_ROUTE_NOT_FOUND",
+    message: "Requested API endpoint was not found.",
+    statusCode: 404,
   });
 });
 
@@ -5237,13 +5264,34 @@ async function startServer() {
   if (process.env.NODE_ENV === "production") {
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
+      // Guard against any /api request reaching SPA fallback
+      if (req.path.startsWith("/api")) {
+        return res.status(404).type("application/json").json({
+          success: false,
+          error: "API_ROUTE_NOT_FOUND",
+          message: "Requested API endpoint was not found.",
+          statusCode: 404,
+        });
+      }
       if (fs.existsSync(path.join(distPath, "index.html"))) {
         res.sendFile(path.join(distPath, "index.html"));
       } else {
-        res.status(404).send("Application index.html not found. Please run build.");
+        res.status(404).type("text/plain").send("Application index.html not found. Please run build.");
       }
     });
   } else {
+    // In dev mode: ensure Vite never intercepts /api requests
+    app.use((req, res, next) => {
+      if (req.path.startsWith("/api")) {
+        return res.status(404).type("application/json").json({
+          success: false,
+          error: "API_ROUTE_NOT_FOUND",
+          message: "Requested API endpoint was not found.",
+          statusCode: 404,
+        });
+      }
+      next();
+    });
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
