@@ -103,10 +103,10 @@ function getAdminApp() {
         projectId: firebaseAppletConfig.projectId,
      });
   } catch(e: any) {
-     console.error("[Firebase Admin] Final fallback failed:", e.message);
+     console.warn("[Firebase Admin] Credentials initialization unavailable:", e?.message || e);
   }
 
-  throw new Error("No valid Firebase Admin credentials found.");
+  return null;
 }
 
 function getFirestoreAdmin() {
@@ -3307,14 +3307,11 @@ app.get("/api/integrations/google-drive/status", async (req, res) => {
 // 2. Generate Central Admin Connect Authorization URL (One-Time Setup)
 app.get("/api/integrations/google-drive/connect", authenticateFirebaseToken, requireAdmin, async (req, res) => {
   try {
-    const origin = req.headers.origin || `${req.protocol}://${req.get("host")}`;
-    const customRedirectUri = (req.query.redirect_uri as string) || undefined;
-    const { authUrl, state } = generateConnectAuthUrl({
+    // Strictly canonical: no client host header manipulation for security
+    const { authUrl, state, redirectUri } = generateConnectAuthUrl({
       adminUid: req.user.uid,
-      origin,
-      customRedirectUri,
     });
-    return res.json({ success: true, authUrl, state });
+    return res.json({ success: true, authUrl, state, redirectUri });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -3523,8 +3520,10 @@ app.post("/api/integrations/google-drive/upload", authenticateFirebaseToken, req
   }
 });
 
-// 8. Backward-Compatible /api/connections/drive-token using Central Token
+// 8. LEGACY COMPATIBILITY ONLY: /api/connections/drive-token (Deprecated - use server-side upload)
 app.get("/api/connections/drive-token", authenticateFirebaseToken, async (req, res) => {
+  // Label request for audit traceability
+  console.log(`[LEGACY COMPATIBILITY ONLY] /api/connections/drive-token accessed by uid=${req.user?.uid}`);
   try {
     const tokenInfo = await getValidAccessToken();
     return res.json({
@@ -5280,10 +5279,7 @@ async function startServer() {
       next();
     });
     const vite = await createViteServer({
-      server: {
-        middlewareMode: true,
-        hmr: false,
-      },
+      server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);

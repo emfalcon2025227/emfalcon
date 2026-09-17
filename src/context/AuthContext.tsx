@@ -668,6 +668,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           role: "SYSTEM_OWNER",
           isActive: true,
           firebaseUid: fUid,
+          createdAt: new Date().toISOString(),
           lastLogin: new Date().toISOString()
         };
         // Persist the bootstrapped identity to Firestore canonically

@@ -24,7 +24,10 @@ export interface SystemConfigMatrixResponse {
   success: boolean;
   origin: string;
   calculatedCallbackUri: string;
+  canonicalCallbackUri?: string;
   configuredRedirectUri: string;
+  oauthRedirectUriUsed?: string;
+  exactMatch?: boolean;
   oauthMatch: boolean;
   googleDrive: {
     connected: boolean;
@@ -34,6 +37,10 @@ export interface SystemConfigMatrixResponse {
     rootFolderId?: string;
     clientId: string;
     scopes: string[];
+    canonicalRedirectUri?: string;
+    configuredRedirectUri?: string;
+    oauthRedirectUriUsed?: string;
+    exactMatch?: boolean;
   };
   items: ConfigMatrixItem[];
 }

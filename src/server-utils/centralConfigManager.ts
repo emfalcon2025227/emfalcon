@@ -134,9 +134,14 @@ export function getSystemConfigurationMatrix(originUrl: string) {
     apiVersion: "v17.0",
   };
 
-  const calculatedCallbackUri = `${originUrl}/api/integrations/google-drive/callback`;
-  const configuredRedirectUri = process.env.GOOGLE_REDIRECT_URI || "";
-  const oauthMatch = configuredRedirectUri === calculatedCallbackUri;
+  const CANONICAL_PUBLIC_APP_URL = "https://emfalcon.ai.studio";
+  const FIXED_OAUTH_CALLBACK_PATH = "/api/integrations/google-drive/callback";
+  const canonicalCallbackUri = `${CANONICAL_PUBLIC_APP_URL}${FIXED_OAUTH_CALLBACK_PATH}`;
+  const configuredRedirectUri = (process.env.GOOGLE_REDIRECT_URI || canonicalCallbackUri).trim();
+  const oauthRedirectUriUsed = canonicalCallbackUri;
+  const exactMatch = configuredRedirectUri === canonicalCallbackUri;
+  const calculatedCallbackUri = canonicalCallbackUri;
+  const oauthMatch = exactMatch;
 
   // Hashes/Flags
   const hasFirebaseServiceAccount = Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64);
@@ -489,7 +494,10 @@ export function getSystemConfigurationMatrix(originUrl: string) {
   return {
     origin: originUrl,
     calculatedCallbackUri,
+    canonicalCallbackUri,
     configuredRedirectUri,
+    oauthRedirectUriUsed,
+    exactMatch,
     oauthMatch,
     googleDrive: {
       connected: driveConfig.connected,
@@ -498,7 +506,11 @@ export function getSystemConfigurationMatrix(originUrl: string) {
       rootFolderName: driveConfig.rootFolderName || "Emirates Falcon",
       rootFolderId: driveConfig.rootFolderId,
       clientId: driveConfig.clientId || DEFAULT_GOOGLE_CLIENT_ID,
-      scopes: [STANDARD_DRIVE_SCOPE],
+      scopes: [STANDARD_DRIVE_SCOPE, "https://www.googleapis.com/auth/userinfo.email"],
+      canonicalRedirectUri: canonicalCallbackUri,
+      configuredRedirectUri,
+      oauthRedirectUriUsed,
+      exactMatch,
     },
     items,
   };

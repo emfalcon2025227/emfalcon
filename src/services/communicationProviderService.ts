@@ -200,27 +200,27 @@ export async function sendTestEmailMessageOnServer(
 }
 
 // ==============================================================
-// LEGACY MOCK FALLBACKS FOR TEST COMPLIANCE (PHASE 13/14 SUITES)
+// REAL COMMUNICATION INTEGRATION (STRICT ZERO-MOCK STANDARD)
 // ==============================================================
 
 let storedWhatsAppConfig: WhatsAppConfig = {
-  phoneNumberId: "1029384756",
-  accessToken: "EAAB_SECURE_TOKEN_MASKED_XYZ",
-  wabaId: "9988776655",
+  phoneNumberId: "",
+  accessToken: "",
+  wabaId: "",
   apiVersion: "v17.0",
-  enabled: true,
-  status: "CONNECTION_VERIFIED",
+  enabled: false,
+  status: "NOT_CONFIGURED",
 };
 
 let storedGmailConfig: GmailSmtpConfig = {
-  smtpUser: "emfalcon2025227@gmail.com",
-  appPassword: "app_password_masked_xyz",
+  smtpUser: "",
+  appPassword: "",
   smtpHost: "smtp.gmail.com",
   smtpPort: 465,
   encryption: "SSL",
   senderName: "Emirates Falcon ERP Notifications",
-  enabled: true,
-  status: "CONNECTION_VERIFIED",
+  enabled: false,
+  status: "NOT_CONFIGURED",
 };
 
 export function getCommunicationProvidersConfig() {
@@ -263,35 +263,41 @@ export function saveGmailConfig(config: Partial<GmailSmtpConfig>) {
 }
 
 export async function testWhatsAppConnection(): Promise<{ success: boolean; message: string }> {
-  if (!storedWhatsAppConfig.phoneNumberId || !storedWhatsAppConfig.accessToken) {
-    storedWhatsAppConfig.status = "CONNECTION_FAILED";
-    return { success: false, message: "Missing Phone Number ID or Access Token." };
+  try {
+    const res = await testWhatsAppConnectionOnServer();
+    if (res.success && res.status === "VERIFIED") {
+      storedWhatsAppConfig.status = "VERIFIED";
+      return { success: true, message: "WhatsApp Cloud API connection verified successfully." };
+    }
+    storedWhatsAppConfig.status = "ERROR";
+    return { success: false, message: res.safeErrorMessage || res.errorCode || "WhatsApp Connection Failed" };
+  } catch (err: any) {
+    storedWhatsAppConfig.status = "ERROR";
+    return { success: false, message: err?.message || "Failed to verify WhatsApp connection" };
   }
-  storedWhatsAppConfig.status = "CONNECTION_VERIFIED";
-  return { success: true, message: "WhatsApp Cloud API connection verified successfully." };
 }
 
 export async function testGmailConnection(): Promise<{ success: boolean; message: string }> {
-  if (!storedGmailConfig.smtpUser || !storedGmailConfig.appPassword) {
-    storedGmailConfig.status = "CONNECTION_FAILED";
-    return { success: false, message: "Missing SMTP User or Gmail App Password." };
+  try {
+    const res = await testGmailConnectionOnServer();
+    if (res.success && res.status === "VERIFIED") {
+      storedGmailConfig.status = "VERIFIED";
+      return { success: true, message: "Gmail SMTP secure connection verified successfully." };
+    }
+    storedGmailConfig.status = "ERROR";
+    return { success: false, message: res.safeErrorMessage || res.errorCode || "Gmail SMTP Connection Failed" };
+  } catch (err: any) {
+    storedGmailConfig.status = "ERROR";
+    return { success: false, message: err?.message || "Failed to verify Gmail connection" };
   }
-  storedGmailConfig.status = "CONNECTION_VERIFIED";
-  return { success: true, message: "Gmail SMTP secure connection verified successfully." };
 }
 
 export async function sendTestWhatsAppMessage(phone: string, message: string): Promise<{ success: boolean; messageId: string }> {
-  return {
-    success: true,
-    messageId: `WA_TEST_${Date.now()}_${Date.now() % 10000}`,
-  };
+  return sendTestWhatsAppMessageOnServer(phone, message);
 }
 
 export async function sendTestEmailMessage(email: string, subject: string, body: string): Promise<{ success: boolean; messageId: string }> {
-  return {
-    success: true,
-    messageId: `EMAIL_TEST_${Date.now()}_${Date.now() % 10000}`,
-  };
+  return sendTestEmailMessageOnServer(email, subject, body);
 }
 
 

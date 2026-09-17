@@ -276,15 +276,24 @@ setInterval(() => {
 }, 60 * 1000);
 
 // ---------------------------------------------------------------------------
-// 4. OAuth2 Client Factory
+// 4. OAuth2 Client Factory & Canonical Redirect
 // ---------------------------------------------------------------------------
+export const CANONICAL_PUBLIC_APP_URL = "https://emfalcon.ai.studio";
+export const FIXED_OAUTH_CALLBACK_PATH = "/api/integrations/google-drive/callback";
+export const CANONICAL_OAUTH_REDIRECT_URI = `${CANONICAL_PUBLIC_APP_URL}${FIXED_OAUTH_CALLBACK_PATH}`;
+
+export function getCanonicalRedirectUri(): string {
+  const envVal = process.env.GOOGLE_REDIRECT_URI?.trim();
+  return envVal || CANONICAL_OAUTH_REDIRECT_URI;
+}
+
 export function getOAuth2Client(customRedirectUri?: string) {
   const secrets = loadStoredSecrets();
   const config = getGoogleDriveConfig();
 
   const clientId = process.env.GOOGLE_CLIENT_ID || config.clientId || DEFAULT_GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET || secrets.googleClientSecret || "";
-  const redirectUri = customRedirectUri || process.env.GOOGLE_REDIRECT_URI || "";
+  const redirectUri = customRedirectUri || getCanonicalRedirectUri();
 
   return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 }
@@ -294,13 +303,11 @@ export function getOAuth2Client(customRedirectUri?: string) {
 // ---------------------------------------------------------------------------
 export function generateConnectAuthUrl(params: {
   adminUid: string;
-  origin: string;
+  origin?: string;
   customRedirectUri?: string;
 }): { authUrl: string; state: string; redirectUri: string } {
-  const redirectUri =
-    params.customRedirectUri ||
-    process.env.GOOGLE_REDIRECT_URI ||
-    `${params.origin}/api/integrations/google-drive/callback`;
+  // Always enforce trusted canonical redirect URI, preventing client host header poisoning
+  const redirectUri = getCanonicalRedirectUri();
 
   const oauth2Client = getOAuth2Client(redirectUri);
   const state = crypto.randomBytes(32).toString("hex");
@@ -328,20 +335,47 @@ export async function handleOAuthCallback(
   code: string,
   state: string
 ): Promise<{ success: boolean; email?: string; error?: string }> {
-  const stateRecord = pendingOAuthStates.get(state);
-  if (!stateRecord) {
+  // 1. State exists & valid
+  if (!state || typeof state !== "string") {
     return {
       success: false,
       error: "INVALID_STATE",
     };
   }
 
-  // Consume state to prevent replay attacks
+  const stateRecord = pendingOAuthStates.get(state);
+  if (!stateRecord) {
+    return {
+      success: false,
+      error: "STATE_NOT_FOUND_OR_REUSED",
+    };
+  }
+
+  // 2. Consume state immediately (One-time use / prevent replay attacks)
   pendingOAuthStates.delete(state);
+
+  // 3. State expiration check (Max 10 minutes lifetime)
+  const MAX_STATE_LIFETIME_MS = 10 * 60 * 1000;
+  if (Date.now() - stateRecord.createdAt > MAX_STATE_LIFETIME_MS) {
+    return {
+      success: false,
+      error: "STATE_EXPIRED",
+    };
+  }
+
+  // 4. Validate redirect configuration matches canonical URI
+  const canonicalRedirect = getCanonicalRedirectUri();
+  if (stateRecord.redirectUri !== canonicalRedirect) {
+    return {
+      success: false,
+      error: "REDIRECT_URI_MISMATCH",
+    };
+  }
 
   const oauth2Client = getOAuth2Client(stateRecord.redirectUri);
 
   try {
+    // 5. Exchange authorization code
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
 
@@ -354,6 +388,7 @@ export async function handleOAuthCallback(
       console.warn("[OAuth Callback] Could not fetch userinfo:", e.message);
     }
 
+    // 6. Verify refresh token is returned
     const secrets = loadStoredSecrets();
     const effectiveRefreshToken = tokens.refresh_token || secrets.googleDriveRefreshToken;
 
@@ -364,19 +399,30 @@ export async function handleOAuthCallback(
       };
     }
 
-    // Encrypt & store refresh token server-side
-    saveGoogleDriveSecrets({ refreshToken: effectiveRefreshToken });
-
-    // Initialize root folder "Emirates Falcon" in Drive
+    // 7. Verify existing root folder "Emirates Falcon" in Drive (Strictly No Auto-Creation)
     let rootFolderId = "";
     try {
       const drive = google.drive({ version: "v3", auth: oauth2Client });
       rootFolderId = await ensureDriveFolder(drive, "Emirates Falcon", "root");
     } catch (err: any) {
-      console.warn("[OAuth Callback] Root folder check warning:", err.message);
+      console.error("[OAuth Callback] Root folder check failed:", err.message);
+      return {
+        success: false,
+        error: "ROOT_FOLDER_NOT_FOUND",
+      };
     }
 
-    // Update connection status
+    if (!rootFolderId) {
+      return {
+        success: false,
+        error: "ROOT_FOLDER_NOT_FOUND",
+      };
+    }
+
+    // 8. Encrypt & store refresh token server-side only upon full verification
+    saveGoogleDriveSecrets({ refreshToken: effectiveRefreshToken });
+
+    // 9. Update connection status to CONNECTED
     updateGoogleDriveConfig({
       connected: true,
       status: "CONNECTED",
