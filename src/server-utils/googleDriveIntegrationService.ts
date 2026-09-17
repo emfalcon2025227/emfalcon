@@ -417,16 +417,7 @@ export async function ensureDriveFolder(
     return res.data.files[0].id;
   }
 
-  const createRes = await drive.files.create({
-    requestBody: {
-      name: folderName,
-      mimeType: "application/vnd.google-apps.folder",
-      parents: parentId ? [parentId] : undefined,
-    },
-    fields: "id",
-  });
-
-  return createRes.data.id;
+  throw new Error(`ROOT_FOLDER_NOT_FOUND: The folder "${folderName}" was not found in Google Drive.`);
 }
 
 // ---------------------------------------------------------------------------

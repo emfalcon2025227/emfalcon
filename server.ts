@@ -272,11 +272,6 @@ declare global {
 }
 
 async function resolveUserRole(uid: string, email?: string, token?: string): Promise<{ role: string; ownerId?: string; tenantId?: string; name?: string }> {
-  // Hardcoded owner fallback checked FIRST to avoid unnecessary DB queries and errors
-  if (email === "emfalcon2025227@gmail.com" || email === "m_hamed@msn.com") {
-    return { role: "SYSTEM_OWNER", name: "System Owner" };
-  }
-
   try {
     const adminDb = getFirestoreAdmin();
     if (!adminDb) {
@@ -352,16 +347,8 @@ async function authenticateFirebaseToken(req: express.Request, res: express.Resp
     }
 
     let decoded: any = {};
-    try {
-      decoded = await adminAuth.verifyIdToken(token);
-    } catch (verifyErr: any) {
-      console.error("[Auth Middleware] verifyIdToken failed, attempting fallback payload extraction:", verifyErr.message);
-      // Emergency fallback: decode the JWT payload manually if verifyIdToken fails due to project mismatch
-      const base64Url = token.split(".")[1];
-      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-      const jsonPayload = Buffer.from(base64, "base64").toString("utf8");
-      decoded = JSON.parse(jsonPayload);
-    }
+    decoded = await adminAuth.verifyIdToken(token);
+    
     uid = decoded.uid || decoded.user_id;
     email = decoded.email || "";
 

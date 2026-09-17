@@ -63,6 +63,7 @@ export const CentralSystemConfigCenter: React.FC<CentralSystemConfigCenterProps>
 
   const [loading, setLoading] = useState<boolean>(true);
   const [matrixData, setMatrixData] = useState<SystemConfigMatrixResponse | null>(null);
+  const [iamError, setIamError] = useState<{ projectId: string } | null>(null);
   const [diagnostics, setDiagnostics] = useState<DiagnosticResult[]>([]);
   const [runningDiagnostics, setRunningDiagnostics] = useState<boolean>(false);
   const [auditLogs, setAuditLogs] = useState<ConfigAuditEntry[]>([]);
@@ -131,6 +132,15 @@ export const CentralSystemConfigCenter: React.FC<CentralSystemConfigCenterProps>
       }
     } catch (err) {
       console.warn("Error loading system config matrix:", err);
+      try {
+        const healthRes = await fetch("/api/health");
+        const healthData = await healthRes.json();
+        if (healthData?.dbDiagnostics?.queryError?.includes("PERMISSION_DENIED")) {
+          setIamError({ projectId: healthData.dbDiagnostics.projectId || "gen-lang-client-0196715356" });
+        }
+      } catch (healthErr) {
+        // Ignore
+      }
     } finally {
       setLoading(false);
     }
@@ -266,6 +276,36 @@ export const CentralSystemConfigCenter: React.FC<CentralSystemConfigCenterProps>
       setSavingConfig(false);
     }
   };
+
+  // IAM Error Guard
+  if (iamError) {
+    return (
+      <div className="min-h-[500px] flex items-center justify-center p-6 bg-slate-50 dark:bg-slate-900 rounded-xl" dir="ltr">
+        <div className="max-w-xl w-full bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-xl border border-red-500 text-left">
+          <div className="flex items-center gap-3 mb-4 text-red-600">
+            <Server className="w-8 h-8" />
+            <h2 className="text-xl font-bold">IAM Configuration Required</h2>
+          </div>
+          <div className="bg-slate-900 text-green-400 p-4 rounded-lg font-mono text-sm mb-6 whitespace-pre-wrap">
+            {`Firebase Admin runtime identity is missing:\nroles/serviceusage.serviceUsageConsumer\n\nProject: ${iamError.projectId}\nRequired permission: serviceusage.services.use`}
+          </div>
+          <p className="text-slate-600 dark:text-slate-400 mb-6">
+            The application's service account does not have permission to read from Firestore. 
+            This triggered the "FAIL CLOSED" security policy, locking out all administrative access to system configurations.
+            Please grant the required IAM role in the Google Cloud Console to restore access.
+          </p>
+          {onNavigateBack && (
+            <button
+              onClick={onNavigateBack}
+              className="w-full py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 rounded-xl font-medium transition-colors"
+            >
+              Return to Dashboard
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // RBAC Access Guard
   if (!isAdmin) {
