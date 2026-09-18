@@ -138,16 +138,20 @@ export const CentralSystemConfigCenter: React.FC<CentralSystemConfigCenterProps>
           whatsappToken: "",
         }));
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn("Error loading system config matrix:", err);
-      try {
-        const healthRes = await fetch("/api/health");
-        const healthData = await healthRes.json();
-        if (healthData?.dbDiagnostics?.queryError?.includes("PERMISSION_DENIED")) {
-          setIamError({ projectId: healthData.dbDiagnostics.projectId || "gen-lang-client-0196715356" });
+      if (err?.code === "FIRESTORE_PERMISSION_DENIED" || err?.message?.includes("PERMISSION_DENIED") || err?.status === 503) {
+        setIamError({ projectId: err?.projectId || "gen-lang-client-0196715356" });
+      } else {
+        try {
+          const healthRes = await fetch("/api/health");
+          const healthData = await healthRes.json();
+          if (healthData?.dbDiagnostics?.queryError?.includes("PERMISSION_DENIED")) {
+            setIamError({ projectId: healthData.dbDiagnostics.projectId || "gen-lang-client-0196715356" });
+          }
+        } catch (healthErr) {
+          // Ignore
         }
-      } catch (healthErr) {
-        // Ignore
       }
     } finally {
       setLoading(false);

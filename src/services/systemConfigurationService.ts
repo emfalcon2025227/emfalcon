@@ -82,7 +82,11 @@ export async function fetchSystemConfigMatrix(): Promise<SystemConfigMatrixRespo
   const res = await authenticatedFetch("/api/admin/system-config");
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}));
-    throw new Error(errData.message || `Failed to fetch system config matrix (${res.status})`);
+    const err = new Error(errData.message || `Failed to fetch system config matrix (${res.status})`) as any;
+    err.status = res.status;
+    err.code = errData.code || errData.error;
+    err.projectId = errData.projectId;
+    throw err;
   }
   return res.json();
 }

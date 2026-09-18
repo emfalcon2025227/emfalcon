@@ -271,45 +271,111 @@ declare global {
   }
 }
 
-async function resolveUserRole(uid: string, email?: string, token?: string): Promise<{ role: string; ownerId?: string; tenantId?: string; name?: string }> {
-  try {
-    const adminDb = getFirestoreAdmin();
-    if (!adminDb) {
-      console.error("[Auth RBAC] Firestore Admin not initialized. Failing closed.");
-      return { role: "GUEST" };
-    }
+export class AuthResolutionError extends Error {
+  code: "AUTH_SERVICE_UNAVAILABLE" | "FIRESTORE_PERMISSION_DENIED";
+  details?: string;
 
+  constructor(code: "AUTH_SERVICE_UNAVAILABLE" | "FIRESTORE_PERMISSION_DENIED", message: string, details?: string) {
+    super(message);
+    this.name = "AuthResolutionError";
+    this.code = code;
+    this.details = details;
+  }
+}
+
+export type RoleResolutionOutcome = "USER_FOUND" | "USER_NOT_FOUND" | "AUTH_SERVICE_UNAVAILABLE" | "FIRESTORE_PERMISSION_DENIED";
+
+async function resolveUserRole(
+  uid: string,
+  email?: string,
+  token?: string
+): Promise<{
+  status: RoleResolutionOutcome;
+  role: string;
+  ownerId?: string;
+  tenantId?: string;
+  name?: string;
+}> {
+  const adminDb = getFirestoreAdmin();
+  if (!adminDb) {
+    console.error("[Auth RBAC] Firestore Admin not initialized. Auth service unavailable.");
+    throw new AuthResolutionError(
+      "AUTH_SERVICE_UNAVAILABLE",
+      "Firestore Admin is not initialized on the server.",
+      "The server cannot connect to Firestore Admin client."
+    );
+  }
+
+  let directDoc;
+  let qUid;
+  let userData = null;
+
+  try {
     // 1. Strict identity by Canonical UID
-    const directDoc = await adminDb.collection("users").doc(uid).get();
-    let userData = null;
+    directDoc = await adminDb.collection("users").doc(uid).get();
 
     if (directDoc.exists) {
       userData = directDoc.data();
     } else {
       // 2. Legacy fallback by firebaseUid field
-      const qUid = await adminDb.collection("users").where("firebaseUid", "==", uid).limit(1).get();
+      qUid = await adminDb.collection("users").where("firebaseUid", "==", uid).limit(1).get();
       if (!qUid.empty) {
         userData = qUid.docs[0].data();
       }
     }
-
-    if (userData) {
-      return {
-        role: userData.role || "GUEST",
-        ownerId: userData.ownerId,
-        tenantId: userData.tenantId,
-        name: userData.nameAr || userData.nameEn || userData.name || userData.username,
-      };
-    }
   } catch (err: any) {
-    // Only log if it's not the known permission denied error from AI Studio ADC
-    if (!err.message?.includes("PERMISSION_DENIED")) {
-      console.error("[Auth RBAC] Failed to query user document:", err.message);
+    const errMsg = err?.message || String(err);
+    console.error("[Auth RBAC] Firestore access failure during user role resolution:", errMsg);
+
+    if (
+      errMsg.includes("PERMISSION_DENIED") ||
+      errMsg.includes("Missing or insufficient permissions") ||
+      err?.code === 7 ||
+      err?.code === "permission-denied"
+    ) {
+      throw new AuthResolutionError(
+        "FIRESTORE_PERMISSION_DENIED",
+        "Permission denied when reading user roles from Firestore.",
+        errMsg
+      );
     }
+
+    if (
+      errMsg.includes("UNAVAILABLE") ||
+      errMsg.includes("DEADLINE_EXCEEDED") ||
+      err?.code === 14 ||
+      err?.code === 4
+    ) {
+      throw new AuthResolutionError(
+        "AUTH_SERVICE_UNAVAILABLE",
+        "Firestore service is currently unavailable or timed out.",
+        errMsg
+      );
+    }
+
+    // Rethrow any other unexpected database infrastructure failures
+    throw new AuthResolutionError(
+      "AUTH_SERVICE_UNAVAILABLE",
+      `Unexpected database error during user authorization: ${errMsg}`,
+      errMsg
+    );
   }
-  
-  // Secure default fallback: never grant elevated roles
-  return { role: "GUEST" };
+
+  if (userData) {
+    return {
+      status: "USER_FOUND",
+      role: userData.role || "GUEST",
+      ownerId: userData.ownerId,
+      tenantId: userData.tenantId,
+      name: userData.nameAr || userData.nameEn || userData.name || userData.username,
+    };
+  }
+
+  // User identity verified via Firebase Auth, but no record exists in Firestore users collection
+  return {
+    status: "USER_NOT_FOUND",
+    role: "GUEST",
+  };
 }
 
 async function authenticateFirebaseToken(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -332,30 +398,47 @@ async function authenticateFirebaseToken(req: express.Request, res: express.Resp
     });
   }
 
+  let uid = "";
+  let email = "";
+
+  const adminAuth = getAdminAuthClient();
+  if (!adminAuth) {
+    console.error("[Auth Middleware Error]: Firebase Admin SDK unavailable.");
+    return res.status(503).json({
+      success: false,
+      error: "SERVICE_UNAVAILABLE",
+      code: "AUTH_SERVICE_UNAVAILABLE",
+      message: "Firebase authentication service is not initialized on the server.",
+      _padding: " ".repeat(1024),
+    });
+  }
+
   try {
-    let uid = "";
-    let email = "";
-
-    const adminAuth = getAdminAuthClient();
-    if (!adminAuth) {
-      console.error("[Auth Middleware Error]: Firebase Admin SDK unavailable.");
-      return res.status(503).json({
-        success: false,
-        error: "SERVICE_UNAVAILABLE",
-        message: "Firebase authentication service is not initialized on the server.",
-      });
-    }
-
-    let decoded: any = {};
-    decoded = await adminAuth.verifyIdToken(token);
-    
+    const decoded: any = await adminAuth.verifyIdToken(token);
     uid = decoded.uid || decoded.user_id;
     email = decoded.email || "";
+  } catch (verifyErr: any) {
+    console.error("[Auth Middleware Error]: verifyIdToken failed:", verifyErr?.message || verifyErr);
+    return res.status(401).json({
+      success: false,
+      error: "UNAUTHORIZED",
+      code: "INVALID_FIREBASE_ID_TOKEN",
+      message: "Failed to authenticate Firebase token.",
+      _padding: " ".repeat(1024),
+    });
+  }
 
-    if (!uid) {
-      return res.status(401).json({ success: false, error: "UNAUTHORIZED", message: "User ID not found in token." });
-    }
+  if (!uid) {
+    return res.status(401).json({
+      success: false,
+      error: "UNAUTHORIZED",
+      code: "MISSING_UID",
+      message: "User ID not found in token.",
+      _padding: " ".repeat(1024),
+    });
+  }
 
+  try {
     const { role, ownerId, tenantId, name } = await resolveUserRole(uid, email, token);
 
     req.user = {
@@ -368,12 +451,38 @@ async function authenticateFirebaseToken(req: express.Request, res: express.Resp
     };
 
     return next();
-  } catch (err: any) {
-    console.error("[Auth Middleware Error]:", err?.message || err);
-    return res.status(401).json({
+  } catch (roleErr: any) {
+    if (roleErr instanceof AuthResolutionError) {
+      if (roleErr.code === "FIRESTORE_PERMISSION_DENIED") {
+        console.warn(`[Auth RBAC] 503 FIRESTORE_PERMISSION_DENIED for UID ${uid}: ${roleErr.message}`);
+        return res.status(503).json({
+          success: false,
+          error: "SERVICE_UNAVAILABLE",
+          code: "FIRESTORE_PERMISSION_DENIED",
+          message: "Database authorization service is temporarily unavailable due to missing Cloud permissions (PERMISSION_DENIED).",
+          details: roleErr.details,
+          projectId: firebaseAppletConfig.projectId,
+          _padding: " ".repeat(1024),
+        });
+      }
+
+      console.warn(`[Auth RBAC] 503 AUTH_SERVICE_UNAVAILABLE for UID ${uid}: ${roleErr.message}`);
+      return res.status(503).json({
+        success: false,
+        error: "SERVICE_UNAVAILABLE",
+        code: "AUTH_SERVICE_UNAVAILABLE",
+        message: roleErr.message || "Authentication authorization service is currently unavailable.",
+        details: roleErr.details,
+        _padding: " ".repeat(1024),
+      });
+    }
+
+    console.error("[Auth RBAC] Unexpected error during role resolution:", roleErr);
+    return res.status(500).json({
       success: false,
-      error: "UNAUTHORIZED",
-      message: "Failed to authenticate Firebase token.",
+      error: "INTERNAL_AUTH_ERROR",
+      message: "An internal error occurred while resolving user permissions.",
+      _padding: " ".repeat(1024),
     });
   }
 }
@@ -385,7 +494,8 @@ function requireAdmin(req: express.Request, res: express.Response, next: express
   }
 
   const role = req.user.role;
-  if (role !== "ADMIN" && role !== "SUPER_ADMIN" && role !== "SYSTEM_OWNER") {
+  const adminRoles = ["ADMIN", "SUPER_ADMIN", "SYSTEM_OWNER", "MANAGER"];
+  if (!adminRoles.includes(role)) {
     return res.status(403).json({
       success: false,
       error: "ADMIN_REQUIRED",
@@ -402,7 +512,7 @@ function requireStaff(req: express.Request, res: express.Response, next: express
     return res.status(401).json({ success: false, error: "UNAUTHORIZED", message: "Authentication required." });
   }
 
-  const staffRoles = ["ADMIN", "SUPER_ADMIN", "FINANCIAL", "ACCOUNTANT", "EMPLOYEE", "LEGAL", "MANAGER", "SYSTEM_OWNER"];
+  const staffRoles = ["ADMIN", "SUPER_ADMIN", "FINANCIAL", "FINANCE", "ACCOUNTANT", "EMPLOYEE", "LEGAL", "MANAGER", "SYSTEM_OWNER", "PROPERTY_MANAGER", "DATA_ENTRY"];
   const role = req.user.role;
 
   if (!staffRoles.includes(role)) {

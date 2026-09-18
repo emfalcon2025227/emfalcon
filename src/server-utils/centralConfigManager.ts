@@ -774,6 +774,11 @@ export async function runComprehensiveDiagnostics(originUrl: string): Promise<Di
       messageEn: `Read test successful. Latency: ${Date.now() - tFirestoreStart}ms (Database ID: ${dbId || "(default)"})`,
     });
   } catch(err: any) {
+    const isPermissionDenied =
+      err?.message?.includes("PERMISSION_DENIED") ||
+      err?.message?.includes("Missing or insufficient permissions") ||
+      err?.code === 7;
+
     results.push({
       serviceId: "FIRESTORE_DB",
       serviceNameAr: "قاعدة بيانات Firestore المركزية",
@@ -782,8 +787,18 @@ export async function runComprehensiveDiagnostics(originUrl: string): Promise<Di
       status: "FAIL",
       latencyMs: Date.now() - tFirestoreStart,
       lastChecked: nowIso,
-      messageAr: `فشل اختبار القراءة من Firestore: ${err.message}`,
-      messageEn: `Firestore read test failed: ${err.message}`,
+      messageAr: isPermissionDenied
+        ? `فشل قراءة Firestore بسبب نقص صلاحيات Cloud IAM (PERMISSION_DENIED) لمشروع ${firebaseAppletConfig.projectId}. حساب الخدمة يحتاج إلى roles/serviceusage.serviceUsageConsumer.`
+        : `فشل اختبار القراءة من Firestore: ${err.message}`,
+      messageEn: isPermissionDenied
+        ? `Firestore read failed: Missing Cloud IAM permission (PERMISSION_DENIED) on project ${firebaseAppletConfig.projectId}. Runtime identity needs roles/serviceusage.serviceUsageConsumer.`
+        : `Firestore read test failed: ${err.message}`,
+      safeRecoveryActionAr: isPermissionDenied
+        ? `منح دور Service Usage Consumer لحساب الخدمة في مشروع ${firebaseAppletConfig.projectId}`
+        : "تحقق من حالة قاعدة بيانات Firestore في لوحة تحكم Firebase",
+      safeRecoveryActionEn: isPermissionDenied
+        ? `Grant roles/serviceusage.serviceUsageConsumer on project ${firebaseAppletConfig.projectId}`
+        : "Check Firestore database status in Firebase Console",
     });
   }
 
