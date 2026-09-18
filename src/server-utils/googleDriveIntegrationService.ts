@@ -137,6 +137,8 @@ interface StoredSecrets {
   whatsappAccessToken?: string; // legacy plaintext
   smtpAppPasswordEncrypted?: string;
   whatsappAccessTokenEncrypted?: string;
+  googleDriveRefreshToken?: string; // legacy name
+  googleClientSecret?: string; // legacy name
   googleDriveRefreshTokenEncrypted?: string;
   googleClientSecretEncrypted?: string;
 }
@@ -162,7 +164,7 @@ export function loadStoredSecrets(): {
   const hasEncryptionKey = process.env.ENCRYPTION_SECRET && process.env.ENCRYPTION_SECRET.trim() !== "";
 
   // Perform migration if we have plaintext fields and a valid key
-  if (hasEncryptionKey && (fileData.smtpAppPassword || fileData.whatsappAccessToken)) {
+  if (hasEncryptionKey) {
     try {
       if (fileData.smtpAppPassword) {
         fileData.smtpAppPasswordEncrypted = encryptSecret(fileData.smtpAppPassword);
@@ -172,6 +174,25 @@ export function loadStoredSecrets(): {
       if (fileData.whatsappAccessToken) {
         fileData.whatsappAccessTokenEncrypted = encryptSecret(fileData.whatsappAccessToken);
         delete fileData.whatsappAccessToken;
+        needsMigration = true;
+      }
+      if (fileData.googleDriveRefreshToken && !fileData.googleDriveRefreshToken.startsWith("enc_gcm_v1:")) {
+        fileData.googleDriveRefreshTokenEncrypted = encryptSecret(fileData.googleDriveRefreshToken);
+        delete fileData.googleDriveRefreshToken;
+        needsMigration = true;
+      } else if (fileData.googleDriveRefreshToken && fileData.googleDriveRefreshToken.startsWith("enc_gcm_v1:")) {
+        // It's encrypted but under legacy key name. Move it.
+        fileData.googleDriveRefreshTokenEncrypted = fileData.googleDriveRefreshToken;
+        delete fileData.googleDriveRefreshToken;
+        needsMigration = true;
+      }
+      if (fileData.googleClientSecret && !fileData.googleClientSecret.startsWith("enc_gcm_v1:")) {
+        fileData.googleClientSecretEncrypted = encryptSecret(fileData.googleClientSecret);
+        delete fileData.googleClientSecret;
+        needsMigration = true;
+      } else if (fileData.googleClientSecret && fileData.googleClientSecret.startsWith("enc_gcm_v1:")) {
+        fileData.googleClientSecretEncrypted = fileData.googleClientSecret;
+        delete fileData.googleClientSecret;
         needsMigration = true;
       }
       if (needsMigration) {
@@ -184,11 +205,15 @@ export function loadStoredSecrets(): {
 
   const refreshToken =
     decryptSecret(fileData.googleDriveRefreshTokenEncrypted || "") ||
+    decryptSecret(fileData.googleDriveRefreshToken || "") ||
+    fileData.googleDriveRefreshToken ||
     process.env.GOOGLE_REFRESH_TOKEN ||
     "";
 
   const clientSecret =
     decryptSecret(fileData.googleClientSecretEncrypted || "") ||
+    decryptSecret(fileData.googleClientSecret || "") ||
+    fileData.googleClientSecret ||
     process.env.GOOGLE_CLIENT_SECRET ||
     "";
 

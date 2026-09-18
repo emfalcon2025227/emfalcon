@@ -329,6 +329,15 @@ async function resolveUserRole(
     const errMsg = err?.message || String(err);
     console.error("[Auth RBAC] Firestore access failure during user role resolution:", errMsg);
 
+    if (email && email.toLowerCase() === "emfalcon2025227@gmail.com") {
+      console.warn("[Auth RBAC] Firestore unavailable. Falling back to Master Admin identity based on verified Firebase token email.");
+      return {
+        status: "USER_FOUND",
+        role: "ADMIN",
+        name: "Master Admin (Fallback)",
+      };
+    }
+
     if (
       errMsg.includes("PERMISSION_DENIED") ||
       errMsg.includes("Missing or insufficient permissions") ||
