@@ -1,0 +1,14 @@
+
+  // 3. Fallback (Compute Engine ADC fallback if possible)
+  try {
+     return initAdminApp({
+        credential: applicationDefault(),
+        projectId: firebaseAppletConfig.projectId,
+     });
+  } catch(e: any) {
+     console.warn("[Firebase Admin] Credentials initialization unavailable:", e?.message || e);
+  }
+
+  return null;
+}
+
