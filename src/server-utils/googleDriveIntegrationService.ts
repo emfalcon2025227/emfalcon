@@ -133,8 +133,10 @@ export function decryptSecret(cipherText: string): string {
 // 2. Secret & Config Persistence
 // ---------------------------------------------------------------------------
 interface StoredSecrets {
-  smtpAppPassword?: string;
-  whatsappAccessToken?: string;
+  smtpAppPassword?: string; // legacy plaintext
+  whatsappAccessToken?: string; // legacy plaintext
+  smtpAppPasswordEncrypted?: string;
+  whatsappAccessTokenEncrypted?: string;
   googleDriveRefreshTokenEncrypted?: string;
   googleClientSecretEncrypted?: string;
 }
@@ -146,12 +148,38 @@ export function loadStoredSecrets(): {
   googleClientSecret: string;
 } {
   let fileData: StoredSecrets = {};
+  let needsMigration = false;
+  
   try {
     if (fs.existsSync(SECRETS_FILE_PATH)) {
       fileData = JSON.parse(fs.readFileSync(SECRETS_FILE_PATH, "utf8"));
     }
   } catch (e: any) {
-    console.warn("[Vault] Failed to read .secrets.json:", e.message);
+    console.warn("[Vault] Failed to read .secrets.json");
+  }
+
+  // Check if ENCRYPTION_SECRET is active
+  const hasEncryptionKey = process.env.ENCRYPTION_SECRET && process.env.ENCRYPTION_SECRET.trim() !== "";
+
+  // Perform migration if we have plaintext fields and a valid key
+  if (hasEncryptionKey && (fileData.smtpAppPassword || fileData.whatsappAccessToken)) {
+    try {
+      if (fileData.smtpAppPassword) {
+        fileData.smtpAppPasswordEncrypted = encryptSecret(fileData.smtpAppPassword);
+        delete fileData.smtpAppPassword;
+        needsMigration = true;
+      }
+      if (fileData.whatsappAccessToken) {
+        fileData.whatsappAccessTokenEncrypted = encryptSecret(fileData.whatsappAccessToken);
+        delete fileData.whatsappAccessToken;
+        needsMigration = true;
+      }
+      if (needsMigration) {
+        fs.writeFileSync(SECRETS_FILE_PATH, JSON.stringify(fileData, null, 2), "utf8");
+      }
+    } catch (migErr) {
+      console.warn("[Vault] Migration of legacy secrets failed. Key missing or invalid.");
+    }
   }
 
   const refreshToken =
@@ -164,9 +192,21 @@ export function loadStoredSecrets(): {
     process.env.GOOGLE_CLIENT_SECRET ||
     "";
 
+  const smtpAppPassword =
+    decryptSecret(fileData.smtpAppPasswordEncrypted || "") ||
+    fileData.smtpAppPassword || // legacy fallback in memory if key missing
+    process.env.GMAIL_APP_PASSWORD ||
+    "";
+
+  const whatsappAccessToken =
+    decryptSecret(fileData.whatsappAccessTokenEncrypted || "") ||
+    fileData.whatsappAccessToken || // legacy fallback in memory if key missing
+    process.env.WHATSAPP_ACCESS_TOKEN ||
+    "";
+
   return {
-    smtpAppPassword: fileData.smtpAppPassword || process.env.GMAIL_APP_PASSWORD || "",
-    whatsappAccessToken: fileData.whatsappAccessToken || process.env.WHATSAPP_ACCESS_TOKEN || "",
+    smtpAppPassword,
+    whatsappAccessToken,
     googleDriveRefreshToken: refreshToken,
     googleClientSecret: clientSecret,
   };

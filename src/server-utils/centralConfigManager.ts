@@ -555,27 +555,51 @@ export async function updateSystemConfiguration(
   }
 
   if (payload.gmailAppPassword && !payload.gmailAppPassword.includes("•") && payload.gmailAppPassword.trim() !== "") {
-    newSecretsToSave.smtpAppPassword = payload.gmailAppPassword.trim();
-    modifiedFields.push("GMAIL_APP_PASSWORD");
-    logConfigAuditEvent({
-      admin: adminEmail,
-      action: "UPDATE_SECRET",
-      provider: "Gmail SMTP",
-      fieldName: "GMAIL_APP_PASSWORD",
-      result: "SUCCESS",
-    });
+    try {
+      newSecretsToSave.smtpAppPasswordEncrypted = encryptSecret(payload.gmailAppPassword.trim());
+      newSecretsToSave.smtpAppPassword = undefined; // clear plaintext legacy
+      modifiedFields.push("GMAIL_APP_PASSWORD");
+      logConfigAuditEvent({
+        admin: adminEmail,
+        action: "UPDATE_SECRET",
+        provider: "Gmail SMTP",
+        fieldName: "GMAIL_APP_PASSWORD",
+        result: "SUCCESS",
+      });
+    } catch (e: any) {
+      logConfigAuditEvent({
+        admin: adminEmail,
+        action: "UPDATE_SECRET",
+        provider: "Gmail SMTP",
+        fieldName: "GMAIL_APP_PASSWORD",
+        result: "FAILED",
+      });
+      throw new Error(`Failed to encrypt GMAIL_APP_PASSWORD: ${e.message}`);
+    }
   }
 
   if (payload.whatsappToken && !payload.whatsappToken.includes("•") && payload.whatsappToken.trim() !== "") {
-    newSecretsToSave.whatsappAccessToken = payload.whatsappToken.trim();
-    modifiedFields.push("WHATSAPP_ACCESS_TOKEN");
-    logConfigAuditEvent({
-      admin: adminEmail,
-      action: "UPDATE_SECRET",
-      provider: "Meta WhatsApp",
-      fieldName: "WHATSAPP_ACCESS_TOKEN",
-      result: "SUCCESS",
-    });
+    try {
+      newSecretsToSave.whatsappAccessTokenEncrypted = encryptSecret(payload.whatsappToken.trim());
+      newSecretsToSave.whatsappAccessToken = undefined; // clear plaintext legacy
+      modifiedFields.push("WHATSAPP_ACCESS_TOKEN");
+      logConfigAuditEvent({
+        admin: adminEmail,
+        action: "UPDATE_SECRET",
+        provider: "Meta WhatsApp",
+        fieldName: "WHATSAPP_ACCESS_TOKEN",
+        result: "SUCCESS",
+      });
+    } catch (e: any) {
+      logConfigAuditEvent({
+        admin: adminEmail,
+        action: "UPDATE_SECRET",
+        provider: "Meta WhatsApp",
+        fieldName: "WHATSAPP_ACCESS_TOKEN",
+        result: "FAILED",
+      });
+      throw new Error(`Failed to encrypt WHATSAPP_ACCESS_TOKEN: ${e.message}`);
+    }
   }
 
   if (Object.keys(newSecretsToSave).length > 0) {
@@ -586,6 +610,8 @@ export async function updateSystemConfiguration(
       } catch {}
     }
     const updatedSecrets = { ...currentSecrets, ...newSecretsToSave };
+    // Remove undefined properties
+    Object.keys(updatedSecrets).forEach(key => updatedSecrets[key] === undefined ? delete updatedSecrets[key] : {});
     fs.writeFileSync(SECRETS_FILE_PATH, JSON.stringify(updatedSecrets, null, 2), "utf8");
   }
 

@@ -22,6 +22,8 @@ import {
   uploadFileToDriveServerSide,
   DEFAULT_GOOGLE_CLIENT_ID,
   STANDARD_DRIVE_SCOPE,
+  loadStoredSecrets,
+  encryptSecret
 } from "./src/server-utils/googleDriveIntegrationService";
 import {
   getSystemConfigurationMatrix,
@@ -3182,11 +3184,13 @@ interface ConnectionConfigs {
 
 function loadSecrets(): ConnectionSecrets {
   try {
-    if (fs.existsSync(SECRETS_FILE_PATH)) {
-      return JSON.parse(fs.readFileSync(SECRETS_FILE_PATH, "utf8"));
-    }
+    const secrets = loadStoredSecrets();
+    return {
+      smtpAppPassword: secrets.smtpAppPassword,
+      whatsappAccessToken: secrets.whatsappAccessToken,
+    };
   } catch (e) {
-    console.warn("[Secrets Engine] Secrets file .secrets.json not found, falling back to process env.");
+    console.warn("[Secrets Engine] Error loading secrets.", e);
   }
   return {
     smtpAppPassword: process.env.GMAIL_APP_PASSWORD || "",
@@ -3196,9 +3200,31 @@ function loadSecrets(): ConnectionSecrets {
 
 function saveSecrets(newSecrets: ConnectionSecrets) {
   try {
-    const current = loadSecrets();
-    const updated = { ...current, ...newSecrets };
-    fs.writeFileSync(SECRETS_FILE_PATH, JSON.stringify(updated, null, 2), "utf8");
+    let currentRaw: any = {};
+    if (fs.existsSync(SECRETS_FILE_PATH)) {
+      try {
+        currentRaw = JSON.parse(fs.readFileSync(SECRETS_FILE_PATH, "utf8"));
+      } catch {}
+    }
+    
+    if (newSecrets.smtpAppPassword !== undefined) {
+      if (newSecrets.smtpAppPassword) {
+        currentRaw.smtpAppPasswordEncrypted = encryptSecret(newSecrets.smtpAppPassword);
+      }
+      currentRaw.smtpAppPassword = undefined;
+    }
+    
+    if (newSecrets.whatsappAccessToken !== undefined) {
+      if (newSecrets.whatsappAccessToken) {
+        currentRaw.whatsappAccessTokenEncrypted = encryptSecret(newSecrets.whatsappAccessToken);
+      }
+      currentRaw.whatsappAccessToken = undefined;
+    }
+    
+    // Remove undefined properties
+    Object.keys(currentRaw).forEach(key => currentRaw[key] === undefined ? delete currentRaw[key] : {});
+    
+    fs.writeFileSync(SECRETS_FILE_PATH, JSON.stringify(currentRaw, null, 2), "utf8");
   } catch (e: any) {
     console.error("[Secrets Engine] Failed to save secrets:", e.message);
   }
