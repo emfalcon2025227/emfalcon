@@ -3918,41 +3918,57 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const userName = currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
     const mod = lease.pendingModification;
     const patch = mod.proposedPatch || {};
+    const previousValues = {
+      annualRent: lease.annualRent,
+      securityDeposit: lease.securityDeposit,
+      installmentsCount: lease.installmentsCount,
+      startDate: lease.startDate,
+      endDate: lease.endDate,
+    };
+
+    let rentAdjId: string | undefined;
+    let depositAdjId: string | undefined;
 
     // 1. FINANCIAL SAFETY: Check if annualRent is changed on active contract
     const newAnnualRent = mod.proposedAnnualRent ?? patch.annualRent;
     if (newAnnualRent !== undefined && newAnnualRent !== lease.annualRent) {
       const rentDiff = newAnnualRent - lease.annualRent;
-      recordFinancialAdjustment({
+      const adjRes = recordFinancialAdjustment({
         targetEntityType: "LEASE",
         targetEntityId: lease.id,
         adjustmentType: rentDiff > 0 ? "DEBIT" : "CREDIT",
         amount: Math.abs(rentDiff),
         reason: language === "ar"
-          ? `تعديل معتمد للقيمة الإيجارية للعقد #${lease.leaseNumber} من ${lease.annualRent.toLocaleString()} إلى ${newAnnualRent.toLocaleString()}. ملاحظات: ${reviewNotes || "None"}`
-          : `Approved rent adjustment for lease #${lease.leaseNumber} from ${lease.annualRent.toLocaleString()} to ${newAnnualRent.toLocaleString()}. Notes: ${reviewNotes || "None"}`,
+          ? `تعديل معتمد للقيمة الإيجارية للعقد #${lease.leaseNumber} (القيمة السابقة: ${previousValues.annualRent.toLocaleString()}، القيمة الجديدة: ${newAnnualRent.toLocaleString()}، الفارق: ${Math.abs(rentDiff).toLocaleString()} AED). ملاحظات: ${reviewNotes || mod.modificationReason || "اعتماد تعديل مالي"}`
+          : `Approved rent adjustment for lease #${lease.leaseNumber} (Original: ${previousValues.annualRent.toLocaleString()}, New: ${newAnnualRent.toLocaleString()}, Diff: ${Math.abs(rentDiff).toLocaleString()} AED). Notes: ${reviewNotes || mod.modificationReason || "Approved financial modification"}`,
         approvedByUserId: userId,
         approvedByUserName: userName,
         effectiveDate: nowIso.split("T")[0],
       });
+      if (adjRes.success && adjRes.adjustment) {
+        rentAdjId = adjRes.adjustment.id;
+      }
     }
 
-    // 2. FINANCIAL SAFETY: Check if securityDeposit is changed
+    // 2. FINANCIAL SAFETY: Check if securityDeposit is changed (refundable tenant-held obligation, NOT revenue)
     const newSecurityDeposit = mod.proposedSecurityDeposit ?? patch.securityDeposit;
     if (newSecurityDeposit !== undefined && newSecurityDeposit !== lease.securityDeposit) {
       const depositDiff = newSecurityDeposit - lease.securityDeposit;
-      recordFinancialAdjustment({
+      const adjRes = recordFinancialAdjustment({
         targetEntityType: "LEASE",
         targetEntityId: lease.id,
         adjustmentType: depositDiff > 0 ? "DEBIT" : "CREDIT",
         amount: Math.abs(depositDiff),
         reason: language === "ar"
-          ? `تعديل معتمد لمبلغ التأمين للعقد #${lease.leaseNumber} من ${lease.securityDeposit.toLocaleString()} إلى ${newSecurityDeposit.toLocaleString()}`
-          : `Approved security deposit adjustment for lease #${lease.leaseNumber} from ${lease.securityDeposit.toLocaleString()} to ${newSecurityDeposit.toLocaleString()}`,
+          ? `تعديل معتمد لمبلغ تأمين الصيانة المسترد للعقد #${lease.leaseNumber} (القيمة السابقة: ${previousValues.securityDeposit.toLocaleString()}، القيمة الجديدة: ${newSecurityDeposit.toLocaleString()}، الفارق: ${Math.abs(depositDiff).toLocaleString()} AED - أمانة مستردة)`
+          : `Approved refundable security deposit adjustment for lease #${lease.leaseNumber} (Original: ${previousValues.securityDeposit.toLocaleString()}, New: ${newSecurityDeposit.toLocaleString()}, Diff: ${Math.abs(depositDiff).toLocaleString()} AED - refundable holding)`,
         approvedByUserId: userId,
         approvedByUserName: userName,
         effectiveDate: nowIso.split("T")[0],
       });
+      if (adjRes.success && adjRes.adjustment) {
+        depositAdjId = adjRes.adjustment.id;
+      }
     }
 
     // 3. FINANCIAL SAFETY: Handle installments / cheques modification safely without mutating settled/cleared historical records
@@ -3961,31 +3977,49 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       finalInstallments = mod.proposedInstallments.map((propInst) => {
         const existingInst = lease.installments?.find((i) => i.installmentNumber === propInst.installmentNumber);
         if (existingInst && (existingInst.status === "COLLECTED" || existingInst.status === "SETTLED")) {
+          // Strictly protect historical collected/settled records from mutation
           return existingInst;
         }
         return propInst;
       });
     }
 
-    // 4. Safe patch application
-    const safePatch: Partial<Lease> = {
-      ...patch,
+    // 4. Update descriptive lease terms and clear pending modification
+    const approvedValues = {
       annualRent: newAnnualRent ?? lease.annualRent,
       securityDeposit: newSecurityDeposit ?? lease.securityDeposit,
       installments: finalInstallments,
+      startDate: mod.proposedStartDate || patch.startDate || lease.startDate,
+      endDate: mod.proposedEndDate || patch.endDate || lease.endDate,
+      paymentFrequency: patch.paymentFrequency || lease.paymentFrequency,
+      installmentsCount: finalInstallments?.length || lease.installmentsCount,
+      chequesCount: finalInstallments?.filter((i) => i.paymentMethod === "CHEQUE").length || lease.chequesCount,
+    };
+
+    const descriptivePatch: Partial<Lease> = {
+      ...patch,
+      ...approvedValues,
       pendingModification: deleteField() as any,
     };
 
     const updated: Lease = {
       ...lease,
-      ...safePatch,
+      ...descriptivePatch,
       pendingModification: undefined,
     };
 
     setLeases((prev) => prev.map((l) => (l.id === leaseId ? updated : l)));
     safeSetDoc(doc(db, "leases", lease.id), sanitizeForFirestore(updated), { merge: true });
 
-    logAudit("APPROVE", "LEASE", lease.id, lease.leaseNumber, `Approved modification for lease ${lease.leaseNumber}. Notes: ${reviewNotes || "None"}`);
+    // 5. Audit Trail
+    logAudit(
+      "APPROVE",
+      "LEASE",
+      lease.id,
+      lease.leaseNumber,
+      `Approved modification for lease ${lease.leaseNumber}. Request ID: ${mod.id}. Previous: Rent=${previousValues.annualRent}, Deposit=${previousValues.securityDeposit}. Approved: Rent=${approvedValues.annualRent}, Deposit=${approvedValues.securityDeposit}. Adjustments: [${[rentAdjId, depositAdjId].filter(Boolean).join(", ")}]. Approver: ${userName}. Notes: ${reviewNotes || mod.notes || "None"}`
+    );
+
     return { success: true, lease: updated };
   };
 

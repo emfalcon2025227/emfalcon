@@ -84,11 +84,8 @@ export const RenewalView: React.FC<RenewalViewProps> = ({
     owners,
     cheques,
     createLeaseRenewal,
-    approveLeaseRenewal,
     dispatchRenewalNotification,
     addArchiveItem,
-    addCommissionObligation,
-    collectAdministrativeFee,
     extractChequeOCR,
   } = useData();
   const { currentUser, hasPermission } = useAuth();
@@ -993,13 +990,7 @@ export const RenewalView: React.FC<RenewalViewProps> = ({
             >
               <CheckCircle2 className="w-4 h-4" />
               <span>
-                {directApprove && canDirectApprove
-                  ? isRtl
-                    ? "اعتماد وتفعيل العقد مباشرة"
-                    : "Direct Approve & Activate"
-                  : isRtl
-                  ? "إرسال طلب التجديد للاعتماد"
-                  : "Submit for Approval"}
+                {isRtl ? "إرسال طلب التجديد للاعتماد الإداري" : "Submit Renewal Request"}
               </span>
             </button>
           </div>
@@ -2507,12 +2498,12 @@ export const RenewalView: React.FC<RenewalViewProps> = ({
               {isSubmitting ? (
                 <>
                   <RotateCw className="w-4 h-4 animate-spin" />
-                  <span>{isRtl ? "جاري الحفظ..." : "Processing..."}</span>
+                  <span>{isRtl ? "جاري الإرسال..." : "Submitting..."}</span>
                 </>
               ) : (
                 <>
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>{isRtl ? "تأكيد وتنفيذ التجديد" : "Confirm & Execute"}</span>
+                  <span>{isRtl ? "تأكيد وإرسال طلب التجديد" : "Confirm & Submit Request"}</span>
                 </>
               )}
             </button>
