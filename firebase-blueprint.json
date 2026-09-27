@@ -1,0 +1,54 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System user with RBAC profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" },
+        "displayName": { "type": "string" }
+      },
+      "required": ["id", "email", "role"]
+    },
+    "Property": {
+      "title": "Property",
+      "description": "Real estate property asset",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "propertyType": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Lease": {
+      "title": "Lease",
+      "description": "Contractual lease agreement",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "leaseNumber": { "type": "string" },
+        "contractStatus": { "type": "string" },
+        "annualRent": { "type": "number" },
+        "securityDeposit": { "type": "number" }
+      },
+      "required": ["id", "leaseNumber", "contractStatus"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "System users collection"
+    },
+    "/properties/{propertyId}": {
+      "schema": "Property",
+      "description": "Managed properties collection"
+    },
+    "/leases/{leaseId}": {
+      "schema": "Lease",
+      "description": "Lease contracts collection"
+    }
+  }
+}
