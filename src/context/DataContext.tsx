@@ -808,6 +808,7 @@ export interface DataContextType {
   deleteOfficePettyCashExpense: (id: string, modificationReason?: string) => { success: boolean; error?: string };
   addOfficePettyCashCategory: (data: Omit<OfficePettyCashCategory, "id" | "active" | "createdAt">) => { success: boolean; category?: OfficePettyCashCategory; error?: string };
   updateOfficePettyCashCategory: (id: string, patch: Partial<OfficePettyCashCategory>) => { success: boolean; error?: string };
+  restoreDefaultPettyCashCategories: () => Promise<void>;
   // Saqr Office Account Module
   saqrOfficeConfig: SaqrOfficeConfig;
   saqrOfficeManualTransactions: SaqrOfficeManualTransaction[];
@@ -1622,14 +1623,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, createErrorHandler("office_petty_cash_expenses", [], setOfficePettyCashExpenses));
     const unsubPettyCashCategories = onSnapshot(collection(db, "office_petty_cash_categories"), (snap) => {
       if (snap.empty) {
-        seedCollectionIfEmpty("office_petty_cash_categories", INITIAL_PETTY_CASH_CATEGORIES);
-        setOfficePettyCashCategories(INITIAL_PETTY_CASH_CATEGORIES);
+        setOfficePettyCashCategories([]);
       } else {
         const items: OfficePettyCashCategory[] = [];
         snap.forEach(d => items.push(d.data() as OfficePettyCashCategory));
         setOfficePettyCashCategories(items);
       }
-    }, createErrorHandler("office_petty_cash_categories", INITIAL_PETTY_CASH_CATEGORIES, setOfficePettyCashCategories));
+    }, createErrorHandler("office_petty_cash_categories", [], setOfficePettyCashCategories));
     const unsubVatRates = onSnapshot(collection(db, "vatRates"), (snap) => {
       if (snap.empty) {
         const initialVat = [{
@@ -12285,6 +12285,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setJournalEntries([]);
     setOfficePettyCashMonths([]);
     setOfficePettyCashExpenses([]);
+    setOfficePettyCashCategories([]);
+    setDailyDeposits([]);
+    setDepositBatches([]);
     setFinancialPeriods([]);
     setPeriodCertifications([]);
     const operationalStorageKeys = [
@@ -12315,6 +12318,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       "ef_journal_entries_v12",
       "ef_office_petty_cash_months_v12",
       "ef_office_petty_cash_expenses_v12",
+      "ef_office_petty_cash_categories_v12",
+      "ef_daily_deposits_v12",
+      "ef_deposit_batches_v12",
       "ef_financial_periods_v1",
       "ef_period_certifications_v1",
       "emirates_falcon_pending_sync"
@@ -12328,6 +12334,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       "owner_transfers", "property_expenses", "collection_actions",
       "payment_promises", "lease_renewals", "deferred_payments",
       "journal_entries", "office_petty_cash_months", "office_petty_cash_expenses",
+      "office_petty_cash_categories", "daily_deposits", "deposit_batches",
       "financial_periods", "period_certifications"
     ];
     try {
@@ -14061,6 +14068,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
     return { success: true };
   };
+  const restoreDefaultPettyCashCategories = async () => {
+    try {
+      for (const item of INITIAL_PETTY_CASH_CATEGORIES) {
+        await safeSetDoc(doc(db, "office_petty_cash_categories", item.id), sanitizeForFirestore(item));
+      }
+      setOfficePettyCashCategories(INITIAL_PETTY_CASH_CATEGORIES);
+      logAudit(
+        "CREATE",
+        "OFFICE_PETTY_CASH_CATEGORY" as any,
+        "restore-defaults",
+        "Restore Default Categories",
+        "تمت استعادة فئات المصروفات المكتبية القياسية الافتراضية بنجاح"
+      );
+    } catch (e) {
+      console.error("Error restoring default petty cash categories:", e);
+    }
+  };
   const updateSaqrOfficeConfig = (patch: Partial<SaqrOfficeConfig>) => {
     setSaqrOfficeConfig((prev) => ({ ...prev, ...patch, updatedAt: new Date().toISOString() }));
     logAudit("UPDATE", "COMPANY_PROFILE" as any, "saqr-office", "Saqr Office Config", "تم تحديث بيانات حساب مكتب صقر الإمارات للعقارات");
@@ -14177,6 +14201,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteOfficePettyCashExpense,
         addOfficePettyCashCategory,
         updateOfficePettyCashCategory,
+        restoreDefaultPettyCashCategories,
         addOwner,
         updateOwner,
         deleteOwner,

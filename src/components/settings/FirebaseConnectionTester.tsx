@@ -130,7 +130,8 @@ export const FirebaseConnectionTester: React.FC = () => {
       "cheques", "returned_cheques", "collections", "payments", "property_expenses",
       "expenses", "payment_allocations", "owner_transfers", "financial_reversals",
       "financial_adjustments", "commissions", "office_petty_cash_months",
-      "office_petty_cash_expenses", "maintenance_requests", "technicians",
+      "office_petty_cash_expenses", "office_petty_cash_categories", "petty_cash_categories",
+      "expense_categories", "categories", "maintenance_requests", "technicians",
       "collection_actions", "payment_promises", "lease_renewals", "deferred_payments",
       "journal_entries", "cases", "daily_deposits", "deposit_batches", "archive", "attachments"
     ];
@@ -195,12 +196,34 @@ export const FirebaseConnectionTester: React.FC = () => {
       console.warn("Counters reset notice:", cntErr);
     }
 
+    // Clear local storage for operational data and petty cash/expense categories
+    const storageKeysToRemove = [
+      "ef_owners_v12", "ef_properties_v12", "ef_units_v12", "ef_tenants_v12", "ef_leases_v12",
+      "ef_cheques_v12", "ef_collections_v12", "ef_cases_v12", "ef_archive_v12", "ef_notifications_v12",
+      "ef_audit_logs_v12", "ef_historical_records_v12", "ef_maintenance_requests_v12", "ef_technicians_v12",
+      "ef_commissions_v12", "ef_payment_allocations_v12", "ef_financial_reversals_v12",
+      "ef_financial_adjustments_v12", "ef_owner_transfers_v12", "ef_property_expenses_v12",
+      "ef_collection_actions_v12", "ef_payment_promises_v12", "ef_lease_renewals_v12",
+      "ef_deferred_payments_v12", "ef_journal_entries_v12", "ef_office_petty_cash_months_v12",
+      "ef_office_petty_cash_expenses_v12", "ef_office_petty_cash_categories_v12",
+      "ef_daily_deposits_v12", "ef_deposit_batches_v12"
+    ];
+    storageKeysToRemove.forEach((k) => {
+      try { localStorage.removeItem(k); } catch {}
+    });
+
+    try {
+      await resetDatabase();
+    } catch (resetErr) {
+      console.warn("resetDatabase call:", resetErr);
+    }
+
     addLog(language === "ar" 
-      ? `✅ اكتملت عملية تنظيف قاعدة البيانات بنجاح! تم حذف ${totalDeleted} مستند عمل وسجلات تدقيق.` 
-      : `✅ Clean slate completed successfully! ${totalDeleted} documents removed.`);
+      ? `✅ اكتملت عملية تنظيف قاعدة البيانات بنجاح! تم حذف ${totalDeleted} مستند وسجل تدقيق وفئات المصاريف والتحصيلات والنثرية.` 
+      : `✅ Clean slate completed successfully! ${totalDeleted} operational documents and categories removed.`);
     addLog(language === "ar"
-      ? "🔒 البيانات المحفوظة: دليل الحسابات، فئات المصاريف، معدلات الضريبة، الحسابات الرسمية."
-      : "🔒 Preserved: Chart of Accounts, Expense Categories, VAT Rates, System Accounts.");
+      ? "🔒 البيانات المحفوظة: دليل الحسابات المحاسبي (Chart of Accounts) محمي بالكامل ولم يُمس، معدلات الضريبة، الحسابات الرسمية."
+      : "🔒 Preserved: Chart of Accounts (Protected & Untouched), VAT Rates, System Accounts.");
     addLog("=========================================");
 
     setIsCleaningSlate(false);
@@ -234,6 +257,7 @@ export const FirebaseConnectionTester: React.FC = () => {
     chartOfAccounts,
     dailyDeposits,
     isQuotaExceeded,
+    resetDatabase,
   } = useData();
 
   const addLog = (msg: string) => {
@@ -1515,20 +1539,21 @@ export const FirebaseConnectionTester: React.FC = () => {
                 </p>
                 <p>
                   {language === "ar"
-                    ? "سيتم مسح جميع بيانات العتميات التجارية (العقارات، الوحدات، الملاك، المستأجرين، العقود، الشيكات، التحصيلات، والمصروفات، وسجلات التدقيق)."
-                    : "This will delete all business operational records (properties, units, owners, tenants, leases, cheques, collections, expenses, and audit logs)."}
+                    ? "سيتم مسح جميع بيانات العمليات التجارية (العقارات، الوحدات، الملاك، المستأجرين، العقود، الشيكات، التحصيلات، والمصروفات، وسجلات التدقيق) بالإضافة إلى فئات المصاريف والتحصيلات والنثرية بالكامل للبدء من الصفر."
+                    : "This will delete all business operational records (properties, units, owners, tenants, leases, cheques, collections, expenses, and audit logs) as well as all expense, collection, and petty cash categories to start completely clean."}
                 </p>
               </div>
 
               <div className="p-4 bg-emerald-50/80 rounded-2xl border border-emerald-100 text-emerald-900 space-y-1.5">
                 <p className="font-bold flex items-center gap-2 text-emerald-800">
                   <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>{language === "ar" ? "البيانات التي سيتم الحفاظ عليها بأمان:" : "Preserved Infrastructure:"}</span>
+                  <span>{language === "ar" ? "البيانات التي سيتم الحفاظ عليها بأمان (فقط لن تُمس):" : "Preserved Infrastructure (Protected & Untouched):"}</span>
                 </p>
-                <ul className="list-disc list-inside space-y-0.5 text-emerald-800/90 pr-2">
-                  <li>{language === "ar" ? "دليل الحسابات المحاسبي (Chart of Accounts)" : "Chart of Accounts"}</li>
-                  <li>{language === "ar" ? "فئات المصاريف والتحصيلات والنثرية" : "Expense & Petty Cash Categories"}</li>
-                  <li>{language === "ar" ? "معدلات الضريبة المضافة (VAT Rates)" : "VAT Rates"}</li>
+                <ul className="list-disc list-inside space-y-1 text-emerald-800/90 pr-2">
+                  <li className="font-black text-emerald-950">
+                    {language === "ar" ? "دليل الحسابات المحاسبي (Chart of Accounts) — محمي بالكامل ولن يُمس إطلاقاً" : "Chart of Accounts — Fully Protected & Untouched"}
+                  </li>
+                  <li>{language === "ar" ? "معدلات ضريبة القيمة المضافة (VAT Rates)" : "VAT Rates"}</li>
                   <li>{language === "ar" ? "الحسابات المعتمدة ومالك النظام (m_hamed@msn.com / emfalcon2025227@gmail.com)" : "Authorized Owner Accounts"}</li>
                 </ul>
               </div>
