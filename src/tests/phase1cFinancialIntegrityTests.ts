@@ -142,8 +142,23 @@ export async function runPhase1cFinancialIntegrityTests() {
   report("TEST-1C-10", "verifyAuthoritativeJournalPosting gate rejects duplicate posting", dupCheck.isValid === false, `Gate blocked duplicate posting: ${dupCheck.error}`);
 
   // Test 10b: postAuthoritativeJournalEntry Service -> Rejects Duplicate Event Postings
-  const postCheck = await postAuthoritativeJournalEntry(existingJournals[0], existingJournals);
+  const postCheck = await postAuthoritativeJournalEntry({
+    entry: existingJournals[0],
+    financialPeriods: openPeriods,
+    existingEntries: existingJournals,
+  });
   report("TEST-1C-10b", "postAuthoritativeJournalEntry service enforces authoritative posting boundary", postCheck.isValid === false, `Authoritative posting service rejected duplicate posting: ${postCheck.error}`);
+
+  // Test 10c: postAuthoritativeJournalEntry Service -> Rejects Missing / Empty Financial Periods (Fail-Closed)
+  const missingPeriodsCheck = await postAuthoritativeJournalEntry({
+    entry: {
+      ...existingJournals[0],
+      sourceId: "PAY-NEW-1"
+    },
+    financialPeriods: [],
+    existingEntries: [],
+  });
+  report("TEST-1C-10c", "postAuthoritativeJournalEntry rejects missing or empty financial periods (Fail-Closed)", missingPeriodsCheck.isValid === false, `Rejected empty periods: ${missingPeriodsCheck.error}`);
 
 
   // --- 3. CHEQUE COMPONENT RECONCILIATION TESTS ---

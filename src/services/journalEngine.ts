@@ -115,7 +115,8 @@ export interface PostJournalOptions {
 
 /**
  * Authoritative Journal Posting Service.
- * Validates double-entry accounting rules, verifies source event identity and financial periods,
+ * Validates double-entry accounting rules, enforces strict fail-closed financial period rules,
+ * verifies source event identity and authoritative Firestore state,
  * and executes or attaches the journal write to the active Firestore transaction/batch.
  */
 export async function postAuthoritativeJournalEntry(
@@ -139,10 +140,10 @@ export async function postAuthoritativeJournalEntry(
     if (opts.existingEntries) existing = opts.existingEntries;
   }
 
-  // 1. Gate Check (Balance & Duplication)
-  const gate = verifyAuthoritativeJournalPosting(entry, existing);
-  if (!gate.isValid) {
-    return { isValid: false, error: gate.error };
+  // 1. Double-Entry Accounting Gate Check
+  const val = validateJournalEntry(entry);
+  if (!val.isValid) {
+    return { isValid: false, error: val.error };
   }
 
   // 2. Source Identity Enforcement
@@ -150,23 +151,58 @@ export async function postAuthoritativeJournalEntry(
     return { isValid: false, error: "مصدر المعاملة المالية (sourceType & sourceId) مفقود في القيد المحاسبي." };
   }
 
-  // 3. Financial Period Fail-Closed Validation
-  if (periods && periods.length > 0) {
-    const periodCheck = validateTransactionPeriod(entry.transactionDate, periods);
-    if (!periodCheck.allowed) {
-      return { isValid: false, error: periodCheck.errorAr || periodCheck.errorEn };
+  // 3. Strict Financial Period Fail-Closed Validation
+  if (!periods || periods.length === 0) {
+    return {
+      isValid: false,
+      error: "لا يمكن تسجيل القيد المحاسبي: الفترات المالية غير متوفرة أو غير محملة (Strict Fail-Closed)."
+    };
+  }
+
+  const periodCheck = validateTransactionPeriod(entry.transactionDate, periods);
+  if (!periodCheck.allowed) {
+    return { isValid: false, error: periodCheck.errorAr || periodCheck.errorEn };
+  }
+
+  // 4. Authoritative Firestore Event Lock & Idempotency Check
+  const keyRef = doc(dbInstance, "journal_event_keys", `${entry.sourceType}_${entry.sourceId}`);
+  
+  if (txOrBatch && typeof txOrBatch.get === "function") {
+    // Inside active Firestore Transaction: Read authoritative persisted event lock
+    const keySnap = await txOrBatch.get(keyRef);
+    if (keySnap.exists()) {
+      return {
+        isValid: false,
+        error: `تم تسجيل قيد محاسبي لهذا الحدث المالي (${entry.sourceType}: ${entry.sourceId}) مسبقاً لمنع التكرار.`
+      };
+    }
+  } else {
+    // Non-transaction or fallback memory state check
+    if (isDuplicateJournalPosting(existing, entry.sourceType, entry.sourceId)) {
+      return {
+        isValid: false,
+        error: `تم تسجيل قيد محاسبي لهذا الحدث المالي (${entry.sourceType}: ${entry.sourceId}) مسبقاً لمنع التكرار.`
+      };
     }
   }
 
-  // 4. Persistence Participation
+  // 5. Atomic Persistence Participation
   const jeRef = doc(dbInstance, "journal_entries", entry.id);
   const payload = sanitizeForFirestore(entry);
+  const keyPayload = sanitizeForFirestore({
+    journalId: entry.id,
+    sourceType: entry.sourceType,
+    sourceId: entry.sourceId,
+    createdAt: new Date().toISOString()
+  });
 
   if (txOrBatch) {
     if (typeof txOrBatch.set === "function") {
+      txOrBatch.set(keyRef, keyPayload);
       txOrBatch.set(jeRef, payload);
     }
   } else {
+    await setDoc(keyRef, keyPayload);
     await setDoc(jeRef, payload);
   }
 
