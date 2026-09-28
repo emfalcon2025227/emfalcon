@@ -47,7 +47,8 @@ import {
   LeaseExpenseItem, 
   PaymentMethod, 
   Tenant,
-  AdminFeeExemptionPolicy 
+  AdminFeeExemptionPolicy,
+  ChequeComponentItem 
 } from "../../types";
 import { Modal } from "../common/Modal";
 import { Badge } from "../common/Badge";
@@ -71,12 +72,16 @@ interface LeaseInstallmentFormRow {
   installmentIndex: number;
   dueDate: string;
   amount: number;
+  originalAmount?: number;
   paymentMethod: "CHEQUE" | "CASH" | "BANK_TRANSFER" | "CARD";
   chequeNumber: string;
   bankName: string;
   drawerName?: string;
   chequeImage?: string;
   status: "ACTIVE" | "PAID";
+  components?: ChequeComponentItem[];
+  componentsReconciliationMismatch?: boolean;
+  componentsMismatchDifference?: number;
   sourcePdfId?: string;
   sourcePdfFileName?: string;
   sourcePdfPageNumber?: number;
@@ -195,6 +200,7 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
   const currentRecordId = editingLease ? editingLease.id : tempRecordId;
 
   // Installments and Cheques Schedule State
+  const [firstPaymentMethod, setFirstPaymentMethod] = useState<"CHEQUE" | "CASH" | "BANK_TRANSFER" | "CARD">("CHEQUE");
   const [installments, setInstallments] = useState<LeaseInstallmentFormRow[]>([]);
   const [leaseExpenses, setLeaseExpenses] = useState<LeaseExpenseItem[]>([]);
   const [scanningRowId, setScanningRowId] = useState<string | null>(null);
@@ -379,21 +385,62 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
     const leaseToLoad = isRenewal ? renewalSourceLease : editingLease;
 
     if (leaseToLoad) {
-      setIncludeAdminFees(false);
-      setOwnerFeeEnabled(true);
-      setOwnerFeeBasis("PERCENTAGE_OF_RENT");
-      
-      const ownerPolicy = resolveAdministrativeFeePolicy("OWNER", leaseToLoad.ownerId, !isRenewal ? leaseToLoad.adminFeePolicy : undefined, DEFAULT_COMMISSION_SETTINGS, owners, tenants);
-      setOwnerFeeRate(ownerPolicy.rate);
-      
-      setOwnerFeeFixed("");
-      setTenantFeeEnabled(true);
-      setTenantFeeBasis("PERCENTAGE_OF_RENT");
-      
-      const tenantPolicy = resolveAdministrativeFeePolicy("TENANT", leaseToLoad.tenantId, !isRenewal ? leaseToLoad.adminFeePolicy : undefined, DEFAULT_COMMISSION_SETTINGS, owners, tenants);
-      setTenantFeeRate(tenantPolicy.rate);
-      
-      setTenantFeeFixed("");
+      // 1. Administrative Fees / Commission Persistence (Bug #8 Fix)
+      if (leaseToLoad.stagedAdminFeesConfig && !isRenewal) {
+        const staged = leaseToLoad.stagedAdminFeesConfig;
+        setIncludeAdminFees(Boolean(staged.includeAdminFees));
+        if (staged.ownerFeeEnabled !== undefined) setOwnerFeeEnabled(staged.ownerFeeEnabled);
+        if (staged.ownerFeeBasis) setOwnerFeeBasis(staged.ownerFeeBasis);
+        if (staged.ownerFeeRate !== undefined) setOwnerFeeRate(staged.ownerFeeRate);
+        if (staged.ownerFeeFixed !== undefined) setOwnerFeeFixed(staged.ownerFeeFixed);
+        if (staged.ownerFeeDueDate) setOwnerFeeDueDate(staged.ownerFeeDueDate);
+
+        if (staged.tenantFeeEnabled !== undefined) setTenantFeeEnabled(staged.tenantFeeEnabled);
+        if (staged.tenantFeeBasis) setTenantFeeBasis(staged.tenantFeeBasis);
+        if (staged.tenantFeeRate !== undefined) setTenantFeeRate(staged.tenantFeeRate);
+        if (staged.tenantFeeFixed !== undefined) setTenantFeeFixed(staged.tenantFeeFixed);
+        if (staged.tenantFeeDueDate) setTenantFeeDueDate(staged.tenantFeeDueDate);
+      } else {
+        const existingComms = commissions.filter((c) => c.leaseId === leaseToLoad.id);
+        const ownerComm = existingComms.find((c) => c.partyType === "OWNER");
+        const tenantComm = existingComms.find((c) => c.partyType === "TENANT");
+        if ((ownerComm || tenantComm) && !isRenewal) {
+          setIncludeAdminFees(true);
+          if (ownerComm) {
+            setOwnerFeeEnabled(true);
+            if (ownerComm.calculationBasis) setOwnerFeeBasis(ownerComm.calculationBasis);
+            if (ownerComm.ratePercentage !== undefined) setOwnerFeeRate(ownerComm.ratePercentage);
+            if (ownerComm.fixedAmount !== undefined) setOwnerFeeFixed(ownerComm.fixedAmount);
+            if (ownerComm.dueDate) setOwnerFeeDueDate(ownerComm.dueDate);
+          } else {
+            setOwnerFeeEnabled(false);
+          }
+          if (tenantComm) {
+            setTenantFeeEnabled(true);
+            if (tenantComm.calculationBasis) setTenantFeeBasis(tenantComm.calculationBasis);
+            if (tenantComm.ratePercentage !== undefined) setTenantFeeRate(tenantComm.ratePercentage);
+            if (tenantComm.fixedAmount !== undefined) setTenantFeeFixed(tenantComm.fixedAmount);
+            if (tenantComm.dueDate) setTenantFeeDueDate(tenantComm.dueDate);
+          } else {
+            setTenantFeeEnabled(false);
+          }
+        } else {
+          setIncludeAdminFees(false);
+          setOwnerFeeEnabled(true);
+          setOwnerFeeBasis("PERCENTAGE_OF_RENT");
+          
+          const ownerPolicy = resolveAdministrativeFeePolicy("OWNER", leaseToLoad.ownerId, !isRenewal ? leaseToLoad.adminFeePolicy : undefined, DEFAULT_COMMISSION_SETTINGS, owners, tenants);
+          setOwnerFeeRate(ownerPolicy.rate);
+          setOwnerFeeFixed("");
+
+          setTenantFeeEnabled(true);
+          setTenantFeeBasis("PERCENTAGE_OF_RENT");
+          
+          const tenantPolicy = resolveAdministrativeFeePolicy("TENANT", leaseToLoad.tenantId, !isRenewal ? leaseToLoad.adminFeePolicy : undefined, DEFAULT_COMMISSION_SETTINGS, owners, tenants);
+          setTenantFeeRate(tenantPolicy.rate);
+          setTenantFeeFixed("");
+        }
+      }
 
       // Phase 5.3: Load Exemption Policy
       if (leaseToLoad.adminFeePolicy && !isRenewal) {
@@ -453,33 +500,70 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
       setContractStatus(isRenewal ? "BINDING" : (leaseToLoad.contractStatus || "BINDING"));
       setLeaseExpenses(isRenewal ? [] : (leaseToLoad.leaseExpenses || []));
 
-      // Load existing cheques for this lease
-      const existingCheques = cheques.filter((c) => c.leaseId === leaseToLoad.id);
-      if (existingCheques.length > 0 && !isRenewal) {
+      // 2. Schedule & First Payment Method Loading (Section 2, 3, 4)
+      const firstMeth = leaseToLoad.firstPaymentMethod || (leaseToLoad.installments && (leaseToLoad.installments[0]?.paymentMethod as any)) || "CHEQUE";
+      setFirstPaymentMethod(firstMeth);
+
+      if (leaseToLoad.installments && leaseToLoad.installments.length > 0 && !isRenewal) {
         setInstallments(
-          existingCheques.map((c, idx) => ({
-            id: c.id,
-            installmentIndex: idx + 1,
-            dueDate: c.dueDate || c.chequeDate || leaseToLoad.startDate,
-            amount: c.amount || 0,
-            paymentMethod: "CHEQUE",
-            chequeNumber: c.chequeNumber || "",
-            bankName: c.bankName || "",
-            drawerName: c.drawerName || "",
-            status: c.status === "COLLECTED" || c.status === "CLEARED" ? "PAID" : "ACTIVE"
+          leaseToLoad.installments.map((inst, idx) => ({
+            id: inst.chequeId || `inst-${idx + 1}-${Date.now()}`,
+            installmentIndex: inst.installmentNumber || idx + 1,
+            dueDate: inst.dueDate || leaseToLoad.startDate,
+            amount: inst.amount || 0,
+            originalAmount: inst.originalAmount || inst.amount || 0,
+            paymentMethod: (inst.paymentMethod as any) || (idx === 0 ? firstMeth : "CHEQUE"),
+            chequeNumber: inst.chequeNumber || "",
+            bankName: inst.bankName || "",
+            drawerName: inst.drawerName || "",
+            status: inst.status === "COLLECTED" || inst.status === "CLEARED" ? "PAID" : "ACTIVE",
+            components: inst.components,
+            componentsReconciliationMismatch: inst.componentsReconciliationMismatch,
+            componentsMismatchDifference: inst.componentsMismatchDifference,
+            chequeImage: inst.chequeImage,
+            sourcePdfId: inst.sourcePdfId,
+            sourcePdfFileName: inst.sourcePdfFileName,
+            sourcePdfPageNumber: inst.sourcePdfPageNumber,
+            sourceCroppedRegion: inst.sourceCroppedRegion,
+            ingestionSessionId: inst.ingestionSessionId,
           }))
         );
         if (!["ONE_CHEQUE", "TWO_CHEQUES", "THREE_CHEQUES", "QUARTERLY_4_CHEQUES", "FIVE_CHEQUES", "BI_MONTHLY_6_CHEQUES", "SEVEN_CHEQUES", "EIGHT_CHEQUES", "NINE_CHEQUES", "TEN_CHEQUES", "ELEVEN_CHEQUES", "MONTHLY_12_CHEQUES"].includes(rawFreq)) {
-          setCustomInstallmentsCount(existingCheques.length || 5);
+          setCustomInstallmentsCount(leaseToLoad.installments.length || 5);
         }
       } else {
-        generateDefaultInstallments(
-          leaseToLoad.annualRent || 0,
-          leaseToLoad.paymentFrequency || "QUARTERLY_4_CHEQUES",
-          leaseToLoad.startDate || new Date().toISOString().split("T")[0]
-        );
+        const existingCheques = cheques.filter((c) => c.leaseId === leaseToLoad.id);
+        if (existingCheques.length > 0 && !isRenewal) {
+          setInstallments(
+            existingCheques.map((c, idx) => ({
+              id: c.id,
+              installmentIndex: idx + 1,
+              dueDate: c.dueDate || c.chequeDate || leaseToLoad.startDate,
+              amount: c.amount || 0,
+              originalAmount: c.originalAmount || c.amount || 0,
+              paymentMethod: "CHEQUE",
+              chequeNumber: c.chequeNumber || "",
+              bankName: c.bankName || "",
+              drawerName: c.drawerName || "",
+              status: c.status === "COLLECTED" || c.status === "CLEARED" ? "PAID" : "ACTIVE",
+              components: c.components,
+              componentsReconciliationMismatch: c.componentsReconciliationMismatch,
+              componentsMismatchDifference: c.componentsMismatchDifference,
+            }))
+          );
+          if (!["ONE_CHEQUE", "TWO_CHEQUES", "THREE_CHEQUES", "QUARTERLY_4_CHEQUES", "FIVE_CHEQUES", "BI_MONTHLY_6_CHEQUES", "SEVEN_CHEQUES", "EIGHT_CHEQUES", "NINE_CHEQUES", "TEN_CHEQUES", "ELEVEN_CHEQUES", "MONTHLY_12_CHEQUES"].includes(rawFreq)) {
+            setCustomInstallmentsCount(existingCheques.length || 5);
+          }
+        } else {
+          generateDefaultInstallments(
+            leaseToLoad.annualRent || 0,
+            leaseToLoad.paymentFrequency || "QUARTERLY_4_CHEQUES",
+            leaseToLoad.startDate || new Date().toISOString().split("T")[0]
+          );
+        }
       }
     } else {
+      setFirstPaymentMethod("CHEQUE");
       setIncludeAdminFees(false);
       setOwnerFeeEnabled(true);
       setOwnerFeeBasis("PERCENTAGE_OF_RENT");
@@ -591,7 +675,8 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
         installmentIndex: i + 1,
         dueDate: dateStr,
         amount: installmentAmount,
-        paymentMethod: "CHEQUE",
+        originalAmount: installmentAmount,
+        paymentMethod: i === 0 ? (firstPaymentMethod || "CHEQUE") : "CHEQUE",
         chequeNumber: "",
         bankName: prevBank,
         drawerName: "",
@@ -602,13 +687,18 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
     setInstallments(rows);
   };
 
-  // Re-generate if user alters Rent or Frequency or Start Date while in Basic tab
+  // Re-generate if user alters Rent or Frequency or Start Date while in Basic tab (protected against overwriting existing schedule)
   const handleRentOrFreqChange = (
     newRent: number | string,
     newFreq: string,
     newStart: string,
-    customVal?: number
+    customVal?: number,
+    forceRegenerate?: boolean
   ) => {
+    // Schedule Protection (Section 2): Do not silently wipe existing/customized schedule
+    if (!forceRegenerate && (editingLease || installments.length > 0)) {
+      return;
+    }
     const rentNum = typeof newRent === "number" ? newRent : parseFloat(newRent) || 0;
     if (rentNum > 0 && newStart) {
       generateDefaultInstallments(rentNum, newFreq, newStart, customVal);
@@ -1172,6 +1262,7 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
           endDate,
           annualRent: parsedRent,
           paymentFrequency,
+          firstPaymentMethod: firstPaymentMethod || (installments[0]?.paymentMethod as any) || "CHEQUE",
           chequesCount: installments.length || 4,
           installmentsCount: installments.length || 4,
           securityDeposit: parsedDeposit,
@@ -1184,11 +1275,15 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
             installmentNumber: idx + 1,
             dueDate: inst.dueDate,
             amount: inst.amount,
+            originalAmount: inst.originalAmount || inst.amount,
             chequeNumber: inst.chequeNumber,
             bankName: inst.bankName,
             drawerName: inst.drawerName,
             paymentMethod: inst.paymentMethod as any,
             chequeImage: inst.chequeImage,
+            components: inst.components,
+            componentsReconciliationMismatch: inst.componentsReconciliationMismatch,
+            componentsMismatchDifference: inst.componentsMismatchDifference,
             sourcePdfId: inst.sourcePdfId,
             sourcePdfFileName: inst.sourcePdfFileName,
             sourcePdfPageNumber: inst.sourcePdfPageNumber,
@@ -1216,6 +1311,7 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
         endDate,
         annualRent: parsedRent,
         paymentFrequency,
+        firstPaymentMethod: firstPaymentMethod || (installments[0]?.paymentMethod as any) || "CHEQUE",
         chequesCount: installments.length || 4,
         securityDeposit: parsedDeposit,
         securityDepositPaymentMethod: securityDepositPaymentMethod as any || undefined,
@@ -1229,11 +1325,15 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
           installmentNumber: idx + 1,
           dueDate: inst.dueDate,
           amount: inst.amount,
+          originalAmount: inst.originalAmount || inst.amount,
           chequeNumber: inst.chequeNumber,
           bankName: inst.bankName,
           drawerName: inst.drawerName,
           paymentMethod: inst.paymentMethod as any,
           chequeImage: inst.chequeImage,
+          components: inst.components,
+          componentsReconciliationMismatch: inst.componentsReconciliationMismatch,
+          componentsMismatchDifference: inst.componentsMismatchDifference,
           sourcePdfId: inst.sourcePdfId,
           sourcePdfFileName: inst.sourcePdfFileName,
           sourcePdfPageNumber: inst.sourcePdfPageNumber,

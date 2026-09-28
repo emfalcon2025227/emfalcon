@@ -392,6 +392,11 @@ export interface DataContextType {
     notes?: string;
     proofBase64?: string;
     proofFileName?: string;
+    options?: {
+      sourceWorkflow?: "DAILY_DEPOSITS" | "DIRECT_SETTLEMENT" | "SETTLEMENT_GATE";
+      proofDocumentId?: string;
+      dailyDepositId?: string;
+    };
   }) => Promise<{ success: boolean; receipt?: CollectionRecord; journalEntry?: JournalEntryRecord; error?: string }>;
   settleSecurityDeposit: (params: {
     leaseId: string;
@@ -3295,6 +3300,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           chequeNumber: item.chequeDetails.chequeNumber || `CHQ-${crypto.randomUUID().split("-")[0]}`,
           bankName: item.chequeDetails.bankName || "UAE Bank",
           amount: item.amount,
+          originalAmount: item.originalAmount || item.amount,
+          components: item.components,
+          componentsReconciliationMismatch: item.componentsReconciliationMismatch,
+          componentsMismatchDifference: item.componentsMismatchDifference,
           chequeDate: item.chequeDetails.chequeDate || item.dueDate,
           dueDate: item.chequeDetails.dueDate || item.dueDate,
           ownerId: renewal.ownerId,
@@ -3644,6 +3653,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             chequeNumber: inst.chequeNumber || `CHQ-${crypto.randomUUID().split("-")[0]}`,
             bankName: inst.bankName || "UAE Bank",
             amount: inst.amount,
+            originalAmount: inst.originalAmount || inst.amount,
+            components: inst.components,
+            componentsReconciliationMismatch: inst.componentsReconciliationMismatch,
+            componentsMismatchDifference: inst.componentsMismatchDifference,
             chequeDate: inst.dueDate,
             dueDate: inst.dueDate,
             ownerId: lease.ownerId,
@@ -7170,6 +7183,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     notes?: string;
     proofBase64?: string;
     proofFileName?: string;
+    options?: {
+      sourceWorkflow?: "DAILY_DEPOSITS" | "DIRECT_SETTLEMENT" | "SETTLEMENT_GATE";
+      proofDocumentId?: string;
+      dailyDepositId?: string;
+    };
   }): Promise<{ success: boolean; receipt?: CollectionRecord; journalEntry?: JournalEntryRecord; error?: string }> => {
     assertCloudWriteAvailable(language as "ar" | "en");
     const {
@@ -7185,10 +7203,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       notes,
       proofBase64,
       proofFileName,
+      options,
     } = params;
     const lease = leases.find((l) => l.id === leaseId);
     if (!lease) {
       return { success: false, error: language === "ar" ? "عقد الإيجار غير موجود." : "Lease contract not found." };
+    }
+    // Financial Collection Gate: Cash must ONLY be collected/settled via Daily Deposits workflow
+    const isDailyDepositsFlow = options?.sourceWorkflow === "DAILY_DEPOSITS" || options?.sourceWorkflow === "SETTLEMENT_GATE";
+    if (paymentMethod === "CASH" && !isDailyDepositsFlow) {
+      return {
+        success: false,
+        error: language === "ar"
+          ? "تحصيل مبالغ تأمين الصيانة النقدية يجب أن يمر عبر دورة الإيداعات اليومية حصراً لضمان التوريد والمطابقة البنكية."
+          : "Cash security deposit collection must be processed exclusively via Daily Deposits workflow to ensure verified bank deposit.",
+      };
     }
     // Financial Period Validation
     const periodCheck = validateTransactionPeriod(new Date().toISOString(), financialPeriods);
@@ -7267,7 +7296,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createdAt: nowIso,
         createdById: userId,
       };
-      // Update Lease record
+      // Update Lease record - PRESERVE CONTRACTUAL VALUE (Section 10 & 12)
+      const currentContractualDeposit = lease.securityDeposit || 0;
+      const previousHeld = lease.securityDepositHeld || 0;
+      const newHeld = previousHeld + amount;
+      const newOutstanding = Math.max(0, currentContractualDeposit - newHeld);
+      const newStatus = newHeld >= currentContractualDeposit - 0.01 ? "HELD" : (newHeld > 0 ? "PARTIAL" : "PENDING");
+
       const historyItem: SecurityDepositHistoryItem = {
         id: `sd-hist-${Date.now()}`,
         date: nowIso,
@@ -7279,8 +7314,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       const updatedLease: Lease = {
         ...lease,
-        securityDeposit: amount,
-        securityDepositStatus: "HELD",
+        securityDeposit: currentContractualDeposit, // NEVER overwrite contractual deposit value
+        securityDepositHeld: newHeld,
+        securityDepositOutstanding: newOutstanding,
+        securityDepositStatus: newStatus as any,
         securityDepositReceiptNumber: receiptNumber,
         securityDepositPaymentMethod: paymentMethod,
         securityDepositBankName: bankName || lease.securityDepositBankName,

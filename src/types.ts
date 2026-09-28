@@ -341,10 +341,20 @@ export interface Tenant {
   createdAt: string;
 }
 
+export interface ChequeComponentItem {
+  id: string;
+  type: "RENT" | "RENEWAL_FEE" | "TENANT_ADMIN_FEE" | "OWNER_ADMIN_FEE" | "MAINTENANCE" | "SECURITY_DEPOSIT" | "OTHER";
+  descriptionAr: string;
+  descriptionEn: string;
+  amount: number;
+  obligationRefId?: string;
+}
+
 export interface LeaseInstallment {
   installmentNumber: number;
   dueDate: string;
   amount: number;
+  originalAmount?: number;
   paymentMethod?: PaymentMethod | "CHEQUE" | "CASH" | "BANK_TRANSFER" | "CARD";
   chequeNumber?: string;
   chequeId?: string;
@@ -353,6 +363,9 @@ export interface LeaseInstallment {
   chequeImage?: string;
   status: "PENDING" | "CLEARED" | "BOUNCED" | "COLLECTED" | "WAIVED";
   notes?: string;
+  components?: ChequeComponentItem[];
+  componentsReconciliationMismatch?: boolean;
+  componentsMismatchDifference?: number;
   sourcePdfId?: string;
   sourcePdfFileName?: string;
   sourcePdfPageNumber?: number;
@@ -492,8 +505,11 @@ export interface Lease {
   chequesCount?: number;
   paymentFrequency?: string;
   securityDeposit: number;
+  securityDepositHeld?: number;
+  securityDepositOutstanding?: number;
   securityDepositStatus?: SecurityDepositStatus;
   securityDepositReceiptNumber?: string;
+  firstPaymentMethod?: PaymentMethod | "BANK_TRANSFER" | "CHEQUE" | "CASH" | "CARD" | "CREDIT_CARD";
   securityDepositPaymentMethod?: PaymentMethod | "BANK_TRANSFER" | "CHEQUE" | "CASH";
   securityDepositBankName?: string;
   securityDepositChequeNumber?: string;
@@ -580,6 +596,10 @@ export interface Cheque {
   chequeNumber: string;
   bankName: string;
   amount: number;
+  originalAmount?: number;
+  components?: ChequeComponentItem[];
+  componentsReconciliationMismatch?: boolean;
+  componentsMismatchDifference?: number;
   chequeDate: string;
   dueDate: string;
   ownerId: string;
@@ -2427,12 +2447,16 @@ export interface RenewalPaymentItem {
   id: string;
   installmentNumber: number;
   amount: number;
+  originalAmount?: number;
   dueDate: string;
   paymentMethod: PaymentMethod | "DEFERRED";
   isAdvance?: boolean;
   chequeDetails?: RenewalChequeDetail;
   deferredDetails?: RenewalDeferredDetail;
   advanceDetails?: RenewalAdvanceDetail;
+  components?: ChequeComponentItem[];
+  componentsReconciliationMismatch?: boolean;
+  componentsMismatchDifference?: number;
   status: "PENDING" | "COLLECTED" | "BOUNCED" | "WAIVED";
   notes?: string;
 }
@@ -2444,6 +2468,7 @@ export interface LeaseRenewalRecord {
   originalLeaseNumber: string;
   newLeaseId?: string;
   newLeaseNumber?: string;
+  firstPaymentMethod?: PaymentMethod | "BANK_TRANSFER" | "CHEQUE" | "CASH" | "CARD" | "CREDIT_CARD" | "DEFERRED";
   
   // Parties & Unit
   ownerId: string;
