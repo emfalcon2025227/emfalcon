@@ -9956,10 +9956,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         financialPeriods,
         transactionOrBatch: batch,
         existingEntries: journalEntries,
+        originalJournalToReverse: originalJe,
       });
       if (!postRes.isValid) return { success: false, error: postRes.error };
-      // Mark original as reversed
-      batch.set(doc(db, "journal_entries", originalJe.id), sanitizeForFirestore({ ...originalJe, status: "REVERSED" }), { merge: true });
     }
     const relatedUpdates: { rev: FinancialReversalRecord, rel: PropertyExpenseRecord }[] = [];
     if ((existing.sourceType as any) === "MAINTENANCE_REQUEST" && existing.maintenanceInvoiceId) {
@@ -10312,7 +10311,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
   const postJournalEntry = async (
-    entryData: Omit<JournalEntryRecord, "id" | "entryNumber" | "createdAt" | "status">
+    entryData: Omit<JournalEntryRecord, "id" | "entryNumber" | "createdAt" | "status">,
+    originalJournalToReverse?: JournalEntryRecord
   ): Promise<{ success: boolean; entry?: JournalEntryRecord; error?: string }> => {
     assertCloudWriteAvailable(language as "ar" | "en");
     // Financial Period Validation
@@ -10349,6 +10349,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       entry: newEntry,
       financialPeriods,
       existingEntries: journalEntries,
+      originalJournalToReverse,
     });
     if (!postRes.isValid) {
       return { success: false, error: postRes.error };
@@ -10377,7 +10378,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     const userName = currentUser?.nameAr || currentUser?.nameEn || "المحاسب المسؤول";
     const reversalData = buildReversalJournalEntry(original, reason, userName);
-    const result = await postJournalEntry(reversalData);
+    const result = await postJournalEntry(reversalData, original);
     if (!result.success || !result.entry) {
       return { success: false, error: result.error || "فشل في ترحيل قيد العكس." };
     }
@@ -10387,7 +10388,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       reversalEntryId: result.entry.id,
     };
     setJournalEntries((prev) => prev.map((je) => (je.id === id ? updatedOriginal : je)));
-    safeSetDoc(doc(db, "journal_entries", id), updatedOriginal, { merge: true });
     logAudit(
       "FINANCIAL_RECORD_EDIT",
       "ADJUSTMENT",

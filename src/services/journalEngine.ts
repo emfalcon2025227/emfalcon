@@ -4,7 +4,7 @@
  * and constructs balanced double-entry accounting journal postings.
  */
 
-import { doc, setDoc } from "firebase/firestore";
+import { doc, runTransaction, Firestore, Transaction, WriteBatch } from "firebase/firestore";
 import { db as defaultDb, sanitizeForFirestore } from "../lib/firebase";
 import { validateTransactionPeriod } from "./financialEngine";
 import {
@@ -106,11 +106,12 @@ export function verifyAuthoritativeJournalPosting(
 }
 
 export interface PostJournalOptions {
-  db?: any;
+  db?: Firestore;
   entry: JournalEntryRecord;
-  financialPeriods?: FinancialPeriod[];
-  transactionOrBatch?: any;
+  financialPeriods: FinancialPeriod[];
+  transactionOrBatch?: Transaction | WriteBatch;
   existingEntries?: JournalEntryRecord[];
+  originalJournalToReverse?: JournalEntryRecord;
 }
 
 /**
@@ -124,10 +125,11 @@ export async function postAuthoritativeJournalEntry(
   journalEntriesFallback: JournalEntryRecord[] = []
 ): Promise<{ isValid: boolean; journalRecord?: JournalEntryRecord; error?: string }> {
   let entry: JournalEntryRecord;
-  let dbInstance: any = defaultDb;
+  let dbInstance: Firestore = defaultDb;
   let periods: FinancialPeriod[] = [];
-  let txOrBatch: any = null;
+  let txOrBatch: Transaction | WriteBatch | null = null;
   let existing: JournalEntryRecord[] = journalEntriesFallback;
+  let originalToReverse: JournalEntryRecord | undefined = undefined;
 
   if ("lines" in optionsOrEntry && Array.isArray((optionsOrEntry as any).lines)) {
     entry = optionsOrEntry as JournalEntryRecord;
@@ -138,6 +140,7 @@ export async function postAuthoritativeJournalEntry(
     if (opts.financialPeriods) periods = opts.financialPeriods;
     if (opts.transactionOrBatch) txOrBatch = opts.transactionOrBatch;
     if (opts.existingEntries) existing = opts.existingEntries;
+    if (opts.originalJournalToReverse) originalToReverse = opts.originalJournalToReverse;
   }
 
   // 1. Double-Entry Accounting Gate Check
@@ -152,7 +155,7 @@ export async function postAuthoritativeJournalEntry(
   }
 
   // 3. Strict Financial Period Fail-Closed Validation
-  if (!periods || periods.length === 0) {
+  if (!periods || !Array.isArray(periods) || periods.length === 0) {
     return {
       isValid: false,
       error: "لا يمكن تسجيل القيد المحاسبي: الفترات المالية غير متوفرة أو غير محملة (Strict Fail-Closed)."
@@ -164,12 +167,48 @@ export async function postAuthoritativeJournalEntry(
     return { isValid: false, error: periodCheck.errorAr || periodCheck.errorEn };
   }
 
-  // 4. Authoritative Firestore Event Lock & Idempotency Check
+  // 4. Standalone Posting Execution via runTransaction
+  if (!txOrBatch) {
+    try {
+      return await runTransaction(dbInstance, async (tx) => {
+        const keyRef = doc(dbInstance, "journal_event_keys", `${entry.sourceType}_${entry.sourceId}`);
+        const keySnap = await tx.get(keyRef);
+        if (keySnap.exists()) {
+          return {
+            isValid: false,
+            error: `تم تسجيل قيد محاسبي لهذا الحدث المالي (${entry.sourceType}: ${entry.sourceId}) مسبقاً لمنع التكرار.`
+          };
+        }
+        const jeRef = doc(dbInstance, "journal_entries", entry.id);
+        const payload = sanitizeForFirestore(entry);
+        const keyPayload = sanitizeForFirestore({
+          journalId: entry.id,
+          sourceType: entry.sourceType,
+          sourceId: entry.sourceId,
+          createdAt: new Date().toISOString()
+        });
+        tx.set(keyRef, keyPayload);
+        tx.set(jeRef, payload);
+
+        if (originalToReverse) {
+          const origRef = doc(dbInstance, "journal_entries", originalToReverse.id);
+          tx.set(origRef, sanitizeForFirestore({ ...originalToReverse, status: "REVERSED", reversalEntryId: entry.id }), { merge: true });
+        }
+
+        return { isValid: true, journalRecord: entry };
+      });
+    } catch (err: any) {
+      return { isValid: false, error: err?.message || "فشل ترحيل القيد المحاسبي عبر المعاملة الأحادية." };
+    }
+  }
+
+  // 5. Transaction or WriteBatch Participation
   const keyRef = doc(dbInstance, "journal_event_keys", `${entry.sourceType}_${entry.sourceId}`);
   
-  if (txOrBatch && typeof txOrBatch.get === "function") {
-    // Inside active Firestore Transaction: Read authoritative persisted event lock
-    const keySnap = await txOrBatch.get(keyRef);
+  if (typeof (txOrBatch as any).get === "function") {
+    // Active Firestore Transaction
+    const tx = txOrBatch as Transaction;
+    const keySnap = await tx.get(keyRef);
     if (keySnap.exists()) {
       return {
         isValid: false,
@@ -177,7 +216,7 @@ export async function postAuthoritativeJournalEntry(
       };
     }
   } else {
-    // Non-transaction or fallback memory state check
+    // WriteBatch check against memory state
     if (isDuplicateJournalPosting(existing, entry.sourceType, entry.sourceId)) {
       return {
         isValid: false,
@@ -186,7 +225,6 @@ export async function postAuthoritativeJournalEntry(
     }
   }
 
-  // 5. Atomic Persistence Participation
   const jeRef = doc(dbInstance, "journal_entries", entry.id);
   const payload = sanitizeForFirestore(entry);
   const keyPayload = sanitizeForFirestore({
@@ -196,14 +234,13 @@ export async function postAuthoritativeJournalEntry(
     createdAt: new Date().toISOString()
   });
 
-  if (txOrBatch) {
-    if (typeof txOrBatch.set === "function") {
-      txOrBatch.set(keyRef, keyPayload);
-      txOrBatch.set(jeRef, payload);
+  if (typeof (txOrBatch as any).set === "function") {
+    (txOrBatch as any).set(keyRef, keyPayload);
+    (txOrBatch as any).set(jeRef, payload);
+    if (originalToReverse) {
+      const origRef = doc(dbInstance, "journal_entries", originalToReverse.id);
+      (txOrBatch as any).set(origRef, sanitizeForFirestore({ ...originalToReverse, status: "REVERSED", reversalEntryId: entry.id }), { merge: true });
     }
-  } else {
-    await setDoc(keyRef, keyPayload);
-    await setDoc(jeRef, payload);
   }
 
   return { isValid: true, journalRecord: entry };
