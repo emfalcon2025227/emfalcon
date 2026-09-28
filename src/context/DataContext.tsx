@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { allocateNextSequence } from "../utils/sequenceGenerator";
+import { allocateNextSequence, allocateNextSequenceInTransaction } from "../utils/sequenceGenerator";
 import { authenticatedFetch } from "../utils/apiClient";
 import { db, handleFirestoreError, OperationType, sanitizeForFirestore } from "../lib/firebase";
 import { collection, onSnapshot, doc, setDoc, deleteDoc, writeBatch, deleteField, runTransaction, getDocs } from "firebase/firestore";
@@ -128,7 +128,6 @@ import {
 } from "../services/periodReconciliationEngine";
 import {
   validateJournalEntry,
-  verifyAuthoritativeJournalPosting,
   postAuthoritativeJournalEntry,
   buildReversalJournalEntry,
   buildRentCollectionJournal,
@@ -4615,12 +4614,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
       const rentJeId = "je-" + Date.now() + "-rent-" + crypto.randomUUID().split("-")[0];
-      const year = new Date().getFullYear();
-      const [rentEntryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
       rentJournalRecord = {
         ...rentJournalData,
         id: rentJeId,
-        entryNumber: rentEntryNumber,
+        entryNumber: "",
         status: "POSTED",
         totalDebit: rentVal.totalDebit,
         totalCredit: rentVal.totalCredit,
@@ -4656,12 +4653,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
       const commJeId = "je-" + Date.now() + "-comm-" + crypto.randomUUID().split("-")[0];
-      const year = new Date().getFullYear();
-      const [commEntryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length + (rentJournalRecord ? 1 : 0));
       commJournalRecord = {
         ...commJournalData,
         id: commJeId,
-        entryNumber: commEntryNumber,
+        entryNumber: "",
         status: "POSTED",
         totalDebit: commVal.totalDebit,
         totalCredit: commVal.totalCredit,
@@ -4669,8 +4664,34 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
     // 8. Atomic persistence with runTransaction
+    const year = new Date().getFullYear();
     try {
       await runTransaction(db, async (transaction) => {
+        // Reads & Authoritative Journal Posting First (Strict Read-Before-Write)
+        if (rentJournalRecord) {
+          const [rentEntryNumber] = await allocateNextSequenceInTransaction(transaction, db, `journal_${year}`, `JE-${year}-`, 1, 5);
+          rentJournalRecord.entryNumber = rentEntryNumber;
+          const res = await postAuthoritativeJournalEntry({
+            db,
+            entry: rentJournalRecord,
+            financialPeriods,
+            transaction,
+          });
+          if (!res.isValid) throw new Error(res.error);
+        }
+        if (commJournalRecord) {
+          const [commEntryNumber] = await allocateNextSequenceInTransaction(transaction, db, `journal_${year}`, `JE-${year}-`, 1, 5);
+          commJournalRecord.entryNumber = commEntryNumber;
+          const res = await postAuthoritativeJournalEntry({
+            db,
+            entry: commJournalRecord,
+            financialPeriods,
+            transaction,
+          });
+          if (!res.isValid) throw new Error(res.error);
+        }
+
+        // Entity Writes Phase
         transaction.set(doc(db, "collections", receipt.id), sanitizeForFirestore(receipt));
         for (const alloc of createdAllocations) {
           transaction.set(doc(db, "payment_allocations", alloc.id), sanitizeForFirestore(alloc));
@@ -4683,24 +4704,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         for (const com of commissionsToUpdate.values()) {
           transaction.set(doc(db, "commissions", com.id), sanitizeForFirestore(com), { merge: true });
-        }
-        if (rentJournalRecord) {
-          const res = await postAuthoritativeJournalEntry({
-            db,
-            entry: rentJournalRecord,
-            financialPeriods,
-            transaction,
-          });
-          if (!res.isValid) throw new Error(res.error);
-        }
-        if (commJournalRecord) {
-          const res = await postAuthoritativeJournalEntry({
-            db,
-            entry: commJournalRecord,
-            financialPeriods,
-            transaction,
-          });
-          if (!res.isValid) throw new Error(res.error);
         }
       });
     } catch (batchErr: any) {

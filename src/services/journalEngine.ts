@@ -4,9 +4,10 @@
  * and constructs balanced double-entry accounting journal postings.
  */
 
-import { doc, runTransaction, Firestore, Transaction, WriteBatch } from "firebase/firestore";
+import { doc, runTransaction, Firestore, Transaction } from "firebase/firestore";
 import { db as defaultDb, sanitizeForFirestore } from "../lib/firebase";
 import { validateTransactionPeriod } from "./financialEngine";
+import { flushTransactionWrites } from "../utils/sequenceGenerator";
 import {
   AccountDefinition,
   JournalEntryRecord,
@@ -68,7 +69,9 @@ export function validateJournalEntry(entry: {
 }
 
 /**
- * Checks if a posted journal entry already exists for a specific source event.
+ * In-memory validation helper for pure testing / UI simulation only.
+ * MUST NOT be used for production authoritative duplicate prevention.
+ * Production idempotency is enforced cloud-authoritatively via journal_event_keys in Firestore transactions.
  */
 export function isDuplicateJournalPosting(
   journalEntries: JournalEntryRecord[],
@@ -82,8 +85,9 @@ export function isDuplicateJournalPosting(
 }
 
 /**
- * Authoritative Journal Posting Gate.
- * Verifies double-entry balance and enforces idempotency against duplicate postings.
+ * In-memory validation helper for pure testing / UI simulation only.
+ * MUST NOT be used for production authoritative duplicate prevention.
+ * Production idempotency is enforced cloud-authoritatively via journal_event_keys in Firestore transactions.
  */
 export function verifyAuthoritativeJournalPosting(
   entry: JournalEntryRecord,
@@ -120,24 +124,13 @@ export interface PostJournalOptions {
  * and executes or attaches the journal write to the active Firestore transaction.
  */
 export async function postAuthoritativeJournalEntry(
-  optionsOrEntry: PostJournalOptions | JournalEntryRecord
+  options: PostJournalOptions
 ): Promise<{ isValid: boolean; journalRecord?: JournalEntryRecord; error?: string }> {
-  let entry: JournalEntryRecord;
-  let dbInstance: Firestore = defaultDb;
-  let periods: FinancialPeriod[] = [];
-  let transaction: Transaction | null = null;
-  let originalToReverse: JournalEntryRecord | undefined = undefined;
-
-  if ("lines" in optionsOrEntry && Array.isArray((optionsOrEntry as any).lines)) {
-    entry = optionsOrEntry as JournalEntryRecord;
-  } else {
-    const opts = optionsOrEntry as PostJournalOptions;
-    entry = opts.entry;
-    if (opts.db) dbInstance = opts.db;
-    if (opts.financialPeriods) periods = opts.financialPeriods;
-    if (opts.transaction) transaction = opts.transaction;
-    if (opts.originalJournalToReverse) originalToReverse = opts.originalJournalToReverse;
-  }
+  const entry = options.entry;
+  const dbInstance: Firestore = options.db || defaultDb;
+  const periods: FinancialPeriod[] = options.financialPeriods;
+  const transaction: Transaction | undefined = options.transaction;
+  const originalToReverse: JournalEntryRecord | undefined = options.originalJournalToReverse;
 
   // 1. Double-Entry Accounting Gate Check
   const val = validateJournalEntry(entry);
@@ -173,6 +166,10 @@ export async function postAuthoritativeJournalEntry(
         error: `تم تسجيل قيد محاسبي لهذا الحدث المالي (${entry.sourceType}: ${entry.sourceId}) مسبقاً لمنع التكرار.`
       };
     }
+
+    // Flush any pending transaction writes (e.g. sequence counter increments) now that the read phase is complete
+    flushTransactionWrites(tx);
+
     const jeRef = doc(dbInstance, "journal_entries", entry.id);
     const payload = sanitizeForFirestore(entry);
     const keyPayload = sanitizeForFirestore({
@@ -199,8 +196,9 @@ export async function postAuthoritativeJournalEntry(
       return await runTransaction(dbInstance, async (tx) => {
         return await executeAtomicPosting(tx);
       });
-    } catch (err: any) {
-      return { isValid: false, error: err?.message || "فشل ترحيل القيد المحاسبي عبر المعاملة الأحادية." };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "فشل ترحيل القيد المحاسبي عبر المعاملة الأحادية.";
+      return { isValid: false, error: message };
     }
   }
 
