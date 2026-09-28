@@ -3556,8 +3556,8 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
                     />
                     <span className="font-semibold leading-relaxed">
                       {language === "ar"
-                        ? "أقر بأنني قمت بمراجعة وتأكيد كافة البيانات المدخلة وبنود العقد وجدول الدفعات المذكورة أعلاه، وأتحمل المسؤولية الإدارية والمالية الكاملة عن صحتها."
-                        : "I declare that I have reviewed and verified all the entered contract clauses and payment schedule above, and accept full administrative and financial responsibility."}
+                        ? "تم التأكد من كافة البيانات المدخلة وبنود العقد وجدول الدفعات المذكورة."
+                        : "All entered data, contract terms, and payment schedule listed above have been verified."}
                     </span>
                   </label>
                 </div>
