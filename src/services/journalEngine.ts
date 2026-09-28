@@ -102,6 +102,21 @@ export function verifyAuthoritativeJournalPosting(
 }
 
 /**
+ * Authoritative Journal Posting Service.
+ * Validates double-entry accounting rules and checks duplicate event postings before persistence.
+ */
+export function postAuthoritativeJournalEntry(
+  entry: JournalEntryRecord,
+  journalEntries: JournalEntryRecord[] = []
+): { isValid: boolean; journalRecord?: JournalEntryRecord; error?: string } {
+  const gate = verifyAuthoritativeJournalPosting(entry, journalEntries);
+  if (!gate.isValid) {
+    return { isValid: false, error: gate.error };
+  }
+  return { isValid: true, journalRecord: entry };
+}
+
+/**
  * Account Helper Resolver
  */
 export function findAccountByCodeOrType(

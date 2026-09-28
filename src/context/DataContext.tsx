@@ -167,7 +167,6 @@ import {
   computeCommissionDerivedBalance,
   recalculateAllFinancialBalances,
   INITIAL_CHART_OF_ACCOUNTS,
-  INITIAL_FINANCIAL_PERIODS,
   getApplicableVatRate,
   computeOwnerPayableDetails,
   generateOwnerStatement,
@@ -1095,8 +1094,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return safeLoadFromStorage("ef_historical_records_v12", []);
   });
   const [financialPeriods, setFinancialPeriods] = useState<FinancialPeriod[]>(() => {
-    const loaded = safeLoadFromStorage<FinancialPeriod[]>("ef_financial_periods_v1", []);
-    return loaded && loaded.length > 0 ? loaded : INITIAL_FINANCIAL_PERIODS;
+    return safeLoadFromStorage<FinancialPeriod[]>("ef_financial_periods_v1", []);
   });
   const [periodCertifications, setPeriodCertifications] = useState<ForensicClosingCertification[]>(() => {
     return safeLoadFromStorage("ef_period_certifications_v1", []);
@@ -1657,16 +1655,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, createErrorHandler("vatRates", [], setVatRates));
     const unsubFinancialPeriods = onSnapshot(collection(db, "financial_periods"), (snap) => {
       if (snap.empty) {
-        seedCollectionIfEmpty("financial_periods", INITIAL_FINANCIAL_PERIODS);
-        setFinancialPeriods(INITIAL_FINANCIAL_PERIODS);
+        setFinancialPeriods([]);
       } else {
         const items: FinancialPeriod[] = [];
         snap.forEach(d => items.push(d.data() as FinancialPeriod));
-        // If loaded periods are non-empty, ensure any missing standard years are also present
-        const yearMap = new Set(items.map(p => p.startDate.split("-")[0]));
-        const missingInitial = INITIAL_FINANCIAL_PERIODS.filter(p => !yearMap.has(p.startDate.split("-")[0]));
-        const merged = [...items, ...missingInitial];
-        setFinancialPeriods(merged);
+        setFinancialPeriods(items);
       }
     }, createErrorHandler("financial_periods", [], setFinancialPeriods));
     const unsubPeriodCertifications = onSnapshot(collection(db, "period_certifications"), (snap) => {

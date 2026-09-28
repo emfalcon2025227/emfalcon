@@ -6,7 +6,8 @@ import {
 import {
   validateJournalEntry,
   isDuplicateJournalPosting,
-  verifyAuthoritativeJournalPosting
+  verifyAuthoritativeJournalPosting,
+  postAuthoritativeJournalEntry
 } from "../services/journalEngine";
 import { FinancialPeriod, ChequeComponentItem, JournalEntryRecord } from "../types";
 
@@ -139,6 +140,10 @@ export function runPhase1cFinancialIntegrityTests() {
   // Test 10: verifyAuthoritativeJournalPosting Gate -> Blocks Duplicates and Unbalanced Entries
   const dupCheck = verifyAuthoritativeJournalPosting(existingJournals[0], existingJournals);
   report("TEST-1C-10", "verifyAuthoritativeJournalPosting gate rejects duplicate posting", dupCheck.isValid === false, `Gate blocked duplicate posting: ${dupCheck.error}`);
+
+  // Test 10b: postAuthoritativeJournalEntry Service -> Rejects Duplicate Event Postings
+  const postCheck = postAuthoritativeJournalEntry(existingJournals[0], existingJournals);
+  report("TEST-1C-10b", "postAuthoritativeJournalEntry service enforces authoritative posting boundary", postCheck.isValid === false, `Authoritative posting service rejected duplicate posting: ${postCheck.error}`);
 
 
   // --- 3. CHEQUE COMPONENT RECONCILIATION TESTS ---
