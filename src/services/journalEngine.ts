@@ -117,51 +117,113 @@ export async function postAuthoritativeJournalEntry(
 
   // Helper logic for executing atomic posting inside an authoritative Firestore Transaction
   const executeAtomicPosting = async (tx: Transaction): Promise<{ isValid: boolean; journalRecord?: JournalEntryRecord; error?: string }> => {
-    const keyRef = doc(dbInstance, "journal_event_keys", `${entry.sourceType}_${entry.sourceId}`);
+    // 1. Introduce a transaction-attempt-local working copy of the journal entry (deep enough clone for safety)
+    const workingEntry: JournalEntryRecord = {
+      ...entry,
+      lines: entry.lines ? entry.lines.map(line => ({ ...line })) : []
+    };
+
+    // --- READ PHASE ---
+    // Read 1: Check duplicate event key
+    const keyRef = doc(dbInstance, "journal_event_keys", `${workingEntry.sourceType}_${workingEntry.sourceId}`);
     const keySnap = await tx.get(keyRef);
     if (keySnap.exists()) {
       return {
         isValid: false,
-        error: `تم تسجيل قيد محاسبي لهذا الحدث المالي (${entry.sourceType}: ${entry.sourceId}) مسبقاً لمنع التكرار.`
+        error: `تم تسجيل قيد محاسبي لهذا الحدث المالي (${workingEntry.sourceType}: ${workingEntry.sourceId}) مسبقاً لمنع التكرار.`
       };
     }
 
-    // Atomic sequence allocation inside the active transaction if not already set
-    if (!entry.entryNumber) {
-      const year = new Date(entry.transactionDate || new Date().toISOString()).getFullYear();
-      const [seq] = await allocateNextSequenceInTransaction(tx, dbInstance, `journal_${year}`, `JE-${year}-`, 1, 5);
-      entry.entryNumber = seq;
+    // Read 2: Fetch and validate original journal if this is a reversal (Strict Read-Before-Write)
+    let validatedOriginalData: JournalEntryRecord | null = null;
+    let origRefInstance: any = null;
+    if (originalToReverse) {
+      origRefInstance = doc(dbInstance, "journal_entries", originalToReverse.id);
+      const origSnap = await tx.get(origRefInstance);
+      if (!origSnap.exists()) {
+        return {
+          isValid: false,
+          error: "القيد الأصلي المراد عكسه غير موجود في قاعدة البيانات."
+        };
+      }
+      validatedOriginalData = origSnap.data() as JournalEntryRecord;
+      if (validatedOriginalData.status === "REVERSED" || validatedOriginalData.reversalEntryId) {
+        return {
+          isValid: false,
+          error: "تم عكس هذا القيد المحاسبي مسبقاً ولا يمكن عكسه مرة أخرى."
+        };
+      }
+      if (validatedOriginalData.status !== "POSTED") {
+        return {
+          isValid: false,
+          error: "لا يمكن عكس القيد المحاسبي لأنه ليس في حالة مرحل (POSTED)."
+        };
+      }
+
+      // Rebuild the reversal lines and financial fields using validatedOriginalData to guarantee immutability and prevent stale reads
+      const reversedLines: JournalLine[] = validatedOriginalData.lines.map((l, index) => ({
+        id: `rev-line-${Date.now()}-${index + 1}`,
+        accountId: l.accountId,
+        accountCode: l.accountCode,
+        accountNameAr: l.accountNameAr,
+        accountNameEn: l.accountNameEn,
+        debit: l.credit, // SWAP
+        credit: l.debit, // SWAP
+        description: `عكس قيد: ${l.description || ""}`,
+        ownerId: l.ownerId,
+        propertyId: l.propertyId,
+        unitId: l.unitId,
+        leaseId: l.leaseId,
+        tenantId: l.tenantId,
+      }));
+
+      workingEntry.lines = reversedLines;
+      workingEntry.totalDebit = validatedOriginalData.totalCredit;
+      workingEntry.totalCredit = validatedOriginalData.totalDebit;
+      workingEntry.originalEntryId = validatedOriginalData.id;
     }
 
+    // Read 3: Atomic sequence allocation inside the active transaction if not already set on original and working copies
+    if (!entry.entryNumber && !workingEntry.entryNumber) {
+      const year = new Date(workingEntry.transactionDate || new Date().toISOString()).getFullYear();
+      const [seq] = await allocateNextSequenceInTransaction(tx, dbInstance, `journal_${year}`, `JE-${year}-`, 1, 5);
+      workingEntry.entryNumber = seq;
+    }
+
+    // --- WRITE PHASE ---
     // Flush any pending transaction writes (e.g. sequence counter increments) now that the read phase is complete
     flushTransactionWrites(tx);
 
-    const jeRef = doc(dbInstance, "journal_entries", entry.id);
-    const payload = sanitizeForFirestore(entry);
+    const jeRef = doc(dbInstance, "journal_entries", workingEntry.id);
+    const payload = sanitizeForFirestore(workingEntry);
     const keyPayload = sanitizeForFirestore({
-      journalId: entry.id,
-      sourceType: entry.sourceType,
-      sourceId: entry.sourceId,
+      journalId: workingEntry.id,
+      sourceType: workingEntry.sourceType,
+      sourceId: workingEntry.sourceId,
       createdAt: new Date().toISOString()
     });
 
     tx.set(keyRef, keyPayload);
     tx.set(jeRef, payload);
 
-    if (originalToReverse) {
-      const origRef = doc(dbInstance, "journal_entries", originalToReverse.id);
-      tx.set(origRef, sanitizeForFirestore({ ...originalToReverse, status: "REVERSED", reversalEntryId: entry.id }), { merge: true });
+    if (originalToReverse && origRefInstance && validatedOriginalData) {
+      tx.set(origRefInstance, { status: "REVERSED", reversalEntryId: workingEntry.id }, { merge: true });
     }
 
-    return { isValid: true, journalRecord: entry };
+    return { isValid: true, journalRecord: workingEntry };
   };
 
   // 4. Standalone Posting Execution via runTransaction if transaction not supplied
   if (!transaction) {
     try {
-      return await runTransaction(dbInstance, async (tx) => {
+      const result = await runTransaction(dbInstance, async (tx) => {
         return await executeAtomicPosting(tx);
       });
+      // ONLY persist the generated value back to the caller-owned entry once transaction has successfully committed
+      if (result.isValid && result.journalRecord) {
+        entry.entryNumber = result.journalRecord.entryNumber;
+      }
+      return result;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "فشل ترحيل القيد المحاسبي عبر المعاملة الأحادية.";
       return { isValid: false, error: message };
@@ -186,17 +248,7 @@ export function findAccountByCodeOrType(
   const fallback = chartOfAccounts.find((a) => a.accountType === fallbackType && a.isActive);
   if (fallback) return fallback;
 
-  return {
-    id: `acc-system-${code}`,
-    accountCode: code,
-    accountNameAr: `حساب ${code}`,
-    accountNameEn: `Account ${code}`,
-    accountType: fallbackType,
-    normalBalance: fallbackType === "ASSET" || fallbackType === "EXPENSE" ? "DEBIT" : "CREDIT",
-    isActive: true,
-    isSystemAccount: true,
-    createdAt: new Date().toISOString(),
-  };
+  throw new Error(`Required active account or fallback of type ${fallbackType} not found in chart of accounts for code ${code} / حساب غير موجود أو غير نشط في دليل الحسابات المعتمد: ${code}.`);
 }
 
 /**

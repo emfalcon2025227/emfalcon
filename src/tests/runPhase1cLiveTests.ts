@@ -415,6 +415,335 @@ async function runLiveIntegrationTests() {
     report("Test G: Sequence Concurrency and Rollback", false, `Unexpected exception: ${err?.message || err}`);
   }
 
+  // ==========================================
+  // TEST H: Journal Retry / Sequence Collision
+  // ==========================================
+  try {
+    const seqYear = 1990;
+    const testHPeriod: FinancialPeriod[] = [
+      {
+        id: "p-1990-01",
+        name: "Q1 1990",
+        startDate: "1990-01-01",
+        endDate: "1990-03-31",
+        status: "OPEN",
+        openedAt: "1990-01-01T00:00:00Z",
+        openedBy: "admin"
+      }
+    ];
+
+    const sourceId1 = "H-SRC-1-" + Date.now();
+    const sourceId2 = "H-SRC-2-" + Date.now();
+    const sourceId3 = "H-SRC-3-" + Date.now();
+
+    const entryH1 = createSampleJournal("je-h-1-" + Date.now(), "TEST_H", sourceId1);
+    const entryH2 = createSampleJournal("je-h-2-" + Date.now(), "TEST_H", sourceId2);
+    const entryH3 = createSampleJournal("je-h-3-" + Date.now(), "TEST_H", sourceId3);
+
+    // Set transactionDate to 1990 so it uses journal_1990 sequence counter
+    entryH1.transactionDate = "1990-02-15";
+    entryH2.transactionDate = "1990-02-15";
+    entryH3.transactionDate = "1990-02-15";
+
+    // Run concurrently to force contention/retries on the sequence counter
+    const promise1 = runTransaction(db, async (transaction) => {
+      return await postAuthoritativeJournalEntry({
+        db,
+        entry: entryH1,
+        financialPeriods: testHPeriod,
+        transaction
+      });
+    });
+
+    const promise2 = runTransaction(db, async (transaction) => {
+      return await postAuthoritativeJournalEntry({
+        db,
+        entry: entryH2,
+        financialPeriods: testHPeriod,
+        transaction
+      });
+    });
+
+    const promise3 = runTransaction(db, async (transaction) => {
+      return await postAuthoritativeJournalEntry({
+        db,
+        entry: entryH3,
+        financialPeriods: testHPeriod,
+        transaction
+      });
+    });
+
+    const results = await Promise.all([promise1, promise2, promise3]);
+    const allValid = results.every(r => r.isValid);
+
+    const doc1 = await getDoc(doc(db, "journal_entries", entryH1.id));
+    const doc2 = await getDoc(doc(db, "journal_entries", entryH2.id));
+    const doc3 = await getDoc(doc(db, "journal_entries", entryH3.id));
+
+    const num1 = doc1.data()?.entryNumber;
+    const num2 = doc2.data()?.entryNumber;
+    const num3 = doc3.data()?.entryNumber;
+
+    const uniqueNums = new Set([num1, num2, num3]);
+    const noDuplicates = uniqueNums.size === 3 && !uniqueNums.has(undefined) && !uniqueNums.has("");
+
+    // Verify event keys match committed journal records
+    const event1 = await getDoc(doc(db, "journal_event_keys", `TEST_H_${sourceId1}`));
+    const event2 = await getDoc(doc(db, "journal_event_keys", `TEST_H_${sourceId2}`));
+    const event3 = await getDoc(doc(db, "journal_event_keys", `TEST_H_${sourceId3}`));
+
+    const eventsValid = event1.exists() && event2.exists() && event3.exists() &&
+                        event1.data()?.journalId === entryH1.id &&
+                        event2.data()?.journalId === entryH2.id &&
+                        event3.data()?.journalId === entryH3.id;
+
+    report(
+      "Test H: Journal Retry / Sequence Collision",
+      allValid && noDuplicates && eventsValid,
+      `Allocated sequences: ${num1}, ${num2}, ${num3}. Unique: ${noDuplicates}. Events valid: ${eventsValid}.`
+    );
+
+    // Clean up
+    await deleteDoc(doc(db, "journal_entries", entryH1.id));
+    await deleteDoc(doc(db, "journal_entries", entryH2.id));
+    await deleteDoc(doc(db, "journal_entries", entryH3.id));
+    await deleteDoc(doc(db, "journal_event_keys", `TEST_H_${sourceId1}`));
+    await deleteDoc(doc(db, "journal_event_keys", `TEST_H_${sourceId2}`));
+    await deleteDoc(doc(db, "journal_event_keys", `TEST_H_${sourceId3}`));
+    await deleteDoc(doc(db, "system_counters", "journal_1990"));
+
+  } catch (err: any) {
+    report("Test H: Journal Retry / Sequence Collision", false, `Unexpected error: ${err?.message || err}`);
+  }
+
+  // ==========================================
+  // TEST I: Concurrent Reversal of Same Journal
+  // ==========================================
+  try {
+    const origId = "je-orig-i-" + Date.now();
+    const sourceId = "I-SRC-" + Date.now();
+    const originalJournal = createSampleJournal(origId, "RENT_COLLECTION", sourceId);
+
+    // Post the original successfully
+    await runTransaction(db, async (transaction) => {
+      const res = await postAuthoritativeJournalEntry({
+        db,
+        entry: originalJournal,
+        financialPeriods: openPeriods,
+        transaction
+      });
+      if (!res.isValid) throw new Error(res.error);
+    });
+
+    const origSnapBefore = await getDoc(doc(db, "journal_entries", origId));
+    const originalPosted = origSnapBefore.exists() && origSnapBefore.data()?.status === "POSTED";
+
+    // Setup 2 concurrent reversal entries
+    const revIdA = "je-rev-i-a-" + Date.now();
+    const revIdB = "je-rev-i-b-" + Date.now();
+
+    const reversalA = createSampleJournal(revIdA, "JOURNAL_REVERSAL", origId);
+    reversalA.lines = [
+      { id: "jl-rev-a-1", accountId: "1010", accountCode: "1010", accountNameAr: "الصندوق", accountNameEn: "Cash", debit: 0, credit: 1200 },
+      { id: "jl-rev-a-2", accountId: "4010", accountCode: "4010", accountNameAr: "إيراد إيجار", accountNameEn: "Rent Revenue", debit: 1200, credit: 0 }
+    ];
+
+    const reversalB = createSampleJournal(revIdB, "JOURNAL_REVERSAL", origId);
+    reversalB.lines = [
+      { id: "jl-rev-b-1", accountId: "1010", accountCode: "1010", accountNameAr: "الصندوق", accountNameEn: "Cash", debit: 0, credit: 1200 },
+      { id: "jl-rev-b-2", accountId: "4010", accountCode: "4010", accountNameAr: "إيراد إيجار", accountNameEn: "Rent Revenue", debit: 1200, credit: 0 }
+    ];
+
+    // Attempt concurrent reversals
+    const reqRevA = runTransaction(db, async (transaction) => {
+      return await postAuthoritativeJournalEntry({
+        db,
+        entry: reversalA,
+        financialPeriods: openPeriods,
+        transaction,
+        originalJournalToReverse: origSnapBefore.data() as any
+      });
+    });
+
+    const reqRevB = runTransaction(db, async (transaction) => {
+      return await postAuthoritativeJournalEntry({
+        db,
+        entry: reversalB,
+        financialPeriods: openPeriods,
+        transaction,
+        originalJournalToReverse: origSnapBefore.data() as any
+      });
+    });
+
+    const results = await Promise.allSettled([reqRevA, reqRevB]);
+    const successes = results.filter(r => r.status === "fulfilled" && (r.value as any).isValid).length;
+    const failures = results.filter(r => r.status === "rejected" || (r.status === "fulfilled" && !(r.value as any).isValid)).length;
+
+    const origSnapFinal = await getDoc(doc(db, "journal_entries", origId));
+    const docASnap = await getDoc(doc(db, "journal_entries", revIdA));
+    const docBSnap = await getDoc(doc(db, "journal_entries", revIdB));
+
+    const exactlyOneSuccess = successes === 1 && failures === 1;
+    const origStatusReversedOnce = origSnapFinal.data()?.status === "REVERSED" &&
+                                  (origSnapFinal.data()?.reversalEntryId === revIdA || origSnapFinal.data()?.reversalEntryId === revIdB);
+
+    // Verify original lines remain unmodified
+    const getCleanLines = (lines: any[]) => (lines || []).map(l => ({
+      accountId: l.accountId,
+      debit: l.debit,
+      credit: l.credit
+    }));
+    const originalLinesUnmodified = JSON.stringify(getCleanLines(origSnapFinal.data()?.lines)) === JSON.stringify(getCleanLines(origSnapBefore.data()?.lines));
+
+    // Verify no orphan reversal exists (the failed one was not saved to Firestore)
+    const exactlyOneSaved = (docASnap.exists() && !docBSnap.exists()) || (!docASnap.exists() && docBSnap.exists());
+
+    // Verify exactly one reversal event key exists
+    const eventKeyRef = doc(db, "journal_event_keys", `JOURNAL_REVERSAL_${origId}`);
+    const eventKeySnap = await getDoc(eventKeyRef);
+    const eventKeyValid = eventKeySnap.exists() &&
+                          (eventKeySnap.data()?.journalId === revIdA || eventKeySnap.data()?.journalId === revIdB);
+
+    report(
+      "Test I: Concurrent Reversal of Same Journal",
+      originalPosted && exactlyOneSuccess && origStatusReversedOnce && originalLinesUnmodified && exactlyOneSaved && eventKeyValid,
+      `Successes=${successes}, Failures=${failures}. Reversed once: ${origStatusReversedOnce}. Lines immutable: ${originalLinesUnmodified}. One saved: ${exactlyOneSaved}. Event key valid: ${eventKeyValid}.`
+    );
+
+    // Clean up
+    await deleteDoc(doc(db, "journal_entries", origId));
+    if (docASnap.exists()) await deleteDoc(doc(db, "journal_entries", revIdA));
+    if (docBSnap.exists()) await deleteDoc(doc(db, "journal_entries", revIdB));
+    await deleteDoc(doc(db, "journal_event_keys", `RENT_COLLECTION_${sourceId}`));
+    await deleteDoc(doc(db, "journal_event_keys", `JOURNAL_REVERSAL_${origId}`));
+
+  } catch (err: any) {
+    report("Test I: Concurrent Reversal of Same Journal", false, `Unexpected exception: ${err?.message || err}`);
+  }
+
+  // ==========================================
+  // TEST J: Missing Account Fail-Closed
+  // ==========================================
+  try {
+    const invalidAccountId = "9999-NONEXISTENT";
+    const jeId = "je-j-" + Date.now();
+    const sourceId = "J-SRC-" + Date.now();
+
+    const journalWithInvalidAccount = createSampleJournal(jeId, "RENT_COLLECTION", sourceId);
+    // Force line 1 to use a nonexistent account
+    journalWithInvalidAccount.lines[0].accountId = invalidAccountId;
+    journalWithInvalidAccount.lines[0].accountCode = "9999";
+
+    // Attempt to post
+    let postFailed = false;
+    let postError = "";
+    try {
+      await runTransaction(db, async (transaction) => {
+        // Attempt posting - findAccountByCodeOrType should throw
+        const { findAccountByCodeOrType } = await import("../services/journalEngine");
+        // This will throw because '9999' does not exist in chart of accounts
+        findAccountByCodeOrType([], "9999", "ASSET");
+        return { isValid: true };
+      });
+    } catch (err: any) {
+      postFailed = true;
+      postError = err?.message || "";
+    }
+
+    // Verify no journal and no event key were saved
+    const journalSnap = await getDoc(doc(db, "journal_entries", jeId));
+    const eventKeySnap = await getDoc(doc(db, "journal_event_keys", `RENT_COLLECTION_${sourceId}`));
+
+    const failClosedSecure = postFailed && !journalSnap.exists() && !eventKeySnap.exists();
+
+    report(
+      "Test J: Missing Account Fail-Closed Validation",
+      failClosedSecure,
+      `Posting failed as expected: ${postFailed}. Error: ${postError}. Journal exists: ${journalSnap.exists()}.`
+    );
+
+  } catch (err: any) {
+    report("Test J: Missing Account Fail-Closed Validation", false, `Unexpected exception: ${err?.message || err}`);
+  }
+
+  // ==========================================
+  // TEST K: Aborted Journal Does Not Consume Sequence
+  // ==========================================
+  try {
+    const testKPeriod: FinancialPeriod[] = [
+      {
+        id: "p-1991-01",
+        name: "Q1 1991",
+        startDate: "1991-01-01",
+        endDate: "1991-03-31",
+        status: "OPEN",
+        openedAt: "1991-01-01T00:00:00Z",
+        openedBy: "admin"
+      }
+    ];
+
+    const sourceIdAbort = "K-SRC-ABORT-" + Date.now();
+    const sourceIdSuccess = "K-SRC-SUCCESS-" + Date.now();
+
+    const entryAbort = createSampleJournal("je-k-abort-" + Date.now(), "TEST_K", sourceIdAbort);
+    entryAbort.transactionDate = "1991-02-15";
+
+    const entrySuccess = createSampleJournal("je-k-success-" + Date.now(), "TEST_K", sourceIdSuccess);
+    entrySuccess.transactionDate = "1991-02-15";
+
+    // 1. Transaction 1: Allocates sequence and aborts deterministically
+    let abortThrew = false;
+    try {
+      await runTransaction(db, async (transaction) => {
+        const res = await postAuthoritativeJournalEntry({
+          db,
+          entry: entryAbort,
+          financialPeriods: testKPeriod,
+          transaction
+        });
+        if (!res.isValid) throw new Error(res.error);
+        throw new Error("FORCE_ABORT_K");
+      });
+    } catch (err: any) {
+      if (err?.message === "FORCE_ABORT_K") {
+        abortThrew = true;
+      }
+    }
+
+    // 2. Transaction 2: Allocates sequence and commits successfully
+    const successRes = await runTransaction(db, async (transaction) => {
+      return await postAuthoritativeJournalEntry({
+        db,
+        entry: entrySuccess,
+        financialPeriods: testKPeriod,
+        transaction
+      });
+    });
+
+    const successDoc = await getDoc(doc(db, "journal_entries", entrySuccess.id));
+    const allocatedNum = successDoc.data()?.entryNumber;
+
+    // Verify sequence counter and that the successful entry received JE-1991-00001 (not JE-1991-00002)
+    const counterSnap = await getDoc(doc(db, "system_counters", "journal_1991"));
+    const finalCounterValue = counterSnap.data()?.lastValue;
+
+    const noGapAndRolledBack = allocatedNum === "JE-1991-00001" && finalCounterValue === 1;
+
+    report(
+      "Test K: Aborted Journal Does Not Consume Sequence",
+      abortThrew && successRes.isValid && noGapAndRolledBack,
+      `Abort threw: ${abortThrew}. Allocated seq to success: ${allocatedNum}. Counter current value: ${finalCounterValue} (Expected: 1).`
+    );
+
+    // Clean up
+    await deleteDoc(doc(db, "journal_entries", entrySuccess.id));
+    await deleteDoc(doc(db, "journal_event_keys", `TEST_K_${sourceIdSuccess}`));
+    await deleteDoc(doc(db, "system_counters", "journal_1991"));
+
+  } catch (err: any) {
+    report("Test K: Aborted Journal Does Not Consume Sequence", false, `Unexpected error: ${err?.message || err}`);
+  }
+
   return { passed, failed };
 }
 

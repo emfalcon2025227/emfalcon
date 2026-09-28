@@ -4665,30 +4665,30 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     // 8. Atomic persistence with runTransaction
     const year = new Date().getFullYear();
+    let finalRentJournal: JournalEntryRecord | undefined;
+    let finalCommJournal: JournalEntryRecord | undefined;
     try {
       await runTransaction(db, async (transaction) => {
         // Reads & Authoritative Journal Posting First (Strict Read-Before-Write)
         if (rentJournalRecord) {
-          const [rentEntryNumber] = await allocateNextSequenceInTransaction(transaction, db, `journal_${year}`, `JE-${year}-`, 1, 5);
-          rentJournalRecord.entryNumber = rentEntryNumber;
           const res = await postAuthoritativeJournalEntry({
             db,
             entry: rentJournalRecord,
             financialPeriods,
             transaction,
           });
-          if (!res.isValid) throw new Error(res.error);
+          if (!res.isValid || !res.journalRecord) throw new Error(res.error);
+          finalRentJournal = res.journalRecord;
         }
         if (commJournalRecord) {
-          const [commEntryNumber] = await allocateNextSequenceInTransaction(transaction, db, `journal_${year}`, `JE-${year}-`, 1, 5);
-          commJournalRecord.entryNumber = commEntryNumber;
           const res = await postAuthoritativeJournalEntry({
             db,
             entry: commJournalRecord,
             financialPeriods,
             transaction,
           });
-          if (!res.isValid) throw new Error(res.error);
+          if (!res.isValid || !res.journalRecord) throw new Error(res.error);
+          finalCommJournal = res.journalRecord;
         }
 
         // Entity Writes Phase
@@ -4733,8 +4733,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLeases((prev) => prev.map((l) => leasesToUpdate.get(l.id) || l));
     }
     const newJournalsToSet: JournalEntryRecord[] = [];
-    if (rentJournalRecord) newJournalsToSet.push(rentJournalRecord);
-    if (commJournalRecord) newJournalsToSet.push(commJournalRecord);
+    if (finalRentJournal) newJournalsToSet.push(finalRentJournal);
+    if (finalCommJournal) newJournalsToSet.push(finalCommJournal);
     if (newJournalsToSet.length > 0) {
       setJournalEntries((prev) => [...prev, ...newJournalsToSet]);
     }
@@ -5492,13 +5492,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           financialPeriods,
           transaction,
         });
-        if (!postRes.isValid) throw new Error(postRes.error);
+        if (!postRes.isValid || !postRes.journalRecord) throw new Error(postRes.error);
 
         // All writes executed in the write phase
         transaction.set(targetRef, sanitizeForFirestore(updated), { merge: true });
         transaction.set(doc(db, "collections", colId), sanitizeForFirestore(receipt));
         transaction.set(doc(db, "payment_allocations", allocId), sanitizeForFirestore(alloc));
-        return { updated, receipt, alloc, journalRecord };
+        return { updated, receipt, alloc, journalRecord: postRes.journalRecord };
       });
       setCheques((prev) => prev.map((c) => (c.id === params.chequeId ? result.updated : c)));
       setCollections((prev) => [result.receipt, ...prev]);
@@ -6432,13 +6432,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           financialPeriods,
           transaction,
         });
-        if (!postRes.isValid) throw new Error(postRes.error);
+        if (!postRes.isValid || !postRes.journalRecord) throw new Error(postRes.error);
 
         // Writes phase
         transaction.set(chequeRef, sanitizeForFirestore(updatedChqWithAudit), { merge: true });
         transaction.set(doc(db, "collections", receiptId), sanitizeForFirestore(receipt));
         transaction.set(doc(db, "payment_allocations", allocId), sanitizeForFirestore(alloc));
-        return { updatedChqWithAudit, receipt, alloc, journalRecord, isFullyCollected, appliedAmount, isOverpayment };
+        return { updatedChqWithAudit, receipt, alloc, journalRecord: postRes.journalRecord, isFullyCollected, appliedAmount, isOverpayment };
       });
       setCheques((prev) => prev.map((c) => (c.id === params.chequeId ? result.updatedChqWithAudit : c)));
       setCollections((prev) => [result.receipt, ...prev]);
@@ -6869,7 +6869,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           financialPeriods,
           transaction,
         });
-        if (!postRes.isValid) throw new Error(postRes.error);
+        if (!postRes.isValid || !postRes.journalRecord) throw new Error(postRes.error);
+        createdJournalRecord = postRes.journalRecord;
 
         // Writes phase
         transaction.set(commRef, sanitizeForFirestore(updatedCommission), { merge: true });
@@ -7400,6 +7401,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         totalCredit: jVal.totalCredit,
         createdAt: nowIso,
       };
+      let finalJournal: JournalEntryRecord | undefined;
       try {
         await runTransaction(db, async (transaction) => {
           const postRes = await postAuthoritativeJournalEntry({
@@ -7408,7 +7410,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             financialPeriods,
             transaction,
           });
-          if (!postRes.isValid) throw new Error(postRes.error);
+          if (!postRes.isValid || !postRes.journalRecord) throw new Error(postRes.error);
+          finalJournal = postRes.journalRecord;
 
           // Writes phase
           transaction.set(doc(db, "collections", receiptId), sanitizeForFirestore(newReceipt));
@@ -7424,11 +7427,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCollections((prev) => [newReceipt, ...prev]);
       setPaymentAllocations((prev) => mergePaymentAllocations(prev, [newAllocation]));
       setLeases((prev) => prev.map((l) => (l.id === leaseId ? updatedLease : l)));
-      setJournalEntries((prev) => [...prev, journalRecord]);
+      setJournalEntries((prev) => [...prev, finalJournal || journalRecord]);
       if (newArchiveRecord) {
         setArchive((prev) => [newArchiveRecord, ...prev]);
       }
-      let postedJournal = journalRecord;
+      let postedJournal = finalJournal || journalRecord;
       logAudit(
         "FINANCIAL_PAYMENT",
         "LEASE",
@@ -7625,7 +7628,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               financialPeriods,
               transaction,
             });
-            if (!postRes.isValid) throw new Error(postRes.error);
+            if (!postRes.isValid || !postRes.journalRecord) throw new Error(postRes.error);
+            newJournalRecord = postRes.journalRecord;
           }
 
           // Writes phase
@@ -7850,6 +7854,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         totalCredit: jVal.totalCredit,
         createdAt: nowIso,
       };
+      let finalJournal: JournalEntryRecord | undefined;
       try {
         await runTransaction(db, async (transaction) => {
           const postRes = await postAuthoritativeJournalEntry({
@@ -7858,7 +7863,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             financialPeriods,
             transaction,
           });
-          if (!postRes.isValid) throw new Error(postRes.error);
+          if (!postRes.isValid || !postRes.journalRecord) throw new Error(postRes.error);
+          finalJournal = postRes.journalRecord;
 
           // Writes phase
           transaction.set(doc(db, "leases", leaseId), sanitizeForFirestore(updatedLease), { merge: true });
@@ -7870,11 +7876,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: err?.message || "Failed to settle/refund security deposit" };
       }
       setLeases((prev) => prev.map((l) => (l.id === leaseId ? updatedLease : l)));
-      setJournalEntries((prev) => [...prev, journalRecord]);
+      setJournalEntries((prev) => [...prev, finalJournal || journalRecord]);
       if (newArchiveRecord) {
         setArchive((prev) => [newArchiveRecord, ...prev]);
       }
-      postedJournal = journalRecord;
+      postedJournal = finalJournal || journalRecord;
       logAudit(
         "FINANCIAL_PAYMENT",
         "LEASE",
@@ -9193,7 +9199,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           financialPeriods,
           transaction,
         });
-        if (!postRes.isValid) throw new Error(postRes.error);
+        if (!postRes.isValid || !postRes.journalRecord) throw new Error(postRes.error);
 
         // Writes phase
         transaction.update(ownerRef, updateOwnerFields);
@@ -9225,7 +9231,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
            verifiedAt: new Date().toISOString(),
            aiVerificationDetails: aiVerificationDetails || null,
         }));
-        return { journalRecord };
+        return { journalRecord: postRes.journalRecord };
       });
       // Update local state
       const updatedTransfer: OwnerTransferRecord = {
@@ -9491,7 +9497,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           financialPeriods,
           transaction,
         });
-        if (!postRes.isValid) throw new Error(postRes.error);
+        if (!postRes.isValid || !postRes.journalRecord) throw new Error(postRes.error);
 
         // Writes phase
         transaction.update(ownerRef, {
@@ -9506,7 +9512,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
            reversalTimestamp: reversalRecord.reversalTimestamp,
            updatedAt: new Date().toISOString(),
         }));
-        return { journalRecord };
+        return { journalRecord: postRes.journalRecord };
       });
       const updatedTransfer: OwnerTransferRecord = {
         ...existing,
@@ -9623,7 +9629,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             financialPeriods,
             transaction,
           });
-          if (!postRes.isValid) throw new Error(postRes.error);
+          if (!postRes.isValid || !postRes.journalRecord) throw new Error(postRes.error);
+          newJournalRecord = postRes.journalRecord;
         }
 
         // Writes phase
@@ -9777,7 +9784,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           financialPeriods,
           transaction,
         });
-        if (!postRes.isValid) throw new Error(postRes.error);
+        if (!postRes.isValid || !postRes.journalRecord) throw new Error(postRes.error);
+        newJournalRecord = postRes.journalRecord;
 
         // Writes phase
         transaction.set(doc(db, "property_expenses", expenseId), sanitizeForFirestore(updated), { merge: true });
@@ -9934,7 +9942,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             transaction,
             originalJournalToReverse: originalJe,
           });
-          if (!postRes.isValid) throw new Error(postRes.error);
+          if (!postRes.isValid || !postRes.journalRecord) throw new Error(postRes.error);
+          reversalJournal = postRes.journalRecord;
         }
 
         // Writes phase
@@ -10322,10 +10331,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           transaction,
           originalJournalToReverse,
         });
-        if (!postRes.isValid) {
+        if (!postRes.isValid || !postRes.journalRecord) {
           throw new Error(postRes.error);
         }
-        return newEntry;
+        return postRes.journalRecord;
       });
 
       setJournalEntries((prev) => [...prev, result]);
@@ -11280,6 +11289,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       settlement: { ...c.settlement, schedule: updatedSchedule },
       updatedAt: new Date().toISOString(),
     };
+    let committedJournalRecord: JournalEntryRecord | undefined;
     try {
       await runTransaction(db, async (transaction) => {
         // Correct read-before-write ordering: post authoritative journal entry first (performs reads internally)
@@ -11289,7 +11299,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           financialPeriods,
           transaction,
         });
-        if (!postRes.isValid) throw new Error(postRes.error);
+        if (!postRes.isValid || !postRes.journalRecord) throw new Error(postRes.error);
+        committedJournalRecord = postRes.journalRecord;
 
         // Perform writes after all reads/allocations
         transaction.set(doc(db, "collections", receiptId), sanitizeForFirestore(receipt));
@@ -11308,7 +11319,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Only update React state after commit succeeds
     setCollections((prev) => [receipt, ...prev]);
     setPaymentAllocations((prev) => mergePaymentAllocations(prev, [allocation]));
-    setJournalEntries((prev) => [...prev, journalRecord]);
+    setJournalEntries((prev) => [...prev, committedJournalRecord || journalRecord]);
     setCases((prev) => prev.map((item) => (item.id === caseId ? updatedCase : item)));
     logAudit("FINANCIAL_PAYMENT", "CASE", caseId, "Settlement Installment", `Payment of ${payAmount} AED recorded via ${effectivePaymentMethod}`);
     return { success: true, receipt };
@@ -11444,6 +11455,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       settlement: { ...c.settlement, schedule: updatedSchedule },
       updatedAt: new Date().toISOString(),
     };
+    let committedJournalRecord: JournalEntryRecord | undefined;
     try {
       await runTransaction(db, async (transaction) => {
         // Correct read-before-write ordering: post authoritative journal entry first (performs reads internally)
@@ -11453,7 +11465,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           financialPeriods,
           transaction,
         });
-        if (!postRes.isValid) throw new Error(postRes.error);
+        if (!postRes.isValid || !postRes.journalRecord) throw new Error(postRes.error);
+        committedJournalRecord = postRes.journalRecord;
 
         // Perform writes after all reads/allocations
         transaction.set(doc(db, "collections", receiptId), sanitizeForFirestore(receipt));
@@ -11469,7 +11482,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     setCollections((prev) => [receipt, ...prev]);
     setPaymentAllocations((prev) => mergePaymentAllocations(prev, [allocation]));
-    setJournalEntries((prev) => [...prev, journalRecord]);
+    setJournalEntries((prev) => [...prev, committedJournalRecord || journalRecord]);
     setCases((prev) => prev.map((item) => (item.id === caseId ? updatedCase : item)));
     logAudit("FINANCIAL_PAYMENT", "CASE", caseId, "Settlement Cheque Cleared", `Cheque #${targetInst.chequeDetails.chequeNumber} cleared for ${clearAmount} AED`);
     return { success: true, receipt };
