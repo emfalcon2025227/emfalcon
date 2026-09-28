@@ -19,6 +19,7 @@ import {
   OwnerTransferRecord,
   PropertyExpenseRecord,
   JournalEntryRecord,
+  ChequeComponentItem,
   OwnerStatementReport,
   OwnerStatementItem,
   TenantStatementReport,

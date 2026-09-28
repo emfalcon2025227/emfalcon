@@ -118,13 +118,13 @@ export async function runPhase1cFinancialIntegrityTests() {
       entryNumber: "JE-2026-0001",
       transactionDate: "2026-02-01",
       periodId: "p-2026-01",
-      sourceType: "PAYMENT",
+      sourceType: "RENT_COLLECTION",
       sourceId: "PAY-9999",
       descriptionAr: "إيصال استلام",
       descriptionEn: "Payment Receipt",
       lines: [
-        { accountId: "1010", debit: 5000, credit: 0 },
-        { accountId: "4010", debit: 0, credit: 5000 }
+        { id: "jl-1", accountId: "1010", accountCode: "1010", accountNameAr: "الصندوق", accountNameEn: "Cash", debit: 5000, credit: 0 },
+        { id: "jl-2", accountId: "4010", accountCode: "4010", accountNameAr: "إيراد إيجار", accountNameEn: "Rent Revenue", debit: 0, credit: 5000 }
       ],
       totalDebit: 5000,
       totalCredit: 5000,
@@ -134,8 +134,8 @@ export async function runPhase1cFinancialIntegrityTests() {
       createdAt: "2026-02-01T00:00:00Z"
     }
   ];
-  const isDup = isDuplicateJournalPosting(existingJournals, "PAYMENT", "PAY-9999");
-  report("TEST-1C-09", "Duplicate journal posting detected for source event", isDup === true, "Detected existing POSTED journal entry for PAYMENT PAY-9999.");
+  const isDup = isDuplicateJournalPosting(existingJournals, "RENT_COLLECTION", "PAY-9999");
+  report("TEST-1C-09", "Duplicate journal posting detected for source event", isDup === true, "Detected existing POSTED journal entry for RENT_COLLECTION PAY-9999.");
 
   // Test 10: verifyAuthoritativeJournalPosting Gate -> Blocks Duplicates and Unbalanced Entries
   const dupCheck = verifyAuthoritativeJournalPosting(existingJournals[0], existingJournals);
@@ -170,30 +170,30 @@ export async function runPhase1cFinancialIntegrityTests() {
 
   // Test 12: Equal Cheque Components -> Allowed
   const matchingComponents: ChequeComponentItem[] = [
-    { componentType: "RENT", obligationRefId: "obl-1", amount: 4000, descriptionAr: "إيجار", descriptionEn: "Rent" },
-    { componentType: "TENANT_ADMIN_FEE", obligationRefId: "obl-2", amount: 1000, descriptionAr: "رسوم إدارية", descriptionEn: "Admin Fee" }
+    { id: "c1", type: "RENT", obligationRefId: "obl-1", amount: 4000, descriptionAr: "إيجار", descriptionEn: "Rent" },
+    { id: "c2", type: "TENANT_ADMIN_FEE", obligationRefId: "obl-2", amount: 1000, descriptionAr: "رسوم إدارية", descriptionEn: "Admin Fee" }
   ];
   const valChequeEqual = validateChequeComponents(5000, matchingComponents);
   report("TEST-1C-12", "Matching cheque component total allowed", valChequeEqual.isValid === true && valChequeEqual.difference === 0, "Components (4000 + 1000) equal Cheque amount (5000).");
 
   // Test 13: Mismatched Cheque Components (Lower Total) -> Rejected
   const lowerComponents: ChequeComponentItem[] = [
-    { componentType: "RENT", obligationRefId: "obl-1", amount: 3500, descriptionAr: "إيجار", descriptionEn: "Rent" }
+    { id: "c1", type: "RENT", obligationRefId: "obl-1", amount: 3500, descriptionAr: "إيجار", descriptionEn: "Rent" }
   ];
   const valChequeLower = validateChequeComponents(5000, lowerComponents);
   report("TEST-1C-13", "Cheque components sum less than cheque total rejected", valChequeLower.isValid === false, `Difference of ${valChequeLower.difference} detected: ${valChequeLower.errorEn}`);
 
   // Test 14: Mismatched Cheque Components (Higher Total) -> Rejected
   const higherComponents: ChequeComponentItem[] = [
-    { componentType: "RENT", obligationRefId: "obl-1", amount: 6000, descriptionAr: "إيجار", descriptionEn: "Rent" }
+    { id: "c1", type: "RENT", obligationRefId: "obl-1", amount: 6000, descriptionAr: "إيجار", descriptionEn: "Rent" }
   ];
   const valChequeHigher = validateChequeComponents(5000, higherComponents);
   report("TEST-1C-14", "Cheque components sum greater than cheque total rejected", valChequeHigher.isValid === false, `Difference of ${valChequeHigher.difference} detected: ${valChequeHigher.errorEn}`);
 
   // Test 15: Negative Component Amount -> Rejected
   const negativeComponents: ChequeComponentItem[] = [
-    { componentType: "RENT", obligationRefId: "obl-1", amount: 5500, descriptionAr: "إيجار", descriptionEn: "Rent" },
-    { componentType: "OTHER", obligationRefId: "obl-2", amount: -500, descriptionAr: "خصم", descriptionEn: "Discount" }
+    { id: "c1", type: "RENT", obligationRefId: "obl-1", amount: 5500, descriptionAr: "إيجار", descriptionEn: "Rent" },
+    { id: "c2", type: "OTHER", obligationRefId: "obl-2", amount: -500, descriptionAr: "خصم", descriptionEn: "Discount" }
   ];
   const valChequeNegative = validateChequeComponents(5000, negativeComponents);
   report("TEST-1C-15", "Negative cheque component amount rejected", valChequeNegative.isValid === false, `Rejected negative amount: ${valChequeNegative.errorEn}`);

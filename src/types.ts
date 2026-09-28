@@ -2908,7 +2908,7 @@ export interface PeriodReconciliationReport {
   periodName: string;
   startDate: string;
   endDate: string;
-  periodStatus: "OPEN" | "CLOSED";
+  periodStatus: "OPEN" | "CLOSED" | "LOCKED";
   reconciledAt: string;
   reconciledByUserId: string;
   reconciledByUserName: string;

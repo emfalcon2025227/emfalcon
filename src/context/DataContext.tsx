@@ -179,6 +179,7 @@ import {
   createExpenseFromMaintenance,
   OwnerPayableDetails,
   validateTransactionPeriod,
+  validateChequeComponents,
   validateFinancialPeriodClosing,
   canCreateFinancialPeriod,
 } from "../services/financialEngine";
