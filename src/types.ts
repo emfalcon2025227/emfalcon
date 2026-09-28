@@ -361,7 +361,7 @@ export interface LeaseInstallment {
   bankName?: string;
   drawerName?: string;
   chequeImage?: string;
-  status: "PENDING" | "CLEARED" | "BOUNCED" | "COLLECTED" | "WAIVED";
+  status: "PENDING" | "CLEARED" | "BOUNCED" | "COLLECTED" | "WAIVED" | "SETTLED";
   notes?: string;
   components?: ChequeComponentItem[];
   componentsReconciliationMismatch?: boolean;
@@ -565,7 +565,9 @@ export type ChequeStatus =
   | "REPLACED"
   | "UNDER_LEGAL"
   | "DEPOSITED"
-  | "POST_DATED";
+  | "POST_DATED"
+  | "SETTLED"
+  | "WAIVED";
 
 export type ReturnReason =
   | "INSUFFICIENT_FUNDS"
@@ -619,9 +621,9 @@ export interface Cheque {
   imageUrl?: string;
   documentId?: string;
   convertedToCaseId?: string;
-  whatsAppStatus: WhatsAppActionStatus;
+  whatsAppStatus?: WhatsAppActionStatus;
   lastReminderDate?: string;
-  reminderCount: number;
+  reminderCount?: number;
   drawerName?: string;
   accountNumber?: string;
   bankAccountNumber?: string;
@@ -1267,6 +1269,9 @@ export type AuditActionType =
   | "CREATE"
   | "UPDATE"
   | "DELETE"
+  | "APPROVE"
+  | "DOCUMENT_PRINT"
+  | "DOCUMENT_EXPORT"
   | "FINANCIAL_RECORD_ADD"
   | "STATUS_CHANGE"
   | "FINANCIAL_PAYMENT"
@@ -2491,7 +2496,7 @@ export interface LeaseRenewalRecord {
   increaseReason?: string;
 
   // Duration & Dates
-  durationOption: RenewalDurationOption;
+  durationOption?: RenewalDurationOption;
   customDurationMonths?: number;
   originalStartDate: string;
   originalEndDate: string;
@@ -2525,6 +2530,7 @@ export interface LeaseRenewalRecord {
   updatedAt?: string;
   
   notes?: string;
+  reviewNotes?: string;
   attachedDocumentIds?: string[];
 
   // Optional admin fees to be recorded on approval

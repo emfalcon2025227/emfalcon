@@ -48,7 +48,9 @@ import {
   PaymentMethod, 
   Tenant,
   AdminFeeExemptionPolicy,
-  ChequeComponentItem 
+  ChequeComponentItem,
+  StagedAdminFeesConfig,
+  CommissionCalculationBasis 
 } from "../../types";
 import { Modal } from "../common/Modal";
 import { Badge } from "../common/Badge";
@@ -336,7 +338,7 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
   // Optional Office Commission / Administrative Fees
   const [includeAdminFees, setIncludeAdminFees] = useState(false);
   const [ownerFeeEnabled, setOwnerFeeEnabled] = useState(true);
-  const [ownerFeeBasis, setOwnerFeeBasis] = useState<"PERCENTAGE_OF_RENT" | "FIXED_AMOUNT">("PERCENTAGE_OF_RENT");
+  const [ownerFeeBasis, setOwnerFeeBasis] = useState<CommissionCalculationBasis>("PERCENTAGE_OF_RENT");
   const [ownerFeeRate, setOwnerFeeRate] = useState<number | string>(5.0);
   const [ownerFeeFixed, setOwnerFeeFixed] = useState<number | string>("");
   const [ownerFeeDueDate, setOwnerFeeDueDate] = useState("");
@@ -345,7 +347,7 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
   const [ownerFeeReference, setOwnerFeeReference] = useState("");
 
   const [tenantFeeEnabled, setTenantFeeEnabled] = useState(true);
-  const [tenantFeeBasis, setTenantFeeBasis] = useState<"PERCENTAGE_OF_RENT" | "FIXED_AMOUNT">("PERCENTAGE_OF_RENT");
+  const [tenantFeeBasis, setTenantFeeBasis] = useState<CommissionCalculationBasis>("PERCENTAGE_OF_RENT");
   const [tenantFeeRate, setTenantFeeRate] = useState<number | string>(5.0);
   const [tenantFeeFixed, setTenantFeeFixed] = useState<number | string>("");
   const [tenantFeeDueDate, setTenantFeeDueDate] = useState("");

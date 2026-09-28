@@ -54,6 +54,8 @@ export interface OCRV2Result<T = Record<string, any>> {
   };
   warnings?: string[];
   errors?: string[];
+  isTransportFailure?: boolean;
+  errorType?: string;
 }
 
 export interface OCRV2PreprocessOptions {

@@ -20,8 +20,8 @@ export function resolveApiUrl(endpoint: RequestInfo | URL): string {
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   const configuredBase =
     (typeof import.meta !== "undefined" &&
-      import.meta.env &&
-      (import.meta.env.VITE_API_BASE_URL as string)) ||
+      (import.meta as any).env &&
+      ((import.meta as any).env.VITE_API_BASE_URL as string)) ||
     "";
 
   if (configuredBase) {

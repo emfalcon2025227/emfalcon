@@ -63,6 +63,8 @@ export interface OcrExtractionResult {
   errors?: string[];
   error?: string;
   errorAr?: string;
+  isTransportFailure?: boolean;
+  errorType?: string;
 }
 
 // --- Universal Profiles ---
