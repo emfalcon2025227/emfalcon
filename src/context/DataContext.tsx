@@ -5382,6 +5382,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!periodCheck.allowed) {
           throw new Error(language === "ar" ? periodCheck.errorAr : periodCheck.errorEn);
         }
+        const compCheck = validateChequeComponents(target.amount, target.components);
+        if (!compCheck.isValid) {
+          throw new Error(language === "ar" ? compCheck.errorAr : compCheck.errorEn);
+        }
         const oldStatus = target.status;
         const nowIso = new Date().toISOString();
         const auditEntry: ChequeAuditEntry = {

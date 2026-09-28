@@ -78,6 +78,30 @@ export function isDuplicateJournalPosting(
 }
 
 /**
+ * Authoritative Journal Posting Gate.
+ * Verifies double-entry balance and enforces idempotency against duplicate postings.
+ */
+export function verifyAuthoritativeJournalPosting(
+  entry: JournalEntryRecord,
+  existingEntries: JournalEntryRecord[] = []
+): { isValid: boolean; error?: string } {
+  const validation = validateJournalEntry(entry);
+  if (!validation.isValid) {
+    return { isValid: false, error: validation.error };
+  }
+  if (entry.sourceType && entry.sourceId) {
+    const isDup = isDuplicateJournalPosting(existingEntries, entry.sourceType, entry.sourceId);
+    if (isDup) {
+      return {
+        isValid: false,
+        error: `تم تسجيل قيد محاسبي لهذا الحدث المالي (${entry.sourceType}: ${entry.sourceId}) مسبقاً لمنع التكرار.`
+      };
+    }
+  }
+  return { isValid: true };
+}
+
+/**
  * Account Helper Resolver
  */
 export function findAccountByCodeOrType(

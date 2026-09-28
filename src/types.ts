@@ -2823,7 +2823,7 @@ export interface FinancialPeriod {
   name: string;
   startDate: string;
   endDate: string;
-  status: "OPEN" | "CLOSED";
+  status: "OPEN" | "CLOSED" | "LOCKED";
   openedAt: string;
   openedBy: string;
   closedAt?: string;

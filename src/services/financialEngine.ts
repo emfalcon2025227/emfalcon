@@ -157,7 +157,7 @@ export function validateTransactionPeriod(
     };
   }
 
-  if (period.status === "CLOSED" || (period as any).status === "LOCKED") {
+  if (period.status === "CLOSED" || period.status === "LOCKED") {
     return {
       allowed: false,
       errorAr: "لا يمكن تسجيل هذه المعاملة لأن الفترة المالية مغلقة أو مقفلة. يجب استخدام إجراء العكس أو التسوية المعتمد.",
@@ -171,15 +171,22 @@ export function validateTransactionPeriod(
 /**
  * Validates cheque component items against the cheque's target amount.
  * Enforces:
- * 1. SUM(component amounts) === cheque total amount (within 0.01 tolerance).
- * 2. Every component has a non-negative amount and valid category/obligation reference.
+ * 1. Components must be present (non-null, non-undefined, non-empty).
+ * 2. SUM(component amounts) === cheque total amount (within 0.01 tolerance).
+ * 3. Every component has a non-negative amount and valid category/obligation reference.
  */
 export function validateChequeComponents(
   chequeAmount: number,
   components?: ChequeComponentItem[]
 ): { isValid: boolean; calculatedTotal: number; difference: number; errorAr?: string; errorEn?: string } {
   if (!components || components.length === 0) {
-    return { isValid: true, calculatedTotal: chequeAmount, difference: 0 };
+    return {
+      isValid: false,
+      calculatedTotal: 0,
+      difference: chequeAmount,
+      errorAr: "بيانات مكونات الشيك مفقودة أو فارغة. تتطلب التسوية المالية تفكيك مكونات الشيك المعتمد.",
+      errorEn: "Cheque component data is missing or empty. Financial settlement requires valid component breakdown.",
+    };
   }
 
   let calculatedTotal = 0;
