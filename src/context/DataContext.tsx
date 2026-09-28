@@ -128,6 +128,8 @@ import {
 } from "../services/periodReconciliationEngine";
 import {
   validateJournalEntry,
+  verifyAuthoritativeJournalPosting,
+  postAuthoritativeJournalEntry,
   buildReversalJournalEntry,
   buildRentCollectionJournal,
   buildAdminFeeJournal,
@@ -4681,10 +4683,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       batch.set(doc(db, "commissions", com.id), sanitizeForFirestore(com), { merge: true });
     }
     if (rentJournalRecord) {
-      batch.set(doc(db, "journal_entries", rentJournalRecord.id), sanitizeForFirestore(rentJournalRecord));
+      const res = await postAuthoritativeJournalEntry({
+        db,
+        entry: rentJournalRecord,
+        financialPeriods,
+        transactionOrBatch: batch,
+        existingEntries: journalEntries,
+      });
+      if (!res.isValid) return { success: false, error: res.error };
     }
     if (commJournalRecord) {
-      batch.set(doc(db, "journal_entries", commJournalRecord.id), sanitizeForFirestore(commJournalRecord));
+      const res = await postAuthoritativeJournalEntry({
+        db,
+        entry: commJournalRecord,
+        financialPeriods,
+        transactionOrBatch: batch,
+        existingEntries: journalEntries,
+      });
+      if (!res.isValid) return { success: false, error: res.error };
     }
     try {
       await batch.commit();
@@ -5473,7 +5489,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           totalCredit: jVal.totalCredit,
           createdAt: nowIso,
         };
-        transaction.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
+        const postRes = await postAuthoritativeJournalEntry({
+          db,
+          entry: journalRecord,
+          financialPeriods,
+          transactionOrBatch: transaction,
+          existingEntries: journalEntries,
+        });
+        if (!postRes.isValid) throw new Error(postRes.error);
         return { updated, receipt, alloc, journalRecord };
       });
       setCheques((prev) => prev.map((c) => (c.id === params.chequeId ? result.updated : c)));
@@ -6407,7 +6430,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         transaction.set(chequeRef, sanitizeForFirestore(updatedChqWithAudit), { merge: true });
         transaction.set(doc(db, "collections", receiptId), sanitizeForFirestore(receipt));
         transaction.set(doc(db, "payment_allocations", allocId), sanitizeForFirestore(alloc));
-        transaction.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
+        const postRes = await postAuthoritativeJournalEntry({
+          db,
+          entry: journalRecord,
+          financialPeriods,
+          transactionOrBatch: transaction,
+          existingEntries: journalEntries,
+        });
+        if (!postRes.isValid) throw new Error(postRes.error);
         return { updatedChqWithAudit, receipt, alloc, journalRecord, isFullyCollected, appliedAmount, isOverpayment };
       });
       setCheques((prev) => prev.map((c) => (c.id === params.chequeId ? result.updatedChqWithAudit : c)));
@@ -6838,7 +6868,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         transaction.set(commRef, sanitizeForFirestore(updatedCommission), { merge: true });
         transaction.set(receiptRef, sanitizeForFirestore(newReceipt));
         transaction.set(doc(db, "payment_allocations", allocationId), sanitizeForFirestore(newAllocation));
-        transaction.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(createdJournalRecord));
+        const postRes = await postAuthoritativeJournalEntry({
+          db,
+          entry: createdJournalRecord,
+          financialPeriods,
+          transactionOrBatch: transaction,
+          existingEntries: journalEntries,
+        });
+        if (!postRes.isValid) throw new Error(postRes.error);
       });
       // If return was early due to idempotency, no state update needed
       if (!updatedCommission || !newReceipt || !newAllocation) {
@@ -7370,7 +7407,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       batch.set(doc(db, "collections", receiptId), sanitizeForFirestore(newReceipt));
       batch.set(doc(db, "payment_allocations", allocationId), sanitizeForFirestore(newAllocation));
       batch.set(doc(db, "leases", leaseId), sanitizeForFirestore(updatedLease), { merge: true });
-      batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
+      const postRes = await postAuthoritativeJournalEntry({
+        db,
+        entry: journalRecord,
+        financialPeriods,
+        transactionOrBatch: batch,
+        existingEntries: journalEntries,
+      });
+      if (!postRes.isValid) return { success: false, error: postRes.error };
       if (newArchiveRecord) {
         batch.set(doc(db, "archive", newArchiveRecord.id), sanitizeForFirestore(newArchiveRecord));
       }
@@ -7587,7 +7631,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           totalCredit: jVal.totalCredit,
           createdAt: new Date().toISOString(),
         };
-        batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(newJournalRecord));
+        const postRes = await postAuthoritativeJournalEntry({
+          db,
+          entry: newJournalRecord,
+          financialPeriods,
+          transactionOrBatch: batch,
+          existingEntries: journalEntries,
+        });
+        if (!postRes.isValid) return { success: false, error: postRes.error };
       }
       try {
         await batch.commit();
@@ -7811,7 +7862,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       const batch = writeBatch(db);
       batch.set(doc(db, "leases", leaseId), sanitizeForFirestore(updatedLease), { merge: true });
-      batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
+      const postRes = await postAuthoritativeJournalEntry({
+        db,
+        entry: journalRecord,
+        financialPeriods,
+        transactionOrBatch: batch,
+        existingEntries: journalEntries,
+      });
+      if (!postRes.isValid) return { success: false, error: postRes.error };
       if (newArchiveRecord) {
         batch.set(doc(db, "archive", newArchiveRecord.id), sanitizeForFirestore(newArchiveRecord));
       }
@@ -9170,7 +9228,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           totalCredit: jVal.totalCredit,
           createdAt: new Date().toISOString(),
         };
-        transaction.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
+        const postRes = await postAuthoritativeJournalEntry({
+          db,
+          entry: journalRecord,
+          financialPeriods,
+          transactionOrBatch: transaction,
+          existingEntries: journalEntries,
+        });
+        if (!postRes.isValid) throw new Error(postRes.error);
         return { journalRecord };
       });
       // Update local state
@@ -9445,7 +9510,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           totalCredit: jVal.totalCredit,
           createdAt: new Date().toISOString(),
         };
-        transaction.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
+        const postRes = await postAuthoritativeJournalEntry({
+          db,
+          entry: journalRecord,
+          financialPeriods,
+          transactionOrBatch: transaction,
+          existingEntries: journalEntries,
+        });
+        if (!postRes.isValid) throw new Error(postRes.error);
         return { journalRecord };
       });
       const updatedTransfer: OwnerTransferRecord = {
@@ -9563,7 +9635,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         totalCredit: jVal.totalCredit,
         createdAt: new Date().toISOString(),
       };
-      batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(newJournalRecord));
+      const postRes = await postAuthoritativeJournalEntry({
+        db,
+        entry: newJournalRecord,
+        financialPeriods,
+        transactionOrBatch: batch,
+        existingEntries: journalEntries,
+      });
+      if (!postRes.isValid) return { success: false, error: postRes.error };
     }
     try {
       await batch.commit();
@@ -9710,7 +9789,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       totalCredit: jVal.totalCredit,
       createdAt: new Date().toISOString(),
     };
-    batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(newJournalRecord));
+    const postRes = await postAuthoritativeJournalEntry({
+      db,
+      entry: newJournalRecord,
+      financialPeriods,
+      transactionOrBatch: batch,
+      existingEntries: journalEntries,
+    });
+    if (!postRes.isValid) return { success: false, error: postRes.error };
     try {
       await batch.commit();
     } catch (err: any) {
@@ -9863,7 +9949,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         totalCredit: jVal.totalCredit,
         createdAt: new Date().toISOString(),
       };
-      batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(reversalJournal));
+      const postRes = await postAuthoritativeJournalEntry({
+        db,
+        entry: reversalJournal,
+        financialPeriods,
+        transactionOrBatch: batch,
+        existingEntries: journalEntries,
+      });
+      if (!postRes.isValid) return { success: false, error: postRes.error };
       // Mark original as reversed
       batch.set(doc(db, "journal_entries", originalJe.id), sanitizeForFirestore({ ...originalJe, status: "REVERSED" }), { merge: true });
     }
@@ -10250,8 +10343,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       totalCredit: val.totalCredit,
       createdAt: new Date().toISOString(),
     };
+    const postRes = await postAuthoritativeJournalEntry({
+      db,
+      entry: newEntry,
+      financialPeriods,
+      existingEntries: journalEntries,
+    });
+    if (!postRes.isValid) {
+      return { success: false, error: postRes.error };
+    }
     setJournalEntries((prev) => [...prev, newEntry]);
-    safeSetDoc(doc(db, "journal_entries", id), newEntry);
     logAudit(
       "CREATE",
       "ADJUSTMENT",
@@ -11206,7 +11307,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const batch = writeBatch(db);
     batch.set(doc(db, "collections", receiptId), sanitizeForFirestore(receipt));
     batch.set(doc(db, "payment_allocations", allocationId), sanitizeForFirestore(allocation));
-    batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
+    const postRes = await postAuthoritativeJournalEntry({
+      db,
+      entry: journalRecord,
+      financialPeriods,
+      transactionOrBatch: batch,
+      existingEntries: journalEntries,
+    });
+    if (!postRes.isValid) return { success: false, error: postRes.error };
     batch.set(doc(db, "cases", c.id), sanitizeForFirestore(updatedCase), { merge: true });
     try {
       await batch.commit();
@@ -11363,7 +11471,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const batch = writeBatch(db);
     batch.set(doc(db, "collections", receiptId), sanitizeForFirestore(receipt));
     batch.set(doc(db, "payment_allocations", allocationId), sanitizeForFirestore(allocation));
-    batch.set(doc(db, "journal_entries", jeId), sanitizeForFirestore(journalRecord));
+    const postRes = await postAuthoritativeJournalEntry({
+      db,
+      entry: journalRecord,
+      financialPeriods,
+      transactionOrBatch: batch,
+      existingEntries: journalEntries,
+    });
+    if (!postRes.isValid) return { success: false, error: postRes.error };
     batch.set(doc(db, "cases", c.id), sanitizeForFirestore(updatedCase), { merge: true });
     try {
       await batch.commit();

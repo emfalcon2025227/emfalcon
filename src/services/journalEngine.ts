@@ -4,6 +4,9 @@
  * and constructs balanced double-entry accounting journal postings.
  */
 
+import { doc, setDoc } from "firebase/firestore";
+import { db as defaultDb, sanitizeForFirestore } from "../lib/firebase";
+import { validateTransactionPeriod } from "./financialEngine";
 import {
   AccountDefinition,
   JournalEntryRecord,
@@ -12,6 +15,7 @@ import {
   PropertyExpenseCategory,
   ExpenseCostBearer,
   CommissionPartyType,
+  FinancialPeriod,
 } from "../types";
 
 /**
@@ -101,18 +105,71 @@ export function verifyAuthoritativeJournalPosting(
   return { isValid: true };
 }
 
+export interface PostJournalOptions {
+  db?: any;
+  entry: JournalEntryRecord;
+  financialPeriods?: FinancialPeriod[];
+  transactionOrBatch?: any;
+  existingEntries?: JournalEntryRecord[];
+}
+
 /**
  * Authoritative Journal Posting Service.
- * Validates double-entry accounting rules and checks duplicate event postings before persistence.
+ * Validates double-entry accounting rules, verifies source event identity and financial periods,
+ * and executes or attaches the journal write to the active Firestore transaction/batch.
  */
-export function postAuthoritativeJournalEntry(
-  entry: JournalEntryRecord,
-  journalEntries: JournalEntryRecord[] = []
-): { isValid: boolean; journalRecord?: JournalEntryRecord; error?: string } {
-  const gate = verifyAuthoritativeJournalPosting(entry, journalEntries);
+export async function postAuthoritativeJournalEntry(
+  optionsOrEntry: PostJournalOptions | JournalEntryRecord,
+  journalEntriesFallback: JournalEntryRecord[] = []
+): Promise<{ isValid: boolean; journalRecord?: JournalEntryRecord; error?: string }> {
+  let entry: JournalEntryRecord;
+  let dbInstance: any = defaultDb;
+  let periods: FinancialPeriod[] = [];
+  let txOrBatch: any = null;
+  let existing: JournalEntryRecord[] = journalEntriesFallback;
+
+  if ("lines" in optionsOrEntry && Array.isArray((optionsOrEntry as any).lines)) {
+    entry = optionsOrEntry as JournalEntryRecord;
+  } else {
+    const opts = optionsOrEntry as PostJournalOptions;
+    entry = opts.entry;
+    if (opts.db) dbInstance = opts.db;
+    if (opts.financialPeriods) periods = opts.financialPeriods;
+    if (opts.transactionOrBatch) txOrBatch = opts.transactionOrBatch;
+    if (opts.existingEntries) existing = opts.existingEntries;
+  }
+
+  // 1. Gate Check (Balance & Duplication)
+  const gate = verifyAuthoritativeJournalPosting(entry, existing);
   if (!gate.isValid) {
     return { isValid: false, error: gate.error };
   }
+
+  // 2. Source Identity Enforcement
+  if (!entry.sourceType || !entry.sourceId) {
+    return { isValid: false, error: "مصدر المعاملة المالية (sourceType & sourceId) مفقود في القيد المحاسبي." };
+  }
+
+  // 3. Financial Period Fail-Closed Validation
+  if (periods && periods.length > 0) {
+    const periodCheck = validateTransactionPeriod(entry.transactionDate, periods);
+    if (!periodCheck.allowed) {
+      return { isValid: false, error: periodCheck.errorAr || periodCheck.errorEn };
+    }
+  }
+
+  // 4. Persistence Participation
+  const jeRef = doc(dbInstance, "journal_entries", entry.id);
+  const payload = sanitizeForFirestore(entry);
+
+  if (txOrBatch) {
+    if (typeof txOrBatch.set === "function") {
+      txOrBatch.set(jeRef, payload);
+    }
+  } else {
+    await setDoc(jeRef, payload);
+  }
+
   return { isValid: true, journalRecord: entry };
 }
 

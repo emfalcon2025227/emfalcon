@@ -11,7 +11,7 @@ import {
 } from "../services/journalEngine";
 import { FinancialPeriod, ChequeComponentItem, JournalEntryRecord } from "../types";
 
-export function runPhase1cFinancialIntegrityTests() {
+export async function runPhase1cFinancialIntegrityTests() {
   console.log("================================================================================");
   console.log("STARTING PHASE 1C FINANCIAL INTEGRITY HARDENING TEST SUITE");
   console.log("================================================================================\n");
@@ -142,7 +142,7 @@ export function runPhase1cFinancialIntegrityTests() {
   report("TEST-1C-10", "verifyAuthoritativeJournalPosting gate rejects duplicate posting", dupCheck.isValid === false, `Gate blocked duplicate posting: ${dupCheck.error}`);
 
   // Test 10b: postAuthoritativeJournalEntry Service -> Rejects Duplicate Event Postings
-  const postCheck = postAuthoritativeJournalEntry(existingJournals[0], existingJournals);
+  const postCheck = await postAuthoritativeJournalEntry(existingJournals[0], existingJournals);
   report("TEST-1C-10b", "postAuthoritativeJournalEntry service enforces authoritative posting boundary", postCheck.isValid === false, `Authoritative posting service rejected duplicate posting: ${postCheck.error}`);
 
 
