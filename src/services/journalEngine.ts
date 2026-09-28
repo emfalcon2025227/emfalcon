@@ -109,8 +109,7 @@ export interface PostJournalOptions {
   db?: Firestore;
   entry: JournalEntryRecord;
   financialPeriods: FinancialPeriod[];
-  transactionOrBatch?: Transaction | WriteBatch;
-  existingEntries?: JournalEntryRecord[];
+  transaction?: Transaction;
   originalJournalToReverse?: JournalEntryRecord;
 }
 
@@ -118,17 +117,15 @@ export interface PostJournalOptions {
  * Authoritative Journal Posting Service.
  * Validates double-entry accounting rules, enforces strict fail-closed financial period rules,
  * verifies source event identity and authoritative Firestore state,
- * and executes or attaches the journal write to the active Firestore transaction/batch.
+ * and executes or attaches the journal write to the active Firestore transaction.
  */
 export async function postAuthoritativeJournalEntry(
-  optionsOrEntry: PostJournalOptions | JournalEntryRecord,
-  journalEntriesFallback: JournalEntryRecord[] = []
+  optionsOrEntry: PostJournalOptions | JournalEntryRecord
 ): Promise<{ isValid: boolean; journalRecord?: JournalEntryRecord; error?: string }> {
   let entry: JournalEntryRecord;
   let dbInstance: Firestore = defaultDb;
   let periods: FinancialPeriod[] = [];
-  let txOrBatch: Transaction | WriteBatch | null = null;
-  let existing: JournalEntryRecord[] = journalEntriesFallback;
+  let transaction: Transaction | null = null;
   let originalToReverse: JournalEntryRecord | undefined = undefined;
 
   if ("lines" in optionsOrEntry && Array.isArray((optionsOrEntry as any).lines)) {
@@ -138,8 +135,7 @@ export async function postAuthoritativeJournalEntry(
     entry = opts.entry;
     if (opts.db) dbInstance = opts.db;
     if (opts.financialPeriods) periods = opts.financialPeriods;
-    if (opts.transactionOrBatch) txOrBatch = opts.transactionOrBatch;
-    if (opts.existingEntries) existing = opts.existingEntries;
+    if (opts.transaction) transaction = opts.transaction;
     if (opts.originalJournalToReverse) originalToReverse = opts.originalJournalToReverse;
   }
 
@@ -167,47 +163,9 @@ export async function postAuthoritativeJournalEntry(
     return { isValid: false, error: periodCheck.errorAr || periodCheck.errorEn };
   }
 
-  // 4. Standalone Posting Execution via runTransaction
-  if (!txOrBatch) {
-    try {
-      return await runTransaction(dbInstance, async (tx) => {
-        const keyRef = doc(dbInstance, "journal_event_keys", `${entry.sourceType}_${entry.sourceId}`);
-        const keySnap = await tx.get(keyRef);
-        if (keySnap.exists()) {
-          return {
-            isValid: false,
-            error: `تم تسجيل قيد محاسبي لهذا الحدث المالي (${entry.sourceType}: ${entry.sourceId}) مسبقاً لمنع التكرار.`
-          };
-        }
-        const jeRef = doc(dbInstance, "journal_entries", entry.id);
-        const payload = sanitizeForFirestore(entry);
-        const keyPayload = sanitizeForFirestore({
-          journalId: entry.id,
-          sourceType: entry.sourceType,
-          sourceId: entry.sourceId,
-          createdAt: new Date().toISOString()
-        });
-        tx.set(keyRef, keyPayload);
-        tx.set(jeRef, payload);
-
-        if (originalToReverse) {
-          const origRef = doc(dbInstance, "journal_entries", originalToReverse.id);
-          tx.set(origRef, sanitizeForFirestore({ ...originalToReverse, status: "REVERSED", reversalEntryId: entry.id }), { merge: true });
-        }
-
-        return { isValid: true, journalRecord: entry };
-      });
-    } catch (err: any) {
-      return { isValid: false, error: err?.message || "فشل ترحيل القيد المحاسبي عبر المعاملة الأحادية." };
-    }
-  }
-
-  // 5. Transaction or WriteBatch Participation
-  const keyRef = doc(dbInstance, "journal_event_keys", `${entry.sourceType}_${entry.sourceId}`);
-  
-  if (typeof (txOrBatch as any).get === "function") {
-    // Active Firestore Transaction
-    const tx = txOrBatch as Transaction;
+  // Helper logic for executing atomic posting inside an authoritative Firestore Transaction
+  const executeAtomicPosting = async (tx: Transaction): Promise<{ isValid: boolean; journalRecord?: JournalEntryRecord; error?: string }> => {
+    const keyRef = doc(dbInstance, "journal_event_keys", `${entry.sourceType}_${entry.sourceId}`);
     const keySnap = await tx.get(keyRef);
     if (keySnap.exists()) {
       return {
@@ -215,35 +173,39 @@ export async function postAuthoritativeJournalEntry(
         error: `تم تسجيل قيد محاسبي لهذا الحدث المالي (${entry.sourceType}: ${entry.sourceId}) مسبقاً لمنع التكرار.`
       };
     }
-  } else {
-    // WriteBatch check against memory state
-    if (isDuplicateJournalPosting(existing, entry.sourceType, entry.sourceId)) {
-      return {
-        isValid: false,
-        error: `تم تسجيل قيد محاسبي لهذا الحدث المالي (${entry.sourceType}: ${entry.sourceId}) مسبقاً لمنع التكرار.`
-      };
-    }
-  }
+    const jeRef = doc(dbInstance, "journal_entries", entry.id);
+    const payload = sanitizeForFirestore(entry);
+    const keyPayload = sanitizeForFirestore({
+      journalId: entry.id,
+      sourceType: entry.sourceType,
+      sourceId: entry.sourceId,
+      createdAt: new Date().toISOString()
+    });
 
-  const jeRef = doc(dbInstance, "journal_entries", entry.id);
-  const payload = sanitizeForFirestore(entry);
-  const keyPayload = sanitizeForFirestore({
-    journalId: entry.id,
-    sourceType: entry.sourceType,
-    sourceId: entry.sourceId,
-    createdAt: new Date().toISOString()
-  });
+    tx.set(keyRef, keyPayload);
+    tx.set(jeRef, payload);
 
-  if (typeof (txOrBatch as any).set === "function") {
-    (txOrBatch as any).set(keyRef, keyPayload);
-    (txOrBatch as any).set(jeRef, payload);
     if (originalToReverse) {
       const origRef = doc(dbInstance, "journal_entries", originalToReverse.id);
-      (txOrBatch as any).set(origRef, sanitizeForFirestore({ ...originalToReverse, status: "REVERSED", reversalEntryId: entry.id }), { merge: true });
+      tx.set(origRef, sanitizeForFirestore({ ...originalToReverse, status: "REVERSED", reversalEntryId: entry.id }), { merge: true });
+    }
+
+    return { isValid: true, journalRecord: entry };
+  };
+
+  // 4. Standalone Posting Execution via runTransaction if transaction not supplied
+  if (!transaction) {
+    try {
+      return await runTransaction(dbInstance, async (tx) => {
+        return await executeAtomicPosting(tx);
+      });
+    } catch (err: any) {
+      return { isValid: false, error: err?.message || "فشل ترحيل القيد المحاسبي عبر المعاملة الأحادية." };
     }
   }
 
-  return { isValid: true, journalRecord: entry };
+  // 5. Active Transaction Participation
+  return await executeAtomicPosting(transaction);
 }
 
 /**
