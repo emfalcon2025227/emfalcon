@@ -11224,12 +11224,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
     const jeId = "je-set-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
-    const year = new Date().getFullYear();
-    const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
     const journalRecord: JournalEntryRecord = {
       ...journalData,
       id: jeId,
-      entryNumber,
+      entryNumber: "",
       status: "POSTED",
       totalDebit: journalVal.totalDebit,
       totalCredit: journalVal.totalCredit,
@@ -11284,8 +11282,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     try {
       await runTransaction(db, async (transaction) => {
-        transaction.set(doc(db, "collections", receiptId), sanitizeForFirestore(receipt));
-        transaction.set(doc(db, "payment_allocations", allocationId), sanitizeForFirestore(allocation));
+        // Correct read-before-write ordering: post authoritative journal entry first (performs reads internally)
         const postRes = await postAuthoritativeJournalEntry({
           db,
           entry: journalRecord,
@@ -11293,6 +11290,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           transaction,
         });
         if (!postRes.isValid) throw new Error(postRes.error);
+
+        // Perform writes after all reads/allocations
+        transaction.set(doc(db, "collections", receiptId), sanitizeForFirestore(receipt));
+        transaction.set(doc(db, "payment_allocations", allocationId), sanitizeForFirestore(allocation));
         transaction.set(doc(db, "cases", c.id), sanitizeForFirestore(updatedCase), { merge: true });
       });
     } catch (batchErr: any) {
@@ -11406,12 +11407,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
     const jeId = "je-set-chq-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
-    const year = new Date().getFullYear();
-    const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
     const journalRecord: JournalEntryRecord = {
       ...journalData,
       id: jeId,
-      entryNumber,
+      entryNumber: "",
       status: "POSTED",
       totalDebit: val.totalDebit,
       totalCredit: val.totalCredit,
@@ -11447,8 +11446,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     try {
       await runTransaction(db, async (transaction) => {
-        transaction.set(doc(db, "collections", receiptId), sanitizeForFirestore(receipt));
-        transaction.set(doc(db, "payment_allocations", allocationId), sanitizeForFirestore(allocation));
+        // Correct read-before-write ordering: post authoritative journal entry first (performs reads internally)
         const postRes = await postAuthoritativeJournalEntry({
           db,
           entry: journalRecord,
@@ -11456,6 +11454,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           transaction,
         });
         if (!postRes.isValid) throw new Error(postRes.error);
+
+        // Perform writes after all reads/allocations
+        transaction.set(doc(db, "collections", receiptId), sanitizeForFirestore(receipt));
+        transaction.set(doc(db, "payment_allocations", allocationId), sanitizeForFirestore(allocation));
         transaction.set(doc(db, "cases", c.id), sanitizeForFirestore(updatedCase), { merge: true });
       });
     } catch (err: any) {

@@ -68,11 +68,11 @@ export async function runPhase1cFinancialIntegrityTests() {
     id,
     entryNumber: "JE-2026-0001",
     transactionDate: "2026-02-15",
-    periodId: "p-2026-01",
+    postingDate: "2026-02-15",
+    reference: "REF-123",
     sourceType: sourceType as any,
     sourceId,
-    descriptionAr: "إيصال استلام",
-    descriptionEn: "Payment Receipt",
+    description: "Payment Receipt / إيصال استلام",
     lines: [
       { id: "jl-1", accountId: "1010", accountCode: "1010", accountNameAr: "الصندوق", accountNameEn: "Cash", debit: 5000, credit: 0 },
       { id: "jl-2", accountId: "4010", accountCode: "4010", accountNameAr: "إيراد إيجار", accountNameEn: "Rent Revenue", debit: 0, credit: 5000 }
@@ -80,8 +80,7 @@ export async function runPhase1cFinancialIntegrityTests() {
     totalDebit: 5000,
     totalCredit: 5000,
     status: "POSTED",
-    createdById: "usr-1",
-    createdByName: "Admin",
+    createdBy: "Admin",
     createdAt: "2026-02-15T00:00:00Z"
   });
 
@@ -210,7 +209,7 @@ export async function runPhase1cFinancialIntegrityTests() {
   const originalLinesSnapshot = JSON.stringify(journalDoc1.lines);
   const mockTxRev = createMockTransaction();
   const reversalEntry = createSampleJournal("je-rev-1", "JOURNAL_REVERSAL", "je-atom-1");
-  reversalEntry.descriptionEn = "Reversal of je-atom-1";
+  reversalEntry.description = "Reversal of je-atom-1";
   reversalEntry.lines = [
     { id: "jl-rev-1", accountId: "1010", accountCode: "1010", accountNameAr: "الصندوق", accountNameEn: "Cash", debit: 0, credit: 5000 },
     { id: "jl-rev-2", accountId: "4010", accountCode: "4010", accountNameAr: "إيراد إيجار", accountNameEn: "Rent Revenue", debit: 5000, credit: 0 }
