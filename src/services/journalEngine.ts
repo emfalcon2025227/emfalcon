@@ -7,7 +7,7 @@
 import { doc, runTransaction, Firestore, Transaction } from "firebase/firestore";
 import { db as defaultDb, sanitizeForFirestore } from "../lib/firebase";
 import { validateTransactionPeriod } from "./financialEngine";
-import { flushTransactionWrites } from "../utils/sequenceGenerator";
+import { flushTransactionWrites, allocateNextSequenceInTransaction } from "../utils/sequenceGenerator";
 import {
   AccountDefinition,
   JournalEntryRecord,
@@ -68,47 +68,6 @@ export function validateJournalEntry(entry: {
   return { isValid: true, totalDebit, totalCredit };
 }
 
-/**
- * In-memory validation helper for pure testing / UI simulation only.
- * MUST NOT be used for production authoritative duplicate prevention.
- * Production idempotency is enforced cloud-authoritatively via journal_event_keys in Firestore transactions.
- */
-export function isDuplicateJournalPosting(
-  journalEntries: JournalEntryRecord[],
-  sourceType: string,
-  sourceId: string
-): boolean {
-  if (!sourceType || !sourceId) return false;
-  return journalEntries.some(
-    (je) => je.sourceType === sourceType && je.sourceId === sourceId && je.status === "POSTED"
-  );
-}
-
-/**
- * In-memory validation helper for pure testing / UI simulation only.
- * MUST NOT be used for production authoritative duplicate prevention.
- * Production idempotency is enforced cloud-authoritatively via journal_event_keys in Firestore transactions.
- */
-export function verifyAuthoritativeJournalPosting(
-  entry: JournalEntryRecord,
-  existingEntries: JournalEntryRecord[] = []
-): { isValid: boolean; error?: string } {
-  const validation = validateJournalEntry(entry);
-  if (!validation.isValid) {
-    return { isValid: false, error: validation.error };
-  }
-  if (entry.sourceType && entry.sourceId) {
-    const isDup = isDuplicateJournalPosting(existingEntries, entry.sourceType, entry.sourceId);
-    if (isDup) {
-      return {
-        isValid: false,
-        error: `تم تسجيل قيد محاسبي لهذا الحدث المالي (${entry.sourceType}: ${entry.sourceId}) مسبقاً لمنع التكرار.`
-      };
-    }
-  }
-  return { isValid: true };
-}
-
 export interface PostJournalOptions {
   db?: Firestore;
   entry: JournalEntryRecord;
@@ -165,6 +124,13 @@ export async function postAuthoritativeJournalEntry(
         isValid: false,
         error: `تم تسجيل قيد محاسبي لهذا الحدث المالي (${entry.sourceType}: ${entry.sourceId}) مسبقاً لمنع التكرار.`
       };
+    }
+
+    // Atomic sequence allocation inside the active transaction if not already set
+    if (!entry.entryNumber) {
+      const year = new Date(entry.transactionDate || new Date().toISOString()).getFullYear();
+      const [seq] = await allocateNextSequenceInTransaction(tx, dbInstance, `journal_${year}`, `JE-${year}-`, 1, 5);
+      entry.entryNumber = seq;
     }
 
     // Flush any pending transaction writes (e.g. sequence counter increments) now that the read phase is complete

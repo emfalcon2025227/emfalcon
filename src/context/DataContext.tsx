@@ -5422,7 +5422,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           totalApplied: target.amount,
           auditTrail: [auditEntry, ...(target.auditTrail || [])],
         };
-        transaction.set(targetRef, sanitizeForFirestore(updated), { merge: true });
         const colId = "col-" + Date.now();
         const receiptNumber = generateSequentialNumber(collections, "receiptNumber", "RCP-", 4, false);
         const receipt: CollectionRecord = {
@@ -5443,7 +5442,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           collectedByUserId: params.userId || currentUser?.id || "sys",
           createdAt: nowIso,
         };
-        transaction.set(doc(db, "collections", colId), sanitizeForFirestore(receipt));
         const allocId = "pal-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
         const alloc: PaymentAllocation = {
           id: allocId,
@@ -5456,7 +5454,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdById: params.userId || currentUser?.id || "system",
           createdAt: nowIso,
         };
-        transaction.set(doc(db, "payment_allocations", allocId), sanitizeForFirestore(alloc));
         // Required Rent Collection Journal Entry
         const journalData = buildRentCollectionJournal(
           {
@@ -5480,12 +5477,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           throw new Error(`Journal validation failed: ${jVal.error}`);
         }
         const jeId = "je-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
-        const year = new Date().getFullYear();
-        const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
         const journalRecord: JournalEntryRecord = {
           ...journalData,
           id: jeId,
-          entryNumber,
+          entryNumber: "",
           status: "POSTED",
           totalDebit: jVal.totalDebit,
           totalCredit: jVal.totalCredit,
@@ -5498,6 +5493,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           transaction,
         });
         if (!postRes.isValid) throw new Error(postRes.error);
+
+        // All writes executed in the write phase
+        transaction.set(targetRef, sanitizeForFirestore(updated), { merge: true });
+        transaction.set(doc(db, "collections", colId), sanitizeForFirestore(receipt));
+        transaction.set(doc(db, "payment_allocations", allocId), sanitizeForFirestore(alloc));
         return { updated, receipt, alloc, journalRecord };
       });
       setCheques((prev) => prev.map((c) => (c.id === params.chequeId ? result.updated : c)));
@@ -6417,20 +6417,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           throw new Error(`Journal validation failed: ${jVal.error}`);
         }
         const jeId = "je-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
-        const year = new Date().getFullYear();
-        const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
         const journalRecord: JournalEntryRecord = {
           ...journalData,
           id: jeId,
-          entryNumber,
+          entryNumber: "",
           status: "POSTED",
           totalDebit: jVal.totalDebit,
           totalCredit: jVal.totalCredit,
           createdAt: new Date().toISOString(),
         };
-        transaction.set(chequeRef, sanitizeForFirestore(updatedChqWithAudit), { merge: true });
-        transaction.set(doc(db, "collections", receiptId), sanitizeForFirestore(receipt));
-        transaction.set(doc(db, "payment_allocations", allocId), sanitizeForFirestore(alloc));
         const postRes = await postAuthoritativeJournalEntry({
           db,
           entry: journalRecord,
@@ -6438,6 +6433,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           transaction,
         });
         if (!postRes.isValid) throw new Error(postRes.error);
+
+        // Writes phase
+        transaction.set(chequeRef, sanitizeForFirestore(updatedChqWithAudit), { merge: true });
+        transaction.set(doc(db, "collections", receiptId), sanitizeForFirestore(receipt));
+        transaction.set(doc(db, "payment_allocations", allocId), sanitizeForFirestore(alloc));
         return { updatedChqWithAudit, receipt, alloc, journalRecord, isFullyCollected, appliedAmount, isOverpayment };
       });
       setCheques((prev) => prev.map((c) => (c.id === params.chequeId ? result.updatedChqWithAudit : c)));
@@ -6854,20 +6854,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           throw new Error(`Admin fee journal validation failed: ${jVal.error}`);
         }
         const jeId = "je-adm-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
-        const year = new Date().getFullYear();
-        const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
         createdJournalRecord = {
           ...journalData,
           id: jeId,
-          entryNumber,
+          entryNumber: "",
           status: "POSTED",
           totalDebit: jVal.totalDebit,
           totalCredit: jVal.totalCredit,
           createdAt: new Date().toISOString(),
         };
-        transaction.set(commRef, sanitizeForFirestore(updatedCommission), { merge: true });
-        transaction.set(receiptRef, sanitizeForFirestore(newReceipt));
-        transaction.set(doc(db, "payment_allocations", allocationId), sanitizeForFirestore(newAllocation));
         const postRes = await postAuthoritativeJournalEntry({
           db,
           entry: createdJournalRecord,
@@ -6875,6 +6870,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           transaction,
         });
         if (!postRes.isValid) throw new Error(postRes.error);
+
+        // Writes phase
+        transaction.set(commRef, sanitizeForFirestore(updatedCommission), { merge: true });
+        transaction.set(receiptRef, sanitizeForFirestore(newReceipt));
+        transaction.set(doc(db, "payment_allocations", allocationId), sanitizeForFirestore(newAllocation));
       });
       // If return was early due to idempotency, no state update needed
       if (!updatedCommission || !newReceipt || !newAllocation) {
@@ -7391,12 +7391,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
       const jeId = "je-sd-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
-      const year = new Date().getFullYear();
-      const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
       const journalRecord: JournalEntryRecord = {
         ...journalData,
         id: jeId,
-        entryNumber,
+        entryNumber: "",
         status: "POSTED",
         totalDebit: jVal.totalDebit,
         totalCredit: jVal.totalCredit,
@@ -7404,9 +7402,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       try {
         await runTransaction(db, async (transaction) => {
-          transaction.set(doc(db, "collections", receiptId), sanitizeForFirestore(newReceipt));
-          transaction.set(doc(db, "payment_allocations", allocationId), sanitizeForFirestore(newAllocation));
-          transaction.set(doc(db, "leases", leaseId), sanitizeForFirestore(updatedLease), { merge: true });
           const postRes = await postAuthoritativeJournalEntry({
             db,
             entry: journalRecord,
@@ -7414,6 +7409,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             transaction,
           });
           if (!postRes.isValid) throw new Error(postRes.error);
+
+          // Writes phase
+          transaction.set(doc(db, "collections", receiptId), sanitizeForFirestore(newReceipt));
+          transaction.set(doc(db, "payment_allocations", allocationId), sanitizeForFirestore(newAllocation));
+          transaction.set(doc(db, "leases", leaseId), sanitizeForFirestore(updatedLease), { merge: true });
           if (newArchiveRecord) {
             transaction.set(doc(db, "archive", newArchiveRecord.id), sanitizeForFirestore(newArchiveRecord));
           }
@@ -7589,12 +7589,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         securityDepositProofDocId: archiveDocId || existingLease.securityDepositProofDocId,
         securityDepositVerificationStatus: verificationStatus || "VERIFIED",
       };
+      let newJournalRecord: JournalEntryRecord | null = null;
       try {
         await runTransaction(db, async (transaction) => {
-          transaction.set(doc(db, "leases", leaseId), sanitizeForFirestore(updatedLeaseData), { merge: true });
-          if (newArchiveRecord) {
-            transaction.set(doc(db, "archive", newArchiveRecord.id), sanitizeForFirestore(newArchiveRecord));
-          }
           if (existingLease.securityDepositPaymentMethod === "CASH" && updatedLeaseData.securityDepositVerificationStatus === "VERIFIED") {
             const journalData = buildBankDepositJournal(
               {
@@ -7613,12 +7610,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               throw new Error(language === "ar" ? `فشل التحقق من قيد الإيداع البنكي: ${jVal.error}` : `Bank deposit journal validation failed: ${jVal.error}`);
             }
             const jeId = "je-sd-dep-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
-            const year = new Date().getFullYear();
-            const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
             newJournalRecord = {
               ...journalData,
               id: jeId,
-              entryNumber,
+              entryNumber: "",
               status: "POSTED",
               totalDebit: jVal.totalDebit,
               totalCredit: jVal.totalCredit,
@@ -7631,6 +7626,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               transaction,
             });
             if (!postRes.isValid) throw new Error(postRes.error);
+          }
+
+          // Writes phase
+          transaction.set(doc(db, "leases", leaseId), sanitizeForFirestore(updatedLeaseData), { merge: true });
+          if (newArchiveRecord) {
+            transaction.set(doc(db, "archive", newArchiveRecord.id), sanitizeForFirestore(newArchiveRecord));
           }
         });
       } catch (err: any) {
@@ -7840,12 +7841,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
       const jeId = "je-sd-ref-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
-      const year = new Date().getFullYear();
-      const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
       const journalRecord: JournalEntryRecord = {
         ...journalData,
         id: jeId,
-        entryNumber,
+        entryNumber: "",
         status: "POSTED",
         totalDebit: jVal.totalDebit,
         totalCredit: jVal.totalCredit,
@@ -7853,7 +7852,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       try {
         await runTransaction(db, async (transaction) => {
-          transaction.set(doc(db, "leases", leaseId), sanitizeForFirestore(updatedLease), { merge: true });
           const postRes = await postAuthoritativeJournalEntry({
             db,
             entry: journalRecord,
@@ -7861,6 +7859,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             transaction,
           });
           if (!postRes.isValid) throw new Error(postRes.error);
+
+          // Writes phase
+          transaction.set(doc(db, "leases", leaseId), sanitizeForFirestore(updatedLease), { merge: true });
           if (newArchiveRecord) {
             transaction.set(doc(db, "archive", newArchiveRecord.id), sanitizeForFirestore(newArchiveRecord));
           }
@@ -9158,6 +9159,43 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (transferData.status === "APPROVED") {
             updateOwnerFields.totalHeld = Math.max(0, currentHeld - transferData.amount);
         }
+        // Build and Validate Journal Entry inside the transaction
+        const journalData = buildOwnerTransferJournal(
+          {
+            transferId: existing.id,
+            transferNumber: existing.transferNumber,
+            amount: existing.amount,
+            transactionDate: existing.transferDate || new Date().toISOString().split("T")[0],
+            ownerId: existing.ownerId,
+            bankAccountReference: transactionReferenceNumber || transferData.transactionReferenceNumber,
+            createdBy: userName,
+            notes: notes || existing.notes,
+          },
+          chartOfAccounts
+        );
+        const jVal = validateJournalEntry(journalData);
+        if (!jVal.isValid) {
+          throw new Error(language === "ar" ? `فشل التحقق من القيد المحاسبي: ${jVal.error}` : `Journal validation failed: ${jVal.error}`);
+        }
+        const jeId = "je-ot-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
+        const journalRecord: JournalEntryRecord = {
+          ...journalData,
+          id: jeId,
+          entryNumber: "",
+          status: "POSTED",
+          totalDebit: jVal.totalDebit,
+          totalCredit: jVal.totalCredit,
+          createdAt: new Date().toISOString(),
+        };
+        const postRes = await postAuthoritativeJournalEntry({
+          db,
+          entry: journalRecord,
+          financialPeriods,
+          transaction,
+        });
+        if (!postRes.isValid) throw new Error(postRes.error);
+
+        // Writes phase
         transaction.update(ownerRef, updateOwnerFields);
         if (newArchiveRecord) {
            const archiveRef = doc(db, "archive", newArchiveRecord.id);
@@ -9187,44 +9225,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
            verifiedAt: new Date().toISOString(),
            aiVerificationDetails: aiVerificationDetails || null,
         }));
-        // Build and Validate Journal Entry inside the transaction
-        const journalData = buildOwnerTransferJournal(
-          {
-            transferId: existing.id,
-            transferNumber: existing.transferNumber,
-            amount: existing.amount,
-            transactionDate: existing.transferDate || new Date().toISOString().split("T")[0],
-            ownerId: existing.ownerId,
-            bankAccountReference: transactionReferenceNumber || transferData.transactionReferenceNumber,
-            createdBy: userName,
-            notes: notes || existing.notes,
-          },
-          chartOfAccounts
-        );
-        const jVal = validateJournalEntry(journalData);
-        if (!jVal.isValid) {
-          throw new Error(language === "ar" ? `فشل التحقق من القيد المحاسبي: ${jVal.error}` : `Journal validation failed: ${jVal.error}`);
-        }
-        const jeId = "je-ot-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
-        const year = new Date().getFullYear();
-        // Since we are inside a runTransaction, we cannot safely predict the exact length if multiple journals are added concurrently, but this is a reasonable approximation for memory
-        const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
-        const journalRecord: JournalEntryRecord = {
-          ...journalData,
-          id: jeId,
-          entryNumber,
-          status: "POSTED",
-          totalDebit: jVal.totalDebit,
-          totalCredit: jVal.totalCredit,
-          createdAt: new Date().toISOString(),
-        };
-        const postRes = await postAuthoritativeJournalEntry({
-          db,
-          entry: journalRecord,
-          financialPeriods,
-          transaction,
-        });
-        if (!postRes.isValid) throw new Error(postRes.error);
         return { journalRecord };
       });
       // Update local state
@@ -9459,18 +9459,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
            throw new Error("Transfer is already reversed.");
         }
         const currentPaid = ownerSnap.data()?.totalPaid || 0;
-        transaction.update(ownerRef, {
-           totalPaid: Math.max(0, currentPaid - transferData.amount)
-        });
-        const revRef = doc(db, "financial_reversals", reversalRecord.id);
-        transaction.set(revRef, sanitizeForFirestore(reversalRecord));
-        transaction.update(transferRef, sanitizeForFirestore({
-           isReversed: true,
-           reversalRecordId: reversalRecord.id,
-           reversalReason: reason,
-           reversalTimestamp: reversalRecord.reversalTimestamp,
-           updatedAt: new Date().toISOString(),
-        }));
         const journalData = buildOwnerTransferReversalJournal(
           {
             transferId: existing.id,
@@ -9488,12 +9476,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           throw new Error(language === "ar" ? `فشل التحقق من القيد المحاسبي: ${jVal.error}` : `Journal validation failed: ${jVal.error}`);
         }
         const jeId = "je-ot-rev-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
-        const year = new Date().getFullYear();
-        const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
         const journalRecord: JournalEntryRecord = {
           ...journalData,
           id: jeId,
-          entryNumber,
+          entryNumber: "",
           status: "POSTED",
           totalDebit: jVal.totalDebit,
           totalCredit: jVal.totalCredit,
@@ -9506,6 +9492,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           transaction,
         });
         if (!postRes.isValid) throw new Error(postRes.error);
+
+        // Writes phase
+        transaction.update(ownerRef, {
+           totalPaid: Math.max(0, currentPaid - transferData.amount)
+        });
+        const revRef = doc(db, "financial_reversals", reversalRecord.id);
+        transaction.set(revRef, sanitizeForFirestore(reversalRecord));
+        transaction.update(transferRef, sanitizeForFirestore({
+           isReversed: true,
+           reversalRecordId: reversalRecord.id,
+           reversalReason: reason,
+           reversalTimestamp: reversalRecord.reversalTimestamp,
+           updatedAt: new Date().toISOString(),
+        }));
         return { journalRecord };
       });
       const updatedTransfer: OwnerTransferRecord = {
@@ -9571,21 +9571,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdByName,
     };
     let newJournalRecord: JournalEntryRecord | null = null;
+    let updatedCase: any = null;
+    if (data.legalCaseId) {
+      const targetCase = cases.find(c => c.id === data.legalCaseId);
+      if (targetCase) {
+        const newLinkedIds = Array.from(new Set([...(targetCase.linkedExpenseIds || []), id]));
+        updatedCase = recalculateCaseFinancials(
+          { ...targetCase, linkedExpenseIds: newLinkedIds },
+          cheques,
+          [newExpense, ...propertyExpenses]
+        );
+      }
+    }
     try {
       await runTransaction(db, async (transaction) => {
-        transaction.set(doc(db, "property_expenses", id), sanitizeForFirestore(newExpense));
-        if (data.legalCaseId) {
-          const targetCase = cases.find(c => c.id === data.legalCaseId);
-          if (targetCase) {
-            const newLinkedIds = Array.from(new Set([...(targetCase.linkedExpenseIds || []), id]));
-            updatedCase = recalculateCaseFinancials(
-              { ...targetCase, linkedExpenseIds: newLinkedIds },
-              cheques,
-              [newExpense, ...propertyExpenses]
-            );
-            transaction.set(doc(db, "cases", data.legalCaseId), sanitizeForFirestore(updatedCase), { merge: true });
-          }
-        }
         if (newExpense.status === "PAID") {
           const journalData = buildPropertyExpenseJournal(
             {
@@ -9609,12 +9608,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             throw new Error(language === "ar" ? `فشل التحقق من القيد المحاسبي للمصروف: ${jVal.error}` : `Journal validation failed: ${jVal.error}`);
           }
           const jeId = "je-exp-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
-          const year = new Date().getFullYear();
-          const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
           newJournalRecord = {
             ...journalData,
             id: jeId,
-            entryNumber,
+            entryNumber: "",
             status: "POSTED",
             totalDebit: jVal.totalDebit,
             totalCredit: jVal.totalCredit,
@@ -9627,6 +9624,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             transaction,
           });
           if (!postRes.isValid) throw new Error(postRes.error);
+        }
+
+        // Writes phase
+        transaction.set(doc(db, "property_expenses", id), sanitizeForFirestore(newExpense));
+        if (data.legalCaseId && updatedCase) {
+          transaction.set(doc(db, "cases", data.legalCaseId), sanitizeForFirestore(updatedCase), { merge: true });
         }
       });
     } catch (e: any) {
@@ -9733,9 +9736,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       verifiedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+    let newJournalRecord: JournalEntryRecord | null = null;
     try {
       await runTransaction(db, async (transaction) => {
-        transaction.set(doc(db, "property_expenses", expenseId), sanitizeForFirestore(updated), { merge: true });
         // Create Journal Entry since it is now PAID
         const journalData = buildPropertyExpenseJournal(
           {
@@ -9759,12 +9762,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           throw new Error(language === "ar" ? `فشل التحقق من القيد المحاسبي للمصروف: ${jVal.error}` : `Journal validation failed: ${jVal.error}`);
         }
         const jeId = "je-exp-set-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
-        const year = new Date().getFullYear();
-        const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
-        const newJournalRecord: JournalEntryRecord = {
+        newJournalRecord = {
           ...journalData,
           id: jeId,
-          entryNumber,
+          entryNumber: "",
           status: "POSTED",
           totalDebit: jVal.totalDebit,
           totalCredit: jVal.totalCredit,
@@ -9777,6 +9778,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           transaction,
         });
         if (!postRes.isValid) throw new Error(postRes.error);
+
+        // Writes phase
+        transaction.set(doc(db, "property_expenses", expenseId), sanitizeForFirestore(updated), { merge: true });
       });
     } catch (err: any) {
       return { success: false, error: err?.message || "Failed to settle property expense." };
@@ -9907,8 +9911,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const relatedUpdates: { rev: FinancialReversalRecord, rel: PropertyExpenseRecord }[] = [];
     try {
       await runTransaction(db, async (transaction) => {
-        transaction.set(doc(db, "financial_reversals", reversalRecord.id), sanitizeForFirestore(reversalRecord));
-        transaction.set(doc(db, "property_expenses", expenseId), sanitizeForFirestore(updatedExpense), { merge: true });
         if (originalJe) {
           const revData = buildReversalJournalEntry(originalJe, reason, userName);
           const jVal = validateJournalEntry(revData);
@@ -9916,12 +9918,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             throw new Error(language === "ar" ? `فشل التحقق من قيد العكس: ${jVal.error}` : `Reversal journal validation failed: ${jVal.error}`);
           }
           const jeId = "je-rev-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
-          const year = new Date().getFullYear();
-          const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
           reversalJournal = {
             ...revData,
             id: jeId,
-            entryNumber,
+            entryNumber: "",
             status: "POSTED",
             totalDebit: jVal.totalDebit,
             totalCredit: jVal.totalCredit,
@@ -9936,6 +9936,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
           if (!postRes.isValid) throw new Error(postRes.error);
         }
+
+        // Writes phase
+        transaction.set(doc(db, "financial_reversals", reversalRecord.id), sanitizeForFirestore(reversalRecord));
+        transaction.set(doc(db, "property_expenses", expenseId), sanitizeForFirestore(updatedExpense), { merge: true });
         if ((existing.sourceType as any) === "MAINTENANCE_REQUEST" && existing.maintenanceInvoiceId) {
           const relatedExpenses = propertyExpenses.filter(
             (e) =>
@@ -10294,48 +10298,49 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!periodCheck.allowed) {
       return { success: false, error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn };
     }
-    if (entryData.sourceType && entryData.sourceId) {
-      const existing = journalEntries.find(
-        (je) => je.sourceType === entryData.sourceType && je.sourceId === entryData.sourceId && je.status === "POSTED"
-      );
-      if (existing) {
-        return { success: true, entry: existing };
-      }
-    }
     const val = validateJournalEntry(entryData);
     if (!val.isValid) {
       return { success: false, error: val.error || "خطأ في توازن القيد المحاسبي" };
     }
-    const year = new Date().getFullYear();
-    const [entryNumber] = await allocateNextSequence(db, `journal_${year}`, `JE-${year}-`, 1, 5, journalEntries.length);
-    const id = `je-${Date.now()}-${crypto.randomUUID().split("-")[0]}`;
-    const newEntry: JournalEntryRecord = {
-      ...entryData,
-      id,
-      entryNumber,
-      status: "POSTED",
-      totalDebit: val.totalDebit,
-      totalCredit: val.totalCredit,
-      createdAt: new Date().toISOString(),
-    };
-    const postRes = await postAuthoritativeJournalEntry({
-      db,
-      entry: newEntry,
-      financialPeriods,
-      originalJournalToReverse,
-    });
-    if (!postRes.isValid) {
-      return { success: false, error: postRes.error };
+
+    try {
+      const result = await runTransaction(db, async (transaction) => {
+        const id = `je-${Date.now()}-${crypto.randomUUID().split("-")[0]}`;
+        const newEntry: JournalEntryRecord = {
+          ...entryData,
+          id,
+          entryNumber: "",
+          status: "POSTED",
+          totalDebit: val.totalDebit,
+          totalCredit: val.totalCredit,
+          createdAt: new Date().toISOString(),
+        };
+        const postRes = await postAuthoritativeJournalEntry({
+          db,
+          entry: newEntry,
+          financialPeriods,
+          transaction,
+          originalJournalToReverse,
+        });
+        if (!postRes.isValid) {
+          throw new Error(postRes.error);
+        }
+        return newEntry;
+      });
+
+      setJournalEntries((prev) => [...prev, result]);
+      logAudit(
+        "CREATE",
+        "ADJUSTMENT",
+        result.id,
+        `قيد محاسبي #${result.entryNumber}`,
+        `تم ترحيل قيد محاسبي جديد رقم (${result.entryNumber}) بقيمة (${val.totalDebit.toFixed(2)} د.إ) - ${entryData.description}`
+      );
+      return { success: true, entry: result };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "فشل ترحيل القيد المحاسبي";
+      return { success: false, error: message };
     }
-    setJournalEntries((prev) => [...prev, newEntry]);
-    logAudit(
-      "CREATE",
-      "ADJUSTMENT",
-      id,
-      `قيد محاسبي #${entryNumber}`,
-      `تم ترحيل قيد محاسبي جديد رقم (${entryNumber}) بقيمة (${val.totalDebit.toFixed(2)} د.إ) - ${entryData.description}`
-    );
-    return { success: true, entry: newEntry };
   };
   const reverseJournalEntry = async (
     id: string,

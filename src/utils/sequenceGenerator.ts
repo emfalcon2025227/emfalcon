@@ -1,31 +1,41 @@
 import { runTransaction, doc, Firestore, Transaction } from "firebase/firestore";
 
-// Transaction pending write registry to guarantee Firestore read-before-write invariants
-const pendingTxWrites = new WeakMap<Transaction, Array<() => void>>();
+interface TxSequenceState {
+  counters: Map<string, number>;
+  pendingWrites: Map<string, () => void>;
+}
+
+// Transaction state registry to guarantee Firestore read-before-write invariants and atomic commits
+const txStateRegistry = new WeakMap<Transaction, TxSequenceState>();
+
+function getTxState(tx: Transaction): TxSequenceState {
+  let state = txStateRegistry.get(tx);
+  if (!state) {
+    state = { counters: new Map(), pendingWrites: new Map() };
+    txStateRegistry.set(tx, state);
+  }
+  return state;
+}
 
 export function queueTransactionWrite(tx: Transaction, writeFn: () => void): void {
-  let list = pendingTxWrites.get(tx);
-  if (!list) {
-    list = [];
-    pendingTxWrites.set(tx, list);
-  }
-  list.push(writeFn);
+  const state = getTxState(tx);
+  state.pendingWrites.set(String(state.pendingWrites.size), writeFn);
 }
 
 export function flushTransactionWrites(tx: Transaction): void {
-  const list = pendingTxWrites.get(tx);
-  if (list) {
-    for (const writeFn of list) {
+  const state = txStateRegistry.get(tx);
+  if (state) {
+    for (const writeFn of state.pendingWrites.values()) {
       writeFn();
     }
-    pendingTxWrites.delete(tx);
+    state.pendingWrites.clear();
   }
 }
 
 /**
  * Transaction-aware sequence number allocation.
- * Performs the sequence document read inside the active transaction during the READ phase,
- * and defers the write to the WRITE phase to strictly preserve Firestore read-before-write invariants.
+ * Reads the sequence document inside the active transaction during the READ phase (caching for repeated calls within the same transaction),
+ * and defers the write to the WRITE phase via flushTransactionWrites to strictly preserve Firestore read-before-write invariants.
  */
 export const allocateNextSequenceInTransaction = async (
   transaction: Transaction,
@@ -36,12 +46,19 @@ export const allocateNextSequenceInTransaction = async (
   padding: number = 5,
   fallbackInitial: number = 0
 ): Promise<string[]> => {
-  const counterRef = doc(db, "system_counters", sequenceName);
-  const snap = await transaction.get(counterRef);
-  let current = snap.exists() ? snap.data().lastValue || 0 : 0;
+  const state = getTxState(transaction);
+  let current: number;
 
-  if (current === 0 && fallbackInitial > 0) {
-    current = fallbackInitial;
+  if (state.counters.has(sequenceName)) {
+    current = state.counters.get(sequenceName)!;
+  } else {
+    const counterRef = doc(db, "system_counters", sequenceName);
+    const snap = await transaction.get(counterRef);
+    current = snap.exists() ? snap.data().lastValue || 0 : 0;
+
+    if (current === 0 && fallbackInitial > 0) {
+      current = fallbackInitial;
+    }
   }
 
   const allocated: string[] = [];
@@ -50,8 +67,10 @@ export const allocateNextSequenceInTransaction = async (
     allocated.push(`${prefix}${String(current).padStart(padding, "0")}`);
   }
 
-  // Queue write to be committed atomically in the write phase of this same transaction
-  queueTransactionWrite(transaction, () => {
+  state.counters.set(sequenceName, current);
+
+  const counterRef = doc(db, "system_counters", sequenceName);
+  state.pendingWrites.set(sequenceName, () => {
     transaction.set(counterRef, { lastValue: current }, { merge: true });
   });
 
