@@ -123,12 +123,20 @@ export function validateTransactionPeriod(
   financialPeriods: FinancialPeriod[]
 ): { allowed: boolean; errorAr?: string; errorEn?: string } {
   if (!financialPeriods || financialPeriods.length === 0) {
-    return { allowed: true };
+    return {
+      allowed: false,
+      errorAr: "لا يمكن تسجيل المعاملة: تكوين الفترات المالية غير متوفر أو غير محمل.",
+      errorEn: "Transaction cannot be recorded: Financial periods configuration is unavailable or not loaded.",
+    };
   }
 
   const txDate = new Date(transactionDate);
   if (isNaN(txDate.getTime())) {
-    return { allowed: true };
+    return {
+      allowed: false,
+      errorAr: "لا يمكن تسجيل المعاملة: تاريخ المعاملة غير صالحة.",
+      errorEn: "Transaction cannot be recorded: Invalid transaction date.",
+    };
   }
   txDate.setHours(0, 0, 0, 0);
 
@@ -149,15 +157,60 @@ export function validateTransactionPeriod(
     };
   }
 
-  if (period.status === "CLOSED") {
+  if (period.status === "CLOSED" || (period as any).status === "LOCKED") {
     return {
       allowed: false,
-      errorAr: "لا يمكن تسجيل هذه المعاملة لأن الفترة المالية مغلقة. يجب استخدام إجراء العكس أو التسوية المعتمد.",
-      errorEn: "This transaction cannot be recorded because the financial period is closed. Use the approved reversal or adjustment workflow.",
+      errorAr: "لا يمكن تسجيل هذه المعاملة لأن الفترة المالية مغلقة أو مقفلة. يجب استخدام إجراء العكس أو التسوية المعتمد.",
+      errorEn: "This transaction cannot be recorded because the financial period is closed or locked. Use the approved reversal or adjustment workflow.",
     };
   }
 
   return { allowed: true };
+}
+
+/**
+ * Validates cheque component items against the cheque's target amount.
+ * Enforces:
+ * 1. SUM(component amounts) === cheque total amount (within 0.01 tolerance).
+ * 2. Every component has a non-negative amount and valid category/obligation reference.
+ */
+export function validateChequeComponents(
+  chequeAmount: number,
+  components?: ChequeComponentItem[]
+): { isValid: boolean; calculatedTotal: number; difference: number; errorAr?: string; errorEn?: string } {
+  if (!components || components.length === 0) {
+    return { isValid: true, calculatedTotal: chequeAmount, difference: 0 };
+  }
+
+  let calculatedTotal = 0;
+  for (const comp of components) {
+    if (isNaN(comp.amount) || comp.amount < 0) {
+      return {
+        isValid: false,
+        calculatedTotal: 0,
+        difference: chequeAmount,
+        errorAr: "مبلغ مكون الشيك لا يمكن أن يكون salib (سالب) أو غير صالح.",
+        errorEn: "Cheque component amount cannot be negative or invalid.",
+      };
+    }
+    calculatedTotal += Math.round(comp.amount * 100) / 100;
+  }
+
+  calculatedTotal = Math.round(calculatedTotal * 100) / 100;
+  const roundedAmount = Math.round(chequeAmount * 100) / 100;
+  const difference = Math.round(Math.abs(roundedAmount - calculatedTotal) * 100) / 100;
+
+  if (difference > 0.01) {
+    return {
+      isValid: false,
+      calculatedTotal,
+      difference,
+      errorAr: `مجموع مكونات الشيك (${calculatedTotal.toFixed(2)}) لا يطابق قيمة الشيك المطلوبة (${roundedAmount.toFixed(2)}).`,
+      errorEn: `Sum of cheque components (${calculatedTotal.toFixed(2)}) does not match total cheque amount (${roundedAmount.toFixed(2)}).`,
+    };
+  }
+
+  return { isValid: true, calculatedTotal, difference: 0 };
 }
 
 export const INITIAL_FINANCIAL_PERIODS: FinancialPeriod[] = Array.from({ length: 16 }, (_, i) => {

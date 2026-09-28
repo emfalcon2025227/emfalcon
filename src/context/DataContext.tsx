@@ -1668,7 +1668,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const merged = [...items, ...missingInitial];
         setFinancialPeriods(merged);
       }
-    }, createErrorHandler("financial_periods", INITIAL_FINANCIAL_PERIODS, setFinancialPeriods));
+    }, createErrorHandler("financial_periods", [], setFinancialPeriods));
     const unsubPeriodCertifications = onSnapshot(collection(db, "period_certifications"), (snap) => {
       if (!snap.empty) {
         const items: ForensicClosingCertification[] = [];
