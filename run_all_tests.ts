@@ -7,6 +7,8 @@ import { runPhase54EndToEndFinancialReconciliationTests } from "./src/utils/phas
 import { runPhase55FinancialReportingReconciliationTests } from "./src/utils/phase55FinancialReportingReconciliationTests";
 import { runPhase56DepositDelayAlertTests } from "./src/utils/phase56DepositDelayAlertTests";
 import { runPhase57ForensicTests } from "./src/utils/phase57DocumentIntelligenceForensicTests";
+// @ts-ignore
+import { main as runPhase1cLiveTests } from "./src/tests/runPhase1cLiveTests";
 
 const mockContext: any = {
   owners: [],
@@ -45,5 +47,15 @@ console.log(`Failed Tests: ${phase57Report.failedTests}`);
 console.log(`Success Rate: ${phase57Report.successRate.toFixed(2)}%`);
 console.log(`Checklist 47 Compliance: ${phase57Report.checklist47Evaluation.filter(c => c.compliant).length}/47 Points`);
 console.log(`======================================================\n`);
+
+async function runIntegrity() {
+  try {
+    await runPhase1cLiveTests();
+  } catch (err) {
+    console.error("Failed to run Phase 1C Integrity Tests:", err);
+  }
+}
+
+runIntegrity();
 
 

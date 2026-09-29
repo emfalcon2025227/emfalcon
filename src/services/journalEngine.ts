@@ -4,7 +4,7 @@
  * and constructs balanced double-entry accounting journal postings.
  */
 
-import { doc, runTransaction, Firestore, Transaction } from "firebase/firestore";
+import { doc, runTransaction, Firestore, Transaction, DocumentReference } from "firebase/firestore";
 import { db as defaultDb, sanitizeForFirestore } from "../lib/firebase";
 import { validateTransactionPeriod } from "./financialEngine";
 import { flushTransactionWrites, allocateNextSequenceInTransaction } from "../utils/sequenceGenerator";
@@ -123,20 +123,9 @@ export async function postAuthoritativeJournalEntry(
       lines: entry.lines ? entry.lines.map(line => ({ ...line })) : []
     };
 
-    // --- READ PHASE ---
-    // Read 1: Check duplicate event key
-    const keyRef = doc(dbInstance, "journal_event_keys", `${workingEntry.sourceType}_${workingEntry.sourceId}`);
-    const keySnap = await tx.get(keyRef);
-    if (keySnap.exists()) {
-      return {
-        isValid: false,
-        error: `تم تسجيل قيد محاسبي لهذا الحدث المالي (${workingEntry.sourceType}: ${workingEntry.sourceId}) مسبقاً لمنع التكرار.`
-      };
-    }
-
-    // Read 2: Fetch and validate original journal if this is a reversal (Strict Read-Before-Write)
+    // Read 1: Fetch and validate original journal if this is a reversal (Strict Read-Before-Write)
     let validatedOriginalData: JournalEntryRecord | null = null;
-    let origRefInstance: any = null;
+    let origRefInstance: DocumentReference | null = null;
     if (originalToReverse) {
       origRefInstance = doc(dbInstance, "journal_entries", originalToReverse.id);
       const origSnap = await tx.get(origRefInstance);
@@ -167,8 +156,8 @@ export async function postAuthoritativeJournalEntry(
         accountCode: l.accountCode,
         accountNameAr: l.accountNameAr,
         accountNameEn: l.accountNameEn,
-        debit: l.credit, // SWAP
-        credit: l.debit, // SWAP
+        debit: l.credit || 0, // SWAP, ensure 0 fallback
+        credit: l.debit || 0, // SWAP, ensure 0 fallback
         description: `عكس قيد: ${l.description || ""}`,
         ownerId: l.ownerId,
         propertyId: l.propertyId,
@@ -181,9 +170,41 @@ export async function postAuthoritativeJournalEntry(
       workingEntry.totalDebit = validatedOriginalData.totalCredit;
       workingEntry.totalCredit = validatedOriginalData.totalDebit;
       workingEntry.originalEntryId = validatedOriginalData.id;
+      workingEntry.sourceType = "FINANCIAL_REVERSAL";
+      workingEntry.sourceId = validatedOriginalData.id;
     }
 
-    // Read 3: Atomic sequence allocation inside the active transaction if not already set on original and working copies
+    // Read 2: Check duplicate event key (Moved after reversal logic to use authoritative sourceId)
+    const keyRef = doc(dbInstance, "journal_event_keys", `${workingEntry.sourceType}_${workingEntry.sourceId}`);
+    const keySnap = await tx.get(keyRef);
+    if (keySnap.exists()) {
+      return {
+        isValid: false,
+        error: `تم تسجيل قيد محاسبي لهذا الحدث المالي (${workingEntry.sourceType}: ${workingEntry.sourceId}) مسبقاً لمنع التكرار.`
+      };
+    }
+
+    // Read 3: Verify all accounts exist in the authoritative Chart of Accounts (Prevention of Synthetic Accounts)
+    const uniqueAccountIds = [...new Set(workingEntry.lines.map(l => l.accountId))];
+    for (const accId of uniqueAccountIds) {
+      const accRef = doc(dbInstance, "chart_of_accounts", accId);
+      const accSnap = await tx.get(accRef);
+      if (!accSnap.exists()) {
+        return {
+          isValid: false,
+          error: `الحساب المحاسبي (${accId}) غير موجود في دليل الحسابات المعتمد. لا يمكن ترحيل قيد بحسابات غير معرفة.`
+        };
+      }
+      const accData = accSnap.data();
+      if (!accData?.isActive) {
+        return {
+          isValid: false,
+          error: `الحساب المحاسبي (${accId}) غير نشط حالياً. لا يمكن الترحيل لحسابات غير نشطة.`
+        };
+      }
+    }
+
+    // Read 4: Atomic sequence allocation inside the active transaction if not already set on original and working copies
     if (!entry.entryNumber && !workingEntry.entryNumber) {
       const year = new Date(workingEntry.transactionDate || new Date().toISOString()).getFullYear();
       const [seq] = await allocateNextSequenceInTransaction(tx, dbInstance, `journal_${year}`, `JE-${year}-`, 1, 5);
