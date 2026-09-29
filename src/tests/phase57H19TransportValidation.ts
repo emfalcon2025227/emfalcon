@@ -263,9 +263,24 @@ export class Phase57H19TransportValidationMatrix {
 
     try {
       // Instrument V2 engine to count any calls
-      OCRV2Engine.extract = async (..._args: any[]) => {
+      OCRV2Engine.extract = async (dataUrl: string, profileKey: OCRProfileKey, modelLevel?: OCRModelLevel): Promise<OCRV2Result<Record<string, any>>> => {
         v2CallCount++;
-        return { success: false, diagnostics: { errorMsg: "V2 called unexpectedly" } as any };
+        return {
+          success: false,
+          status: "FAILED",
+          profile: profileKey || "EMIRATES_ID",
+          data: {},
+          fields: {},
+          diagnostics: {
+            traceId: "test-trace-1",
+            model: "test-model",
+            attempts: 1,
+            processingMs: 0,
+            imageVariant: "original",
+            errorMsg: "V2 called unexpectedly",
+            checkpoints: []
+          }
+        };
       };
 
       // Instrument local fallback to count calls
@@ -357,11 +372,23 @@ export class Phase57H19TransportValidationMatrix {
       });
 
       // Instrument V2 engine to count calls and simulate fallback
-      OCRV2Engine.extract = async (..._args: any[]) => {
+      OCRV2Engine.extract = async (dataUrl: string, profileKey: OCRProfileKey, modelLevel?: OCRModelLevel): Promise<OCRV2Result<Record<string, any>>> => {
         v2CallCount++;
         return {
           success: false,
-          diagnostics: { errorMsg: "Quality low" } as any,
+          status: "FAILED",
+          profile: profileKey || "EMIRATES_ID",
+          data: {},
+          fields: {},
+          diagnostics: {
+            traceId: "test-trace-2",
+            model: "test-model",
+            attempts: 1,
+            processingMs: 0,
+            imageVariant: "original",
+            errorMsg: "Quality low",
+            checkpoints: []
+          }
         };
       };
 

@@ -389,7 +389,7 @@ export type LeaseContractStatus =
 export interface StagedAdminFeesConfig {
   includeAdminFees?: boolean;
   ownerFeeEnabled?: boolean;
-  ownerFeeBasis?: "PERCENTAGE_OF_RENT" | "FIXED_AMOUNT";
+  ownerFeeBasis?: CommissionCalculationBasis;
   ownerFeeRate?: number;
   ownerFeeFixed?: number;
   ownerFeeDueDate?: string;
@@ -397,7 +397,7 @@ export interface StagedAdminFeesConfig {
   ownerFeePaymentMethod?: PaymentMethod;
   ownerFeeReference?: string;
   tenantFeeEnabled?: boolean;
-  tenantFeeBasis?: "PERCENTAGE_OF_RENT" | "FIXED_AMOUNT";
+  tenantFeeBasis?: CommissionCalculationBasis;
   tenantFeeRate?: number;
   tenantFeeFixed?: number;
   tenantFeeDueDate?: string;
