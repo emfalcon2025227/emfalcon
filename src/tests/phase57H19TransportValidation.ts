@@ -7,6 +7,7 @@ import { safeFetchJson } from "../utils/safeApiFetch";
 import { runOcrScan, localOcrFallback } from "../services/emiratesIdService";
 import { OCRService } from "../services/ocr/ocrEngine";
 import { OCRV2Engine } from "../services/ocr/v2/OCRV2Engine";
+import { OCRProfileKey, OCRModelLevel, OCRV2Result } from "../services/ocr/v2/OCRV2Types";
 import { resolveApiUrl } from "../utils/apiClient";
 
 export interface TransportTestResult {

@@ -338,7 +338,7 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
   // Optional Office Commission / Administrative Fees
   const [includeAdminFees, setIncludeAdminFees] = useState(false);
   const [ownerFeeEnabled, setOwnerFeeEnabled] = useState(true);
-  const [ownerFeeBasis, setOwnerFeeBasis] = useState<CommissionCalculationBasis>("PERCENTAGE_OF_RENT");
+  const [ownerFeeBasis, setOwnerFeeBasis] = useState<"PERCENTAGE_OF_RENT" | "FIXED_AMOUNT">("PERCENTAGE_OF_RENT");
   const [ownerFeeRate, setOwnerFeeRate] = useState<number | string>(5.0);
   const [ownerFeeFixed, setOwnerFeeFixed] = useState<number | string>("");
   const [ownerFeeDueDate, setOwnerFeeDueDate] = useState("");
@@ -347,7 +347,7 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
   const [ownerFeeReference, setOwnerFeeReference] = useState("");
 
   const [tenantFeeEnabled, setTenantFeeEnabled] = useState(true);
-  const [tenantFeeBasis, setTenantFeeBasis] = useState<CommissionCalculationBasis>("PERCENTAGE_OF_RENT");
+  const [tenantFeeBasis, setTenantFeeBasis] = useState<"PERCENTAGE_OF_RENT" | "FIXED_AMOUNT">("PERCENTAGE_OF_RENT");
   const [tenantFeeRate, setTenantFeeRate] = useState<number | string>(5.0);
   const [tenantFeeFixed, setTenantFeeFixed] = useState<number | string>("");
   const [tenantFeeDueDate, setTenantFeeDueDate] = useState("");
@@ -410,7 +410,9 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
           setIncludeAdminFees(true);
           if (ownerComm) {
             setOwnerFeeEnabled(true);
-            if (ownerComm.calculationBasis) setOwnerFeeBasis(ownerComm.calculationBasis);
+            if (ownerComm.calculationBasis === "PERCENTAGE_OF_RENT" || ownerComm.calculationBasis === "FIXED_AMOUNT") {
+              setOwnerFeeBasis(ownerComm.calculationBasis);
+            }
             if (ownerComm.ratePercentage !== undefined) setOwnerFeeRate(ownerComm.ratePercentage);
             if (ownerComm.fixedAmount !== undefined) setOwnerFeeFixed(ownerComm.fixedAmount);
             if (ownerComm.dueDate) setOwnerFeeDueDate(ownerComm.dueDate);
@@ -419,7 +421,9 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
           }
           if (tenantComm) {
             setTenantFeeEnabled(true);
-            if (tenantComm.calculationBasis) setTenantFeeBasis(tenantComm.calculationBasis);
+            if (tenantComm.calculationBasis === "PERCENTAGE_OF_RENT" || tenantComm.calculationBasis === "FIXED_AMOUNT") {
+              setTenantFeeBasis(tenantComm.calculationBasis);
+            }
             if (tenantComm.ratePercentage !== undefined) setTenantFeeRate(tenantComm.ratePercentage);
             if (tenantComm.fixedAmount !== undefined) setTenantFeeFixed(tenantComm.fixedAmount);
             if (tenantComm.dueDate) setTenantFeeDueDate(tenantComm.dueDate);
@@ -3204,7 +3208,12 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
                                   <label className="block text-[11px] font-bold text-slate-500 mb-1">{language === "ar" ? "طريقة الاحتساب" : "Calculation Method"}</label>
                                   <select
                                     value={ownerFeeBasis}
-                                    onChange={(e) => setOwnerFeeBasis(e.target.value as any)}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      if (val === "PERCENTAGE_OF_RENT" || val === "FIXED_AMOUNT") {
+                                        setOwnerFeeBasis(val);
+                                      }
+                                    }}
                                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none"
                                   >
                                     <option value="PERCENTAGE_OF_RENT">{language === "ar" ? "نسبة مئوية من الإيجار (%)" : "Percentage of Rent (%)"}</option>
@@ -3371,7 +3380,12 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
                                   <label className="block text-[11px] font-bold text-slate-500 mb-1">{language === "ar" ? "طريقة الاحتساب" : "Calculation Method"}</label>
                                   <select
                                     value={tenantFeeBasis}
-                                    onChange={(e) => setTenantFeeBasis(e.target.value as any)}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      if (val === "PERCENTAGE_OF_RENT" || val === "FIXED_AMOUNT") {
+                                        setTenantFeeBasis(val);
+                                      }
+                                    }}
                                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none"
                                   >
                                     <option value="PERCENTAGE_OF_RENT">{language === "ar" ? "نسبة مئوية من الإيجار (%)" : "Percentage of Rent (%)"}</option>
