@@ -239,7 +239,7 @@ export const LeaseTerminationModal: React.FC<LeaseTerminationModalProps> = ({
         !validationResult.isFeeWaived
       ) {
         // Record as commission/receivable obligation to owner
-        addCommissionObligation({
+        await addCommissionObligation({
           leaseId: lease.id,
           partyType: "TENANT",
           tenantId: lease.tenantId,

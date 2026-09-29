@@ -186,7 +186,7 @@ export const DailyRevenueView: React.FC = () => {
         finalNet = calc.netRevenue;
     }
 
-    const res = addCommissionObligation({
+    const res = await addCommissionObligation({
       leaseId: lease.id,
       propertyId: lease.propertyId,
       unitId: lease.unitId,

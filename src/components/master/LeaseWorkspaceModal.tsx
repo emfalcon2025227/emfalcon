@@ -890,7 +890,7 @@ export const LeaseWorkspacePage: React.FC<LeaseWorkspaceModalProps> = ({ lease: 
   const currentCommissionYear = (lease.startDate || '') ? new Date((lease.startDate || '')).getFullYear() : 2026;
   const renewalSeq = lease.renewalSequence || 1;
 
-  const handleChargeCommission = (partyType: "OWNER" | "TENANT") => {
+  const handleChargeCommission = async (partyType: "OWNER" | "TENANT") => {
     const partyId = partyType === "OWNER" ? (owner?.id || lease.ownerId) : (tenant?.id || lease.tenantId);
     if (!partyId) {
       alert(isAr ? "معرف الطرف غير متوفر." : "Party ID not available.");
@@ -918,7 +918,7 @@ export const LeaseWorkspacePage: React.FC<LeaseWorkspaceModalProps> = ({ lease: 
     const defaultRate = 5.0;
     const amount = Math.round(((lease.annualRent || 0) * defaultRate) / 100);
 
-    const res = addCommissionObligation({
+    const res = await addCommissionObligation({
       leaseId: lease.id,
       businessKeySequence: "PRIMARY",
       ownerId: partyType === "OWNER" ? partyId : undefined,

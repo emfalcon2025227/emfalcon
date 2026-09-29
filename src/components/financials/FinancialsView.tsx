@@ -571,7 +571,7 @@ export const FinancialsView: React.FC = () => {
   });
 
   // Handle Add Commission
-  const handleSaveCommission = (e: React.FormEvent) => {
+  const handleSaveCommission = async (e: React.FormEvent) => {
     e.preventDefault();
     setModalError("");
 
@@ -620,7 +620,7 @@ export const FinancialsView: React.FC = () => {
       targetLease.adminFeePolicy
     );
 
-    const res = addCommissionObligation({
+    const res = await addCommissionObligation({
       leaseId: targetLease.id,
       propertyId: targetLease.propertyId,
       unitId: targetLease.unitId,
