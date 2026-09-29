@@ -384,11 +384,24 @@ export const SaqrOfficeAccountView: React.FC = () => {
         {/* Total Balance */}
         <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all duration-200 space-y-2 relative overflow-hidden">
           <div className={`absolute top-0 w-24 h-24 pointer-events-none transition-all duration-200 ${isAr ? "left-0 rounded-br-full bg-emerald-50/80 dark:bg-emerald-950/20" : "right-0 rounded-bl-full bg-emerald-50/80 dark:bg-emerald-950/20"}`} />
-          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 block uppercase tracking-wider">
-            {isAr ? "حساب المكتب" : "Office Account"}
-          </span>
-          <div className="text-2xl font-black text-slate-900 dark:text-white font-mono tracking-tight whitespace-nowrap">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 block uppercase tracking-wider">
+              {isAr ? "حساب المكتب (صافي الرصيد)" : "Office Account (Net Balance)"}
+            </span>
+            <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
+              <Wallet className="w-4 h-4" />
+            </div>
+          </div>
+          <div className={`text-2xl font-black font-mono tracking-tight whitespace-nowrap ${netOfficeBalance >= 0 ? "text-slate-900 dark:text-white" : "text-rose-600 dark:text-rose-400"}`}>
             {isAr ? `${netOfficeBalance.toLocaleString()} درهم` : `AED ${netOfficeBalance.toLocaleString()}`}
+          </div>
+          <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800/80 text-[11px]">
+            <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+              +{totalDeposits.toLocaleString()}
+            </span>
+            <span className="text-rose-500 dark:text-rose-400 font-medium">
+              -{totalWithdrawals.toLocaleString()}
+            </span>
           </div>
           <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
             <ArrowUpRight className="w-3.5 h-3.5" />

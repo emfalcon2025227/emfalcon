@@ -1,8 +1,0 @@
-{
-  "name": "emirates-falcon-erp",
-  "description": "Emirates Falcon Real Estate Management & Financial ERP System",
-  "permissions": [],
-  "capabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
-}
