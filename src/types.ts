@@ -534,6 +534,7 @@ export interface Lease {
     tenant?: AdminFeeExemptionPolicy;
   };
   stagedAdminFeesConfig?: StagedAdminFeesConfig;
+  renewalSequence?: number;
   pendingModification?: LeaseModificationRequest;
   approvedAt?: string;
   approvedById?: string;

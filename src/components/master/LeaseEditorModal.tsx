@@ -1072,10 +1072,10 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
     }
   };
 
-  // Save Lease Submission
+    // Save Lease Submission
   const handleFinalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!tenantId || !propertyId || !unitId || !annualRent || !startDate || !endDate) {
+    if (!tenantId || !propertyId || !unitId || !annualRent || !startDate || !endDate || !paymentFrequency || !installments || installments.length === 0) {
       addNotification({
         channel: "PORTAL",
         recipient: "User",
@@ -1083,8 +1083,8 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
         tenantId: tenantId || "sys",
         status: "DELIVERED",
         content: language === "ar"
-          ? "⚠️ يرجى استكمال جميع الحقول الإلزامية في تبويب بيانات العقد الأساسية."
-          : "⚠️ Please fill in all mandatory fields in the basic info tab.",
+          ? "⚠️ يرجى استكمال جميع الحقول الإلزامية وتأكيد جدول الدفعات في التبويب الخاص بها."
+          : "⚠️ Please fill in all mandatory fields and confirm the installment payment schedule.",
         attemptCount: 1,
         sentAt: new Date().toISOString()
       });
@@ -1320,11 +1320,15 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
         firstPaymentMethod: firstPaymentMethod || (installments[0]?.paymentMethod as any) || "CHEQUE",
         chequesCount: installments.length || 4,
         securityDeposit: parsedDeposit,
+        securityDepositHeld: 0,
+        securityDepositOutstanding: parsedDeposit,
+        securityDepositStatus: parsedDeposit > 0 ? "PENDING" : undefined,
         securityDepositPaymentMethod: securityDepositPaymentMethod as any || undefined,
         securityDepositBankName: securityDepositBankName || undefined,
         securityDepositChequeNumber: securityDepositChequeNumber || undefined,
         securityDepositIsUndatedCheque,
         carriedForwardFromLeaseId: isRenewal ? renewalSourceLease?.id : undefined,
+        renewalSequence: isRenewal && renewalSourceLease ? (renewalSourceLease.renewalSequence || 1) + 1 : 1,
         ejariNumber: ejariNumber.trim(),
         installmentsCount: installments.length || 4,
         installments: installments.map((inst, idx) => ({

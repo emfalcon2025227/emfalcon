@@ -888,7 +888,7 @@ export const LeaseWorkspacePage: React.FC<LeaseWorkspaceModalProps> = ({ lease: 
 
   const isAr = language === "ar";
   const currentCommissionYear = (lease.startDate || '') ? new Date((lease.startDate || '')).getFullYear() : 2026;
-  const renewalSeq = lease.id || 0;
+  const renewalSeq = lease.renewalSequence || 1;
 
   const handleChargeCommission = (partyType: "OWNER" | "TENANT") => {
     const partyId = partyType === "OWNER" ? (owner?.id || lease.ownerId) : (tenant?.id || lease.tenantId);

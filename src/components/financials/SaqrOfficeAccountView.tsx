@@ -380,70 +380,70 @@ export const SaqrOfficeAccountView: React.FC = () => {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {/* Total Balance */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-bl-full pointer-events-none" />
-          <span className="text-xs font-bold text-slate-500 block uppercase">
-            {isAr ? "إصافي رصيد حساب المكتب" : "Net Office Balance"}
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all duration-200 space-y-2 relative overflow-hidden">
+          <div className={`absolute top-0 w-24 h-24 pointer-events-none transition-all duration-200 ${isAr ? "left-0 rounded-br-full bg-emerald-50/80 dark:bg-emerald-950/20" : "right-0 rounded-bl-full bg-emerald-50/80 dark:bg-emerald-950/20"}`} />
+          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 block uppercase tracking-wider">
+            {isAr ? "حساب المكتب" : "Office Account"}
           </span>
-          <div className="text-2xl font-black text-slate-900 font-mono">
-            AED {netOfficeBalance.toLocaleString()}
+          <div className="text-2xl font-black text-slate-900 dark:text-white font-mono tracking-tight whitespace-nowrap">
+            {isAr ? `${netOfficeBalance.toLocaleString()} درهم` : `AED ${netOfficeBalance.toLocaleString()}`}
           </div>
-          <div className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+          <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
             <ArrowUpRight className="w-3.5 h-3.5" />
             <span>{isAr ? "محدث لحظياً من العمليات" : "Live auto-synced"}</span>
           </div>
         </div>
 
         {/* Bounced Penalties */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2 relative overflow-hidden">
-          <span className="text-xs font-bold text-indigo-600 block uppercase">
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-2 relative overflow-hidden">
+          <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 block uppercase">
             {isAr ? "غرامات الشيكات الراجعة" : "Bounced Penalties"}
           </span>
-          <div className="text-2xl font-black text-slate-900 font-mono">
-            AED {totalBouncedPenalties.toLocaleString()}
+          <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+            {isAr ? `${totalBouncedPenalties.toLocaleString()} درهم` : `AED ${totalBouncedPenalties.toLocaleString()}`}
           </div>
-          <div className="text-[11px] text-slate-500">
+          <div className="text-[11px] text-slate-500 dark:text-slate-400">
             {isAr ? "مقتطعة من الشيكات المرتجعة" : "From bounced cheques"}
           </div>
         </div>
 
         {/* Admin Fees */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2 relative overflow-hidden">
-          <span className="text-xs font-bold text-amber-600 block uppercase">
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-2 relative overflow-hidden">
+          <span className="text-xs font-bold text-amber-600 dark:text-amber-400 block uppercase">
             {isAr ? "الرسوم الإدارية للتحصيل" : "Admin & Service Fees"}
           </span>
-          <div className="text-2xl font-black text-slate-900 font-mono">
-            AED {totalAdminFees.toLocaleString()}
+          <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+            {isAr ? `${totalAdminFees.toLocaleString()} درهم` : `AED ${totalAdminFees.toLocaleString()}`}
           </div>
-          <div className="text-[11px] text-slate-500">
+          <div className="text-[11px] text-slate-500 dark:text-slate-400">
             {isAr ? "عمولات ورسوم إدارية للمكتب" : "Office service revenue"}
           </div>
         </div>
 
         {/* Cleaning & Guard Deductions */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2 relative overflow-hidden">
-          <span className="text-xs font-bold text-violet-600 block uppercase">
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-2 relative overflow-hidden">
+          <span className="text-xs font-bold text-violet-600 dark:text-violet-400 block uppercase">
             {isAr ? "نظافة وحراسة (على المالك)" : "Cleaning & Guard Deductions"}
           </span>
-          <div className="text-2xl font-black text-slate-900 font-mono">
-            AED {totalCleaningGuard.toLocaleString()}
+          <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+            {isAr ? `${totalCleaningGuard.toLocaleString()} درهم` : `AED ${totalCleaningGuard.toLocaleString()}`}
           </div>
-          <div className="text-[11px] text-slate-500">
+          <div className="text-[11px] text-slate-500 dark:text-slate-400">
             {isAr ? "خصومات مرحلة لحساب المكتب" : "Credited to office"}
           </div>
         </div>
 
         {/* Total Withdrawals */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2 relative overflow-hidden">
-          <span className="text-xs font-bold text-rose-600 block uppercase">
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-2 relative overflow-hidden">
+          <span className="text-xs font-bold text-rose-600 dark:text-rose-400 block uppercase">
             {isAr ? "إجمالي المسحوبات / المصروفات" : "Total Withdrawals"}
           </span>
-          <div className="text-2xl font-black text-rose-600 font-mono">
-            AED {totalWithdrawals.toLocaleString()}
+          <div className="text-2xl font-black text-rose-600 dark:text-rose-400 font-mono">
+            {isAr ? `${totalWithdrawals.toLocaleString()} درهم` : `AED ${totalWithdrawals.toLocaleString()}`}
           </div>
-          <div className="text-[11px] text-slate-500">
+          <div className="text-[11px] text-slate-500 dark:text-slate-400">
             {isAr ? "مصروفات أو سحوبات مسجلة" : "Expenses & outflows"}
           </div>
         </div>

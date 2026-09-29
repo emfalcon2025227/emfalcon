@@ -345,7 +345,7 @@ export interface DataContextType {
   getOwnerPayable: (ownerId: string) => OwnerPayableDetails;
   getOwnerStatement: (ownerId: string, filters?: { propertyId?: string; dateFrom?: string; dateTo?: string }) => OwnerStatementReport;
   getTenantStatement: (tenantId: string, filters?: { leaseId?: string; dateFrom?: string; dateTo?: string }) => TenantStatementReport;
-  addCommissionObligation: (data: Omit<CommissionObligation, "id" | "businessKey" | "collectedAmount" | "outstandingBalance" | "status" | "createdAt" | "createdById" | "createdByName" | "createdById" | "createdByName"> & { createdById?: string; createdByName?: string; businessKeySequence?: string }) => { success: boolean; commission?: CommissionObligation; error?: string };
+  addCommissionObligation: (data: Omit<CommissionObligation, "id" | "businessKey" | "collectedAmount" | "outstandingBalance" | "status" | "createdAt" | "createdById" | "createdByName" | "createdById" | "createdByName"> & { createdById?: string; createdByName?: string; businessKeySequence?: string }, batch?: any) => Promise<{ success: boolean; commission?: CommissionObligation; error?: string }>;
   updateCommissionObligation: (id: string, patch: Partial<CommissionObligation>, modificationReason?: string) => { success: boolean; error?: string };
   collectAdministrativeFee: (
     id: string,
@@ -2695,6 +2695,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...data,
       id: "lse-" + Date.now() + "-" + crypto.randomUUID().split("-")[0],
       contractStatus: "BINDING",
+      renewalSequence: data.renewalSequence || 1,
       createdAt: new Date().toISOString(),
     };
     setLeases((prev) => [newLease, ...prev]);
@@ -2792,6 +2793,54 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (lease) {
       saveEntitySnapshot("LEASE", lease, "VERSION");
     }
+    if (lease && (lease.contractStatus === "ACTIVE" || lease.contractStatus === "RENEWED" || lease.contractStatus === "EXPIRED")) {
+      const hasRentChanged = patch.annualRent !== undefined && patch.annualRent !== lease.annualRent;
+      const hasDepositChanged = patch.securityDeposit !== undefined && patch.securityDeposit !== lease.securityDeposit;
+      const hasStartDateChanged = patch.startDate !== undefined && patch.startDate !== lease.startDate;
+      const hasEndDateChanged = patch.endDate !== undefined && patch.endDate !== lease.endDate;
+      const hasFreqChanged = patch.paymentFrequency !== undefined && patch.paymentFrequency !== lease.paymentFrequency;
+      const hasInstallmentsChanged = patch.installments !== undefined && JSON.stringify(patch.installments) !== JSON.stringify(lease.installments);
+
+      if (hasRentChanged || hasDepositChanged || hasStartDateChanged || hasEndDateChanged || hasFreqChanged || hasInstallmentsChanged) {
+        const requestData = {
+          proposedAnnualRent: patch.annualRent !== undefined ? patch.annualRent : lease.annualRent,
+          proposedSecurityDeposit: patch.securityDeposit !== undefined ? patch.securityDeposit : lease.securityDeposit,
+          proposedStartDate: patch.startDate !== undefined ? patch.startDate : lease.startDate,
+          proposedEndDate: patch.endDate !== undefined ? patch.endDate : lease.endDate,
+          proposedInstallments: (patch.installments !== undefined ? patch.installments : lease.installments).map((inst, idx) => ({
+            installmentNumber: idx + 1,
+            dueDate: inst.dueDate,
+            amount: inst.amount,
+            chequeNumber: inst.chequeNumber,
+            bankName: inst.bankName,
+            drawerName: inst.drawerName,
+            paymentMethod: inst.paymentMethod as any,
+            status: "PENDING" as const
+          })),
+          proposedPatch: {
+            annualRent: patch.annualRent !== undefined ? patch.annualRent : lease.annualRent,
+            securityDeposit: patch.securityDeposit !== undefined ? patch.securityDeposit : lease.securityDeposit,
+            startDate: patch.startDate !== undefined ? patch.startDate : lease.startDate,
+            endDate: patch.endDate !== undefined ? patch.endDate : lease.endDate,
+            paymentFrequency: patch.paymentFrequency !== undefined ? patch.paymentFrequency : lease.paymentFrequency,
+            chequesCount: (patch.installments !== undefined ? patch.installments : lease.installments).length || 4,
+            installmentsCount: (patch.installments !== undefined ? patch.installments : lease.installments).length || 4,
+          },
+          modificationReason: language === "ar"
+            ? "تعديل بنود تعاقدية لعقد ساري بانتظار الاعتماد الإداري"
+            : "Contractual modification request for active lease",
+        };
+        requestLeaseModification(id, requestData);
+
+        delete patch.annualRent;
+        delete patch.securityDeposit;
+        delete patch.startDate;
+        delete patch.endDate;
+        delete patch.paymentFrequency;
+        delete patch.installments;
+      }
+    }
+
     // VALIDATE UNIT CHANGE IF ASSIGNING TO A NEW UNIT
     if (patch.unitId && lease && patch.unitId !== lease.unitId) {
       const validation = validateUnitAvailabilityForLease({
@@ -3211,6 +3260,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       paymentFrequency: renewal.paymentFrequency,
       securityDeposit: depositAmount,
       contractStatus: "ACTIVE",
+      renewalSequence: originalLease ? (originalLease.renewalSequence || 1) + 1 : 1,
       ejariNumber: renewal.ejariNumber || originalLease?.ejariNumber,
       installments: generatedInstallments,
       createdAt: nowIso,
@@ -3426,7 +3476,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               ? `الرسوم الإدارية السنوية للمكتب من المالك لتجديد عقد ${currentCommissionYear}`
               : `Annual Administrative Renewal Fees for Owner for ${currentCommissionYear}`,
             contractualCommissionYear: currentCommissionYear,
-            renewalSequence: 2,
+            renewalSequence: createdLease.renewalSequence || 1,
             isOverride: false,
             createdById: userId,
             createdByName: userName,
@@ -3456,7 +3506,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               ? `الرسوم الإدارية السنوية للمكتب من المستأجر لتجديد عقد ${currentCommissionYear}`
               : `Annual Administrative Renewal Fees for Tenant for ${currentCommissionYear}`,
             contractualCommissionYear: currentCommissionYear,
-            renewalSequence: 2,
+            renewalSequence: createdLease.renewalSequence || 1,
             isOverride: false,
             createdById: userId,
             createdByName: userName,
@@ -3615,32 +3665,34 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       approvedByName: userName,
       securityDepositStatus: lease.securityDeposit > 0 ? (lease.securityDepositStatus || "PENDING") : undefined,
     };
-    setLeases((prev) => prev.map((l) => (l.id === leaseId ? activatedLease : l)));
-    safeSetDoc(doc(db, "leases", lease.id), sanitizeForFirestore(activatedLease), { merge: true });
+
+    const batch = writeBatch(db);
+    batch.set(doc(db, "leases", lease.id), sanitizeForFirestore(activatedLease), { merge: true });
 
     // 2. Ensure unit occupancy is synchronized
+    let updatedUnitObj: Unit | null = null;
     if (lease.unitId) {
       setUnits((prevUnits) =>
         prevUnits.map((u) => {
           if (u.id === lease.unitId) {
-            const updatedUnit: Unit = {
+            updatedUnitObj = {
               ...u,
               status: "OCCUPIED",
               currentTenantId: lease.tenantId,
               currentLeaseId: lease.id,
             };
-            safeSetDoc(doc(db, "units", u.id), updatedUnit, { merge: true });
-            return updatedUnit;
+            batch.set(doc(db, "units", u.id), updatedUnitObj, { merge: true });
+            return updatedUnitObj;
           }
           return u;
         })
       );
     }
 
-    // 3. Materialize Cheques (Idempotent: prevent duplicate cheque creation)
+    // 3. Materialize Cheques
+    const createdCheques: Cheque[] = [];
     const existingChequesForLease = cheques.filter((c) => c.leaseId === lease.id);
     if (existingChequesForLease.length === 0 && lease.installments && lease.installments.length > 0) {
-      const createdCheques: Cheque[] = [];
       lease.installments.forEach((inst, idx) => {
         if (inst.chequeNumber || inst.paymentMethod === "CHEQUE") {
           const chq: Cheque = {
@@ -3676,20 +3728,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             createdAt: nowIso,
           };
           createdCheques.push(chq);
-          safeSetDoc(doc(db, "cheques", chq.id), chq);
+          batch.set(doc(db, "cheques", chq.id), chq);
         }
       });
-      if (createdCheques.length > 0) {
-        setCheques((prev) => [...createdCheques, ...prev]);
-      }
     }
 
-    // 4. Materialize Admin Fees / Commissions (Establish obligations ONLY - Never collect on approval)
+    // 4. Materialize Admin Fees / Commissions
     const stagedFees = lease.stagedAdminFeesConfig;
     if (stagedFees && stagedFees.includeAdminFees) {
       const currentCommissionYear = new Date(lease.startDate).getFullYear().toString();
 
-      // Owner Fee: Payer OWNER, Direction OWNER -> OFFICE
+      // Owner Fee
       if (stagedFees.ownerFeeEnabled) {
         const ownerFeeAmount =
           stagedFees.ownerFeeBasis === "PERCENTAGE_OF_RENT"
@@ -3715,13 +3764,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               ? `الرسوم الإدارية السنوية للمكتب من المالك للعام ${currentCommissionYear}`
               : `Annual Administrative Fees for Owner for ${currentCommissionYear}`,
             contractualCommissionYear: currentCommissionYear,
-            renewalSequence: 1,
+            renewalSequence: lease.renewalSequence || 1,
             isOverride: false,
-          });
+          }, batch);
         }
       }
 
-      // Tenant Fee: Payer TENANT, Direction TENANT -> OFFICE
+      // Tenant Fee
       if (stagedFees.tenantFeeEnabled) {
         const tenantFeeAmount =
           stagedFees.tenantFeeBasis === "PERCENTAGE_OF_RENT"
@@ -3747,16 +3796,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               ? `الرسوم الإدارية السنوية للمكتب من المستأجر للعام ${currentCommissionYear}`
               : `Annual Administrative Fees for Tenant for ${currentCommissionYear}`,
             contractualCommissionYear: currentCommissionYear,
-            renewalSequence: 1,
+            renewalSequence: lease.renewalSequence || 1,
             isOverride: false,
-          });
+          }, batch);
         }
       }
     }
 
-    // 5. Security deposit is preserved on the lease as a pending obligation (NO premature collection on approval)
-
     // 6. Materialize Lease Expenses (if any)
+    const createdExpenses: PropertyExpenseRecord[] = [];
     if (lease.leaseExpenses && lease.leaseExpenses.length > 0) {
       lease.leaseExpenses.forEach((exp, idx) => {
         const expRecord: PropertyExpenseRecord = {
@@ -3781,12 +3829,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           notes: exp.notes,
           expenseLevel: "LEASE_LEVEL",
         };
-        setPropertyExpenses((prev) => [expRecord, ...prev]);
-        safeSetDoc(doc(db, "property_expenses", expRecord.id), expRecord);
+        createdExpenses.push(expRecord);
+        batch.set(doc(db, "property_expenses", expRecord.id), expRecord);
       });
     }
 
-    logAudit("APPROVE", "LEASE", lease.id, lease.leaseNumber, `Approved and activated lease contract ${lease.leaseNumber}. Review notes: ${reviewNotes || "None"}`);
+    // COMMIT BATCH ATOMICALLY
+    batch.commit()
+      .then(() => {
+        setLeases((prev) => prev.map((l) => (l.id === leaseId ? activatedLease : l)));
+        if (createdCheques.length > 0) {
+          setCheques((prev) => [...createdCheques, ...prev]);
+        }
+        if (createdExpenses.length > 0) {
+          setPropertyExpenses((prev) => [...createdExpenses, ...prev]);
+        }
+        logAudit("APPROVE", "LEASE", lease.id, lease.leaseNumber, `Approved and activated lease contract ${lease.leaseNumber}. Review notes: ${reviewNotes || "None"}`);
+      })
+      .catch((err) => {
+        handleFirestoreError(err, OperationType.WRITE, "Atomic Lease Approval Batch");
+      });
 
     return { success: true, lease: activatedLease };
   };
@@ -6521,12 +6583,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logAudit("DELETE", "CHART_OF_ACCOUNTS", id, `VAT Rate ${existing.rate}%`, reason || "Deleted VAT rate record");
     return { success: true };
   };
-  const addCommissionObligation = (
+  const addCommissionObligation = async (
     data: Omit<
       CommissionObligation,
       "id" | "businessKey" | "collectedAmount" | "outstandingBalance" | "status" | "createdAt" | "createdById" | "createdByName"
-    > & { createdById?: string; createdByName?: string; businessKeySequence?: string }
-  ): { success: boolean; commission?: CommissionObligation; error?: string } => {
+    > & { createdById?: string; createdByName?: string; businessKeySequence?: string },
+    batch?: any
+  ): Promise<{ success: boolean; commission?: CommissionObligation; error?: string }> => {
     // Financial Period Validation
     const periodCheck = validateTransactionPeriod(data.dueDate || new Date().toISOString(), financialPeriods);
     if (!periodCheck.allowed) {
@@ -6538,8 +6601,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       data.contractualCommissionYear ||
       (data.dueDate ? new Date(data.dueDate).getFullYear() : new Date().getFullYear())
     );
-    // Business Rule Phase 53: Sequential Revenue Tracking
-    // Format: leaseId:partyType:commissionType:contractYear:sequence
+    const renewalSeq = data.renewalSequence || 1;
+    const deterministicDocId = `com-${data.leaseId}-${data.partyType}-${data.commissionType}-${contractYear}-${renewalSeq}`;
+
+    // Duplicate Prevention - React State Fallback
     const fullBusinessKey = `${businessKey}:${contractYear}`;
     const existingYearDuplicate = commissions.find(
       (c) =>
@@ -6548,7 +6613,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         c.partyType === data.partyType &&
         c.commissionType === data.commissionType &&
         String(c.contractualCommissionYear || (c.dueDate ? new Date(c.dueDate).getFullYear() : (c.createdAt ? new Date(c.createdAt).getFullYear() : new Date().getFullYear()))) === contractYear &&
-        (c.businessKeySequence || "PRIMARY") === seq
+        (c.businessKeySequence || "PRIMARY") === seq &&
+        (c.renewalSequence || 1) === renewalSeq
     );
     if (isDuplicateCommission(commissions, fullBusinessKey) || (!data.isOverride && existingYearDuplicate)) {
       return {
@@ -6558,6 +6624,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : `Administrative fees already recorded for this party for contractual year ${contractYear}. Duplicate fees are prohibited.`,
       };
     }
+
     // Calculate total commission amount and tax components
     let totalAmount = 0;
     let vatAmount = 0;
@@ -6592,7 +6659,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     const newCommission: CommissionObligation = {
       ...data,
-      id: "com-" + Date.now() + "-" + crypto.randomUUID().split("-")[0],
+      id: deterministicDocId,
       businessKey,
       totalCommissionAmount: totalAmount,
       vatAmount,
@@ -6606,16 +6673,44 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdById: currentUser?.id || "system",
       createdByName: currentUser?.nameEn || "System User",
     };
-    setCommissions((prev) => [newCommission, ...prev]);
-    safeSetDoc(doc(db, "commissions", newCommission.id), newCommission);
-    logAudit(
-      "COMMISSION_CREATED",
-      "COMMISSION",
-      newCommission.id,
-      `${newCommission.partyType} Commission (${newCommission.commissionType})`,
-      `Created ${newCommission.partyType} commission obligation of AED ${totalAmount.toLocaleString()} for Lease ${newCommission.leaseId} (Rate: ${newCommission.ratePercentage || 0}%, Key: ${businessKey})`
-    );
-    return { success: true, commission: newCommission };
+
+    if (batch) {
+      batch.set(doc(db, "commissions", deterministicDocId), newCommission);
+      setCommissions((prev) => [newCommission, ...prev]);
+      return { success: true, commission: newCommission };
+    }
+
+    try {
+      const result = await runTransaction(db, async (transaction) => {
+        const docRef = doc(db, "commissions", deterministicDocId);
+        const docSnap = await transaction.get(docRef);
+        if (docSnap.exists() && !data.isOverride) {
+          throw new Error("DUPLICATE_OBLIGATION");
+        }
+        transaction.set(docRef, newCommission);
+        return newCommission;
+      });
+
+      setCommissions((prev) => [result, ...prev]);
+      logAudit(
+        "COMMISSION_CREATED",
+        "COMMISSION",
+        result.id,
+        `${result.partyType} Commission (${result.commissionType})`,
+        `Created ${result.partyType} commission obligation of AED ${totalAmount.toLocaleString()} for Lease ${result.leaseId} (Key: ${deterministicDocId})`
+      );
+      return { success: true, commission: result };
+    } catch (err: any) {
+      if (err?.message === "DUPLICATE_OBLIGATION") {
+        return {
+          success: false,
+          error: language === "ar"
+            ? "الرسوم الإدارية مسجلة بالفعل في قاعدة البيانات وتمنع الحماية التزاماً مكرراً."
+            : "Administrative fees already recorded in database. Concurrency safeguard blocked duplicate.",
+        };
+      }
+      return { success: false, error: err?.message || String(err) };
+    }
   };
   const updateCommissionObligation = (id: string, patch: Partial<CommissionObligation>, modificationReason?: string): { success: boolean; error?: string } => {
     const existing = commissions.find((c) => c.id === id);
