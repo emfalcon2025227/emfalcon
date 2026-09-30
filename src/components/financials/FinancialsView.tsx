@@ -323,71 +323,71 @@ export const FinancialsView: React.FC = () => {
   };
 
   // Derived Totals
-  const totalCommissionExpected = commissions.reduce((sum, c) => sum + c.totalCommissionAmount, 0);
-  const totalCommissionCollected = commissions.reduce((sum, c) => sum + c.collectedAmount, 0);
-  const totalCommissionOutstanding = commissions.reduce((sum, c) => sum + c.outstandingBalance, 0);
+  const totalCommissionExpected = commissions.reduce((sum, c) => sum + (c.totalCommissionAmount || 0), 0);
+  const totalCommissionCollected = commissions.reduce((sum, c) => sum + (c.collectedAmount || 0), 0);
+  const totalCommissionOutstanding = commissions.reduce((sum, c) => sum + (c.outstandingBalance || 0), 0);
 
   const totalOwnerCommissions = commissions
     .filter((c) => c.partyType === "OWNER")
-    .reduce((sum, c) => sum + c.totalCommissionAmount, 0);
+    .reduce((sum, c) => sum + (c.totalCommissionAmount || 0), 0);
   const totalTenantCommissions = commissions
     .filter((c) => c.partyType === "TENANT")
-    .reduce((sum, c) => sum + c.totalCommissionAmount, 0);
+    .reduce((sum, c) => sum + (c.totalCommissionAmount || 0), 0);
 
   // Reconciliation Calculations
   const totalRentCollections = collections.reduce((sum, col) => {
     const isReversed = financialReversals.some((r) => r.targetType === "COLLECTION" && r.targetId === col.id);
-    return isReversed ? sum : sum + col.amountEntered;
+    return isReversed ? sum : sum + (col.amountEntered || 0);
   }, 0);
 
   const totalOwnerCommissionsWithReversals = commissions
     .filter((c) => c.partyType === "OWNER" && c.status !== "CANCELLED")
-    .reduce((sum, c) => sum + c.totalCommissionAmount, 0);
+    .reduce((sum, c) => sum + (c.totalCommissionAmount || 0), 0);
 
   const totalOwnerExpenses = propertyExpenses
     .filter((e) => e.costBearer === "OWNER" && e.status !== "CANCELLED" && e.status !== "REVERSED")
-    .reduce((sum, e) => sum + e.totalAmount, 0);
+    .reduce((sum, e) => sum + (e.totalAmount || 0), 0);
 
   const totalTransfers = ownerTransfers
     .filter((t) => t.status !== "DRAFT" && t.status !== "REVERSED")
-    .reduce((sum, t) => sum + t.amount, 0);
+    .reduce((sum, t) => sum + (t.amount || 0), 0);
 
-  const calculatedOwnerPayable = totalRentCollections - totalOwnerCommissionsWithReversals - totalOwnerExpenses - totalTransfers;
+  const calculatedOwnerPayable = (totalRentCollections || 0) - (totalOwnerCommissionsWithReversals || 0) - (totalOwnerExpenses || 0) - (totalTransfers || 0);
 
   // Tenant Reconciliation
-  const totalRentCharges = leases.reduce((sum, l) => sum + l.annualRent, 0);
+  const totalRentCharges = leases.reduce((sum, l) => sum + (l.annualRent || 0), 0);
 
   const totalTenantExpenses = propertyExpenses
     .filter((e) => e.costBearer === "TENANT" && e.status !== "CANCELLED" && e.status !== "REVERSED")
-    .reduce((sum, e) => sum + e.totalAmount, 0);
+    .reduce((sum, e) => sum + (e.totalAmount || 0), 0);
 
-  const calculatedTenantOutstanding = totalRentCharges + totalTenantCommissions - totalRentCollections;
+  const calculatedTenantOutstanding = (totalRentCharges || 0) + (totalTenantCommissions || 0) - (totalRentCollections || 0);
 
   // Office Reconciliation
   const totalOfficeExpenses = propertyExpenses
     .filter((e) => e.costBearer === "OFFICE" && e.status !== "CANCELLED" && e.status !== "REVERSED")
-    .reduce((sum, e) => sum + e.totalAmount, 0);
+    .reduce((sum, e) => sum + (e.totalAmount || 0), 0);
 
   // Active Property Expenses
   const totalActiveExpenses = propertyExpenses
     .filter((e) => e.status !== "CANCELLED" && e.status !== "REVERSED")
-    .reduce((sum, e) => sum + e.totalAmount, 0);
+    .reduce((sum, e) => sum + (e.totalAmount || 0), 0);
 
   // Maintenance Expenses
   const totalMaintenanceExpenses = propertyExpenses
     .filter((e) => e.category === "MAINTENANCE" && e.status !== "CANCELLED" && e.status !== "REVERSED")
-    .reduce((sum, e) => sum + e.totalAmount, 0);
+    .reduce((sum, e) => sum + (e.totalAmount || 0), 0);
 
   // Reversed Expenses
   const totalReversedExpenses = propertyExpenses
     .filter((e) => e.status === "REVERSED")
-    .reduce((sum, e) => sum + e.totalAmount, 0);
+    .reduce((sum, e) => sum + (e.totalAmount || 0), 0);
 
   // Unallocated Expenses
   const unallocatedExpenses = propertyExpenses.filter(
     (e) => !e.ownerId && !e.tenantId && e.costBearer !== "OFFICE"
   );
-  const totalUnallocatedExpenses = unallocatedExpenses.reduce((sum, e) => sum + e.totalAmount, 0);
+  const totalUnallocatedExpenses = unallocatedExpenses.reduce((sum, e) => sum + (e.totalAmount || 0), 0);
 
   // Duplicate posting checker
   const duplicatePostings = propertyExpenses.filter((exp, idx, self) => {
@@ -516,32 +516,32 @@ export const FinancialsView: React.FC = () => {
   const recon = reconcileSystemFinancialBalances();
   if (recon.ownerTransferReconciliation) {
     Object.values(recon.ownerTransferReconciliation).forEach(r => {
-      if (r.status === "DISCREPANCY") {
-        if (Math.abs(r.heldDiscrepancy) > 0.01) {
+      if (r && r.status === "DISCREPANCY") {
+        if (Math.abs(Number(r.heldDiscrepancy || 0)) > 0.01) {
           exceptions.push({
             id: `exc-recon-held-${r.ownerId}`,
             severity: "HIGH",
             entity: "OWNER_COUNTER",
             recordId: r.ownerId,
-            amount: r.heldDiscrepancy,
+            amount: Number(r.heldDiscrepancy || 0),
             detectedDate: new Date().toISOString().slice(0, 10),
             explanation: isAr 
-              ? `فرق في رصيد المبالغ المحجوزة للمالك ${r.ownerName || r.ownerId} (المسجل: ${r.persistedHeld.toLocaleString()}, الفعلي: ${r.derivedHeld.toLocaleString()})`
-              : `Total Held counter desync for owner ${r.ownerName || r.ownerId} (Persisted: ${r.persistedHeld.toLocaleString()}, Derived: ${r.derivedHeld.toLocaleString()})`,
+              ? `فرق في رصيد المبالغ المحجوزة للمالك ${r.ownerName || r.ownerId} (المسجل: ${Number(r.persistedHeld || 0).toLocaleString()}, الفعلي: ${Number(r.derivedHeld || 0).toLocaleString()})`
+              : `Total Held counter desync for owner ${r.ownerName || r.ownerId} (Persisted: ${Number(r.persistedHeld || 0).toLocaleString()}, Derived: ${Number(r.derivedHeld || 0).toLocaleString()})`,
             resolutionStatus: isAr ? "يتطلب إعادة مزامنة" : "Needs Resync"
           });
         }
-        if (Math.abs(r.paidDiscrepancy) > 0.01) {
+        if (Math.abs(Number(r.paidDiscrepancy || 0)) > 0.01) {
           exceptions.push({
             id: `exc-recon-paid-${r.ownerId}`,
             severity: "HIGH",
             entity: "OWNER_COUNTER",
             recordId: r.ownerId,
-            amount: r.paidDiscrepancy,
+            amount: Number(r.paidDiscrepancy || 0),
             detectedDate: new Date().toISOString().slice(0, 10),
             explanation: isAr 
-              ? `فرق في رصيد المبالغ المسددة للمالك ${r.ownerName || r.ownerId} (المسجل: ${r.persistedPaid.toLocaleString()}, الفعلي: ${r.derivedPaid.toLocaleString()})`
-              : `Total Paid counter desync for owner ${r.ownerName || r.ownerId} (Persisted: ${r.persistedPaid.toLocaleString()}, Derived: ${r.derivedPaid.toLocaleString()})`,
+              ? `فرق في رصيد المبالغ المسددة للمالك ${r.ownerName || r.ownerId} (المسجل: ${Number(r.persistedPaid || 0).toLocaleString()}, الفعلي: ${Number(r.derivedPaid || 0).toLocaleString()})`
+              : `Total Paid counter desync for owner ${r.ownerName || r.ownerId} (Persisted: ${Number(r.persistedPaid || 0).toLocaleString()}, Derived: ${Number(r.derivedPaid || 0).toLocaleString()})`,
             resolutionStatus: isAr ? "يتطلب إعادة مزامنة" : "Needs Resync"
           });
         }
@@ -927,10 +927,10 @@ export const FinancialsView: React.FC = () => {
           </div>
           <div className="mt-3">
             <div className="text-2xl font-bold text-slate-900 dark:text-white">
-              {totalCommissionExpected.toLocaleString()} <span className="text-sm font-normal">AED</span>
+              {Number(totalCommissionExpected || 0).toLocaleString()} <span className="text-sm font-normal">AED</span>
             </div>
             <div className="text-xs text-slate-500 mt-1 flex items-center justify-between">
-              <span>{isAr ? `مالك: ${totalOwnerCommissions.toLocaleString()} AED` : `Owner: ${totalOwnerCommissions.toLocaleString()}`}</span>
+              <span>{isAr ? `مالك: ${Number(totalOwnerCommissions || 0).toLocaleString()} AED` : `Owner: ${Number(totalOwnerCommissions || 0).toLocaleString()}`}</span>
               <span>{isAr ? `مستأجر: ${Number(totalTenantCommissions || 0).toLocaleString()} AED` : `Tenant: ${Number(totalTenantCommissions || 0).toLocaleString()}`}</span>
             </div>
           </div>
@@ -947,11 +947,11 @@ export const FinancialsView: React.FC = () => {
           </div>
           <div className="mt-3">
             <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-              {totalCommissionCollected.toLocaleString()} <span className="text-sm font-normal">AED</span>
+              {Number(totalCommissionCollected || 0).toLocaleString()} <span className="text-sm font-normal">AED</span>
             </div>
             <div className="text-xs text-slate-500 mt-1">
               {totalCommissionExpected > 0
-                ? `${Math.round((totalCommissionCollected / totalCommissionExpected) * 100)}% ${isAr ? "تم تحصيله" : "collected"}`
+                ? `${Math.round(((totalCommissionCollected || 0) / totalCommissionExpected) * 100)}% ${isAr ? "تم تحصيله" : "collected"}`
                 : "0%"}
             </div>
           </div>
@@ -968,7 +968,7 @@ export const FinancialsView: React.FC = () => {
           </div>
           <div className="mt-3">
             <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-              {totalCommissionOutstanding.toLocaleString()} <span className="text-sm font-normal">AED</span>
+              {Number(totalCommissionOutstanding || 0).toLocaleString()} <span className="text-sm font-normal">AED</span>
             </div>
             <div className="text-xs text-slate-500 mt-1">
               {commissions.filter((c) => c.status === "PENDING" || c.status === "PARTIALLY_COLLECTED").length}{" "}
@@ -1612,27 +1612,27 @@ export const FinancialsView: React.FC = () => {
                           </code>
                         </td>
                         <td className={`px-4 py-3.5 font-mono ${isReversed ? "line-through decoration-rose-600 decoration-[2px]" : ""}`}>
-                          {c.baseAmount.toLocaleString()} AED
+                          {Number(c.baseAmount || 0).toLocaleString()} AED
                         </td>
                         <td className={`px-4 py-3.5 font-semibold ${isReversed ? "text-slate-400 line-through decoration-rose-600 decoration-[2px]" : "text-emerald-600"}`}>
                           {c.ratePercentage}%
                         </td>
                         <td className={`px-4 py-3.5 font-bold font-mono ${isReversed ? "text-slate-400 line-through decoration-rose-600 decoration-[2px]" : "text-slate-900 dark:text-white"}`}>
-                          {c.totalCommissionAmount.toLocaleString()} AED
+                          {Number(c.totalCommissionAmount || 0).toLocaleString()} AED
                           {c.vatAmount && c.vatAmount > 0 && !isReversed && (
                             <button 
                               onClick={() => setSelectedVatCommission(c)}
                               className="text-[10px] text-indigo-500 hover:text-indigo-700 hover:underline dark:text-indigo-400 font-normal mt-0.5 flex items-center gap-1"
                             >
-                              <span>{isAr ? "شامل ضريبة:" : "Incl. VAT:"} {c.vatAmount.toLocaleString()}</span>
+                              <span>{isAr ? "شامل ضريبة:" : "Incl. VAT:"} {Number(c.vatAmount || 0).toLocaleString()}</span>
                             </button>
                           )}
                         </td>
                         <td className={`px-4 py-3.5 font-mono ${isReversed ? "text-slate-400 line-through decoration-rose-600 decoration-[2px]" : "text-blue-600 dark:text-blue-400"}`}>
-                          {c.collectedAmount.toLocaleString()} AED
+                          {Number(c.collectedAmount || 0).toLocaleString()} AED
                         </td>
                         <td className={`px-4 py-3.5 font-bold font-mono ${isReversed ? "text-slate-400 line-through decoration-rose-600 decoration-[2px]" : "text-amber-600 dark:text-amber-400"}`}>
-                          {c.outstandingBalance.toLocaleString()} AED
+                          {Number(c.outstandingBalance || 0).toLocaleString()} AED
                         </td>
                         <td className="px-4 py-3.5">
                           {isReversed ? (
@@ -1773,7 +1773,7 @@ export const FinancialsView: React.FC = () => {
                           {a.targetDescription || a.targetId}
                         </td>
                         <td className="px-4 py-3.5 font-bold font-mono text-slate-900 dark:text-white">
-                          {a.allocatedAmount.toLocaleString()} AED
+                          {Number(a.allocatedAmount || 0).toLocaleString()} AED
                         </td>
                         <td className="px-4 py-3.5 text-xs text-slate-500">{a.allocationDate}</td>
                         <td className="px-4 py-3.5">
@@ -1861,7 +1861,7 @@ export const FinancialsView: React.FC = () => {
                         <td className="px-4 py-3.5 text-xs font-bold">{r.targetType}</td>
                         <td className="px-4 py-3.5 font-mono text-xs">{r.targetId}</td>
                         <td className="px-4 py-3.5 font-bold font-mono text-slate-900 dark:text-white">
-                          {r.reversedAmount.toLocaleString()} AED
+                          {Number(r.reversedAmount || 0).toLocaleString()} AED
                         </td>
                         <td className="px-4 py-3.5 text-slate-700 dark:text-slate-300">{r.reason}</td>
                         <td className="px-4 py-3.5 text-xs text-slate-500">{r.performedByUserName}</td>
@@ -1903,7 +1903,7 @@ export const FinancialsView: React.FC = () => {
                 {isAr ? "إجمالي مستحقات الملاك" : "Total Owner Payable"}
               </div>
               <div className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1">
-                {calculatedOwnerPayable.toLocaleString()} AED
+                {Number(calculatedOwnerPayable || 0).toLocaleString()} AED
               </div>
               <p className="text-[10px] text-slate-400 mt-2">
                 {isAr ? "المحصل - العمولات - المصاريف - المحول" : "Collections - Commissions - Expenses - Transfers"}
@@ -1927,7 +1927,7 @@ export const FinancialsView: React.FC = () => {
                 {isAr ? "مصاريف المكتب التشغيلية" : "Office Borne Expenses"}
               </div>
               <div className="text-2xl font-bold font-mono text-indigo-600 dark:text-indigo-400 mt-1">
-                {totalOfficeExpenses.toLocaleString()} AED
+                {Number(totalOfficeExpenses || 0).toLocaleString()} AED
               </div>
               <p className="text-[10px] text-slate-400 mt-2">
                 {isAr ? "مصاريف صيانة يتحملها المكتب بالكامل" : "Expenses allocated fully to office"}
@@ -1939,7 +1939,7 @@ export const FinancialsView: React.FC = () => {
                 {isAr ? "إجمالي مصاريف الصيانة" : "Total Maintenance Expenses"}
               </div>
               <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1">
-                {totalMaintenanceExpenses.toLocaleString()} AED
+                {Number(totalMaintenanceExpenses || 0).toLocaleString()} AED
               </div>
               <p className="text-[10px] text-slate-400 mt-2">
                 {isAr ? "المسجلة على العقارات والملاك والمستأجرين" : "Active maintenance expenses posted"}
@@ -1953,7 +1953,7 @@ export const FinancialsView: React.FC = () => {
                 {isAr ? "إجمالي المصاريف الفعالة" : "Total Active Expenses"}
               </div>
               <div className="text-xl font-bold font-mono text-slate-700 dark:text-slate-300 mt-1">
-                {totalActiveExpenses.toLocaleString()} AED
+                {Number(totalActiveExpenses || 0).toLocaleString()} AED
               </div>
             </div>
 
@@ -1962,7 +1962,7 @@ export const FinancialsView: React.FC = () => {
                 {isAr ? "المصاريف المسترجعة / الملغاة" : "Total Reversed Expenses"}
               </div>
               <div className="text-xl font-bold font-mono text-rose-600 mt-1">
-                {totalReversedExpenses.toLocaleString()} AED
+                {Number(totalReversedExpenses || 0).toLocaleString()} AED
               </div>
             </div>
 
@@ -1971,7 +1971,7 @@ export const FinancialsView: React.FC = () => {
                 {isAr ? "مصاريف معلقة / غير مخصصة" : "Unallocated Expenses"}
               </div>
               <div className="text-xl font-bold font-mono text-rose-600 mt-1">
-                {totalUnallocatedExpenses.toLocaleString()} AED
+                {Number(totalUnallocatedExpenses || 0).toLocaleString()} AED
               </div>
             </div>
 
@@ -2043,7 +2043,7 @@ export const FinancialsView: React.FC = () => {
                         <td className="px-4 py-3.5 font-bold text-xs">{exc.entity}</td>
                         <td className="px-4 py-3.5 font-mono text-xs">{exc.recordId}</td>
                         <td className="px-4 py-3.5 font-bold font-mono">
-                          {exc.amount ? `${exc.amount.toLocaleString()} AED` : "—"}
+                          {exc.amount ? `${Number(exc.amount || 0).toLocaleString()} AED` : "—"}
                         </td>
                         <td className="px-4 py-3.5 text-slate-700 dark:text-slate-300 font-medium">
                           {exc.explanation}
@@ -2080,23 +2080,23 @@ export const FinancialsView: React.FC = () => {
                 <div className="space-y-2 text-sm font-mono bg-slate-50 dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
                   <div className="flex justify-between">
                     <span>+ {isAr ? "الإيجارات المحصلة فعلياً" : "Rent Collected"}:</span>
-                    <span>{totalRentCollections.toLocaleString()} AED</span>
+                    <span>{Number(totalRentCollections || 0).toLocaleString()} AED</span>
                   </div>
                   <div className="flex justify-between text-rose-600">
                     <span>- {isAr ? "الرسوم الإدارية المستقطعة" : "Administrative Fees"}:</span>
-                    <span>{totalOwnerCommissionsWithReversals.toLocaleString()} AED</span>
+                    <span>{Number(totalOwnerCommissionsWithReversals || 0).toLocaleString()} AED</span>
                   </div>
                   <div className="flex justify-between text-rose-600">
                     <span>- {isAr ? "مصاريف صيانة المالك" : "Owner Expenses"}:</span>
-                    <span>{totalOwnerExpenses.toLocaleString()} AED</span>
+                    <span>{Number(totalOwnerExpenses || 0).toLocaleString()} AED</span>
                   </div>
                   <div className="flex justify-between text-rose-600">
                     <span>- {isAr ? "التحويلات المصرفية للمالك" : "Owner Transfers"}:</span>
-                    <span>{totalTransfers.toLocaleString()} AED</span>
+                    <span>{Number(totalTransfers || 0).toLocaleString()} AED</span>
                   </div>
                   <div className="border-t border-slate-300 dark:border-slate-700 pt-2 flex justify-between font-bold text-emerald-600">
                     <span>= {isAr ? "الرصيد الحالي المستحق" : "Net Balance Payable"}:</span>
-                    <span>{calculatedOwnerPayable.toLocaleString()} AED</span>
+                    <span>{Number(calculatedOwnerPayable || 0).toLocaleString()} AED</span>
                   </div>
                 </div>
               </div>
@@ -2113,7 +2113,7 @@ export const FinancialsView: React.FC = () => {
                 <div className="space-y-2 text-sm font-mono bg-slate-50 dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
                   <div className="flex justify-between">
                     <span>+ {isAr ? "رسوم الإيجار التعاقدية" : "Rent Charges"}:</span>
-                    <span>{totalRentCharges.toLocaleString()} AED</span>
+                    <span>{Number(totalRentCharges || 0).toLocaleString()} AED</span>
                   </div>
                   <div className="flex justify-between">
                     <span>+ {isAr ? "الرسوم الإدارية للمستأجر" : "Tenant Admin Fees"}:</span>
@@ -2121,7 +2121,7 @@ export const FinancialsView: React.FC = () => {
                   </div>
                   <div className="flex justify-between text-rose-600">
                     <span>- {isAr ? "الدفعات المستلمة فعلياً" : "Payments Received"}:</span>
-                    <span>{totalRentCollections.toLocaleString()} AED</span>
+                    <span>{Number(totalRentCollections || 0).toLocaleString()} AED</span>
                   </div>
                   <div className="border-t border-slate-300 dark:border-slate-700 pt-2 flex justify-between font-bold text-amber-600">
                     <span>= {isAr ? "الرصيد المطلوب سداده" : "Outstanding Balance"}:</span>
@@ -2497,12 +2497,12 @@ export const FinancialsView: React.FC = () => {
                     <div className="flex justify-between items-center text-slate-600 dark:text-slate-400">
                       <span>{isAr ? "قيمة الإيجار السنوي للعقد:" : "Lease Annual Rent:"}</span>
                       <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
-                        {selectedModalRent.toLocaleString()} AED
+                        {Number(selectedModalRent || 0).toLocaleString()} AED
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-emerald-800 dark:text-emerald-300 font-bold">
                       <span>{isAr ? `قيمة الرسوم الإدارية (${modalRate}%):` : `Admin Fee Gross (${modalRate}%):`}</span>
-                      <span className="font-mono text-sm">{calculatedModalGross.toLocaleString()} AED</span>
+                      <span className="font-mono text-sm">{Number(calculatedModalGross || 0).toLocaleString()} AED</span>
                     </div>
                     {modalPolicy?.isExempt && (
                       <div className="p-2 bg-amber-50 dark:bg-amber-950/30 rounded-lg text-[10px] text-amber-800 dark:text-amber-300 border border-amber-100 dark:border-amber-900/50 italic">
@@ -2514,13 +2514,13 @@ export const FinancialsView: React.FC = () => {
                       <div className="p-2 bg-white/70 dark:bg-slate-900/60 rounded-lg">
                         <span className="text-slate-500 block">{isAr ? "الضريبة المستقطعة (5%):" : "Deducted VAT (5%):"}</span>
                         <span className="font-mono font-bold text-amber-700 dark:text-amber-400">
-                          {calculatedModalVat.toLocaleString()} AED
+                          {Number(calculatedModalVat || 0).toLocaleString()} AED
                         </span>
                       </div>
                       <div className="p-2 bg-white/70 dark:bg-slate-900/60 rounded-lg">
                         <span className="text-slate-500 block">{isAr ? "المبلغ الخاضع للضريبة:" : "Taxable Amount:"}</span>
                         <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
-                          {calculatedModalNet.toLocaleString()} AED
+                          {Number(calculatedModalNet || 0).toLocaleString()} AED
                         </span>
                       </div>
                     </div>
@@ -2632,7 +2632,7 @@ export const FinancialsView: React.FC = () => {
                       {isAr ? "قيمة العمولة الإجمالية" : "Total Commission"}
                     </span>
                     <span className="text-xs font-black font-mono text-slate-900 dark:text-white">
-                      {totalCommAmount.toLocaleString()} AED
+                      {Number(totalCommAmount || 0).toLocaleString()} AED
                     </span>
                   </div>
 
@@ -2641,7 +2641,7 @@ export const FinancialsView: React.FC = () => {
                       {isAr ? "المبلغ المحصل" : "Collected Amount"}
                     </span>
                     <span className="text-xs font-black font-mono text-emerald-700 dark:text-emerald-300">
-                      {prevCollected.toLocaleString()} AED
+                      {Number(prevCollected || 0).toLocaleString()} AED
                     </span>
                   </div>
 
@@ -2650,7 +2650,7 @@ export const FinancialsView: React.FC = () => {
                       {isAr ? "القيمة المستحقة للمكتب" : "Amount Due to Office"}
                     </span>
                     <span className="text-xs font-black font-mono text-rose-700 dark:text-rose-300">
-                      {outstandingDue.toLocaleString()} AED
+                      {Number(outstandingDue || 0).toLocaleString()} AED
                     </span>
                   </div>
                 </div>
@@ -2659,11 +2659,11 @@ export const FinancialsView: React.FC = () => {
                 <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400">
                   <span>
                     {isAr ? "الضريبة المستقطعة (5%):" : "Deducted VAT (5%):"}{" "}
-                    <strong className="text-amber-600 dark:text-amber-400 font-mono">{vatAmountVal.toLocaleString()} AED</strong>
+                    <strong className="text-amber-600 dark:text-amber-400 font-mono">{Number(vatAmountVal || 0).toLocaleString()} AED</strong>
                   </span>
                   <span>
                     {isAr ? "المبلغ الخاضع للضريبة:" : "Taxable Amount:"}{" "}
-                    <strong className="text-emerald-600 dark:text-emerald-400 font-mono">{netRevenueVal.toLocaleString()} AED</strong>
+                    <strong className="text-emerald-600 dark:text-emerald-400 font-mono">{Number(netRevenueVal || 0).toLocaleString()} AED</strong>
                   </span>
                 </div>
               </div>
@@ -2687,7 +2687,7 @@ export const FinancialsView: React.FC = () => {
                     <span>
                       {isAr ? "الرصيد المتبقي بعد التحصيل:" : "Remaining Balance After Collection:"}{" "}
                       <span className="font-bold text-slate-800 dark:text-slate-200 font-mono">
-                        {remainingAfterThis.toLocaleString()} AED
+                        {Number(remainingAfterThis || 0).toLocaleString()} AED
                       </span>
                     </span>
                     <button
@@ -2885,7 +2885,7 @@ export const FinancialsView: React.FC = () => {
                 <SearchableSelect
                   options={collections.map((c) => ({
                     id: c.id,
-                    title: `#${c.receiptNumber} — ${c.amountEntered.toLocaleString()} AED (${c.paymentDate})`,
+                    title: `#${c.receiptNumber} — ${Number(c.amountEntered || 0).toLocaleString()} AED (${c.paymentDate})`,
                     subLabel: `المسدد: ${c.payerName || "غير محدد"}`,
                     badge: c.receiptNumber,
                     extraSearchTerms: [c.receiptNumber, c.payerName || "", c.paymentDate],
@@ -2964,7 +2964,7 @@ export const FinancialsView: React.FC = () => {
             <div className="bg-rose-50 dark:bg-rose-950/20 p-4 rounded-xl border border-rose-100 dark:border-rose-900/30 mb-6">
                <div className="flex justify-between text-xs mb-1">
                  <span className="text-rose-700/60">{isAr ? "المبلغ المراد عكسه:" : "Amount to Reverse:"}</span>
-                 <span className="font-bold text-rose-700 font-mono">{selectedCommissionForReversal.totalCommissionAmount.toLocaleString()} AED</span>
+                 <span className="font-bold text-rose-700 font-mono">{Number(selectedCommissionForReversal.totalCommissionAmount || 0).toLocaleString()} AED</span>
                </div>
                <div className="flex justify-between text-xs">
                  <span className="text-rose-700/60">{isAr ? "الطرف:" : "Party:"}</span>

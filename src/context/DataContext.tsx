@@ -9333,10 +9333,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const ownerObj = owners.find(o => o.id === data.ownerId);
     const beneficiaryBankName = data.beneficiaryBankName || ownerObj?.bankName || undefined;
     const beneficiaryIban = data.beneficiaryIban || ownerObj?.iban || undefined;
+    const deductionSnapshot = {
+      grossOwnerFunds: payableDetails.totalRentCollected || 0,
+      totalCollections: payableDetails.totalRentCollected || 0,
+      totalCommissions: payableDetails.totalOwnerCommissions || 0,
+      totalExpenses: payableDetails.totalOwnerExpenses || 0,
+      totalTransfersPaid: payableDetails.totalTransfersPaid || 0,
+      netRemainingBalance: payableDetails.netRemainingBalance || 0,
+      deductionsList: [...(payableDetails.commissions || []), ...(payableDetails.expenses || [])],
+    };
     const newTransfer: OwnerTransferRecord = {
       ...data,
       beneficiaryBankName,
       beneficiaryIban,
+      deductionSnapshot,
       id,
       transferNumber,
       status: data.status || "APPROVED",

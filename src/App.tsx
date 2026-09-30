@@ -41,6 +41,7 @@ import { OperationalTaskCenter } from "./components/master/OperationalTaskCenter
 import { OperationalControlCenter } from "./components/operations/OperationalControlCenter";
 import { Property360Workspace } from "./components/master/Property360Workspace";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
+import { GlobalNotificationManager } from "./components/common/GlobalNotificationManager";
 import { Unit360Workspace } from "./components/master/Unit360Workspace";
 import { Tenant360Workspace } from "./components/master/Tenant360Workspace";
 import { Owner360Workspace } from "./components/master/Owner360Workspace";
@@ -700,7 +701,9 @@ export default function App() {
           <DataProvider>
             <LayoutProvider>
               <NavigationProvider>
-                <MainAppContent />
+                <GlobalNotificationManager>
+                  <MainAppContent />
+                </GlobalNotificationManager>
               </NavigationProvider>
             </LayoutProvider>
           </DataProvider>

@@ -1,0 +1,4028 @@
+[
+  {
+    "file": "src/components/admin/BusinessContinuityCenter.tsx",
+    "line": 202,
+    "expr": "b.recordCount.toLocaleString",
+    "fullLine": "<td className=\"py-3 px-4 font-bold\">{b.recordCount.toLocaleString()}</td>"
+  },
+  {
+    "file": "src/components/admin/BusinessContinuityCenter.tsx",
+    "line": 287,
+    "expr": "simulationResult.recordsProcessed.toLocaleString",
+    "fullLine": "<div className=\"text-sm font-black text-emerald-900\">{simulationResult.recordsProcessed.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/admin/DataRecoveryView.tsx",
+    "line": 471,
+    "expr": "amount?.toLocaleString",
+    "fullLine": "<td className=\"p-2.5 font-semibold text-blue-700\">{inst.amount?.toLocaleString()} AED</td>"
+  },
+  {
+    "file": "src/components/admin/DataRecoveryView.tsx",
+    "line": 546,
+    "expr": "?.toLocaleString",
+    "fullLine": "<InfoBox label={isAr ? \"الإيجار السنوي\" : \"Annual Rent\"} value={`${(data.annualRent || data.rentAmount)?.toLocaleString()} AED`} highlight />"
+  },
+  {
+    "file": "src/components/admin/DataRecoveryView.tsx",
+    "line": 556,
+    "expr": "amount?.toLocaleString",
+    "fullLine": "<InfoBox label={isAr ? \"المبلغ\" : \"Amount\"} value={`${data.amount?.toLocaleString()} AED`} icon={DollarSign} highlight />"
+  },
+  {
+    "file": "src/components/admin/DataRecoveryView.tsx",
+    "line": 579,
+    "expr": "amount?.toLocaleString",
+    "fullLine": "<InfoBox label={isAr ? \"المبلغ\" : \"Amount\"} value={`${data.amount?.toLocaleString()} AED`} icon={DollarSign} highlight />"
+  },
+  {
+    "file": "src/components/admin/ProductionOperationsExcellenceCenter.tsx",
+    "line": 273,
+    "expr": "metric.current.toLocaleString",
+    "fullLine": "<div className=\"text-2xl font-black text-slate-900\">{metric.current.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/admin/ProductionOperationsExcellenceCenter.tsx",
+    "line": 277,
+    "expr": "metric.estimatedFutureVolume.toLocaleString",
+    "fullLine": "<div className=\"text-sm font-black text-slate-500\">{metric.estimatedFutureVolume.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/ai/AIAssistantChat.tsx",
+    "line": 493,
+    "expr": "totalExposure.toLocaleString",
+    "fullLine": "? `حسب البيانات اللحظية بالنظام، يبلغ إجمالي التعثر المالي والشيكات المرتجعة **AED ${totalExposure.toLocaleString()}** موزعة على **${bouncedList.length} شيك مرتجع**.`"
+  },
+  {
+    "file": "src/components/ai/AIAssistantChat.tsx",
+    "line": 494,
+    "expr": "totalExposure.toLocaleString",
+    "fullLine": ": `According to live system data, the total bounced cheques exposure is **AED ${totalExposure.toLocaleString()}** across **${bouncedList.length} bounced instruments**.`;"
+  },
+  {
+    "file": "src/components/ai/AIAssistantChat.tsx",
+    "line": 518,
+    "expr": "totalExposure.toLocaleString",
+    "fullLine": "? `مرحباً بك في نظام **${data.companyProfile.nameAr}**.\\n\\nإحصائيات سريعة بالنظام:\\n- المباني والعقارات: **${data.properties.length}**\\n- الوحدات العقارية: **${data.units.length}**\\n- المستأجرين: **${data.tenants.length}**\\n- إجمالي الشيكات المرتجعة: **AED ${totalExposure.toLocaleString()}** (${bouncedList.length} شيك)\\n- طلبات الصيانة النشطة: **${openMaintenance.length}**`"
+  },
+  {
+    "file": "src/components/ai/AIAssistantChat.tsx",
+    "line": 519,
+    "expr": "totalExposure.toLocaleString",
+    "fullLine": ": `Welcome to **${data.companyProfile.nameEn}**!\\n\\nSystem Quick Statistics:\\n- Properties: **${data.properties.length}**\\n- Units: **${data.units.length}**\\n- Tenants: **${data.tenants.length}**\\n- Bounced Exposure: **AED ${totalExposure.toLocaleString()}** (${bouncedList.length} cheques)\\n- Active Maintenance: **${openMaintenance.length}**`;"
+  },
+  {
+    "file": "src/components/archive/ArchiveView.tsx",
+    "line": 543,
+    "expr": "cheque.amount.toLocaleString",
+    "fullLine": "AED {cheque.amount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/archive/ChequeImageUploadModal.tsx",
+    "line": 147,
+    "expr": "cheque.amount.toLocaleString",
+    "fullLine": "subtitle={`${cheque.bankName} — AED ${cheque.amount.toLocaleString()}`}"
+  },
+  {
+    "file": "src/components/archive/ChequeImageUploadModal.tsx",
+    "line": 168,
+    "expr": "cheque.amount.toLocaleString",
+    "fullLine": "AED {cheque.amount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/cases/AddChequesToCaseModal.tsx",
+    "line": 243,
+    "expr": "c.outstanding.toLocaleString",
+    "fullLine": "AED {c.outstanding.toLocaleString()}"
+  },
+  {
+    "file": "src/components/cases/AddChequesToCaseModal.tsx",
+    "line": 262,
+    "expr": "totalSelectedAmount.toLocaleString",
+    "fullLine": "AED {totalSelectedAmount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/cases/CaseDetailsModal.tsx",
+    "line": 837,
+    "expr": "c.amount.toLocaleString",
+    "fullLine": "AED {c.amount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/cases/CaseDetailsModal.tsx",
+    "line": 978,
+    "expr": "exp.totalAmount.toLocaleString",
+    "fullLine": "AED {exp.totalAmount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/cases/CaseDetailsModal.tsx",
+    "line": 1072,
+    "expr": "amount?.toLocaleString",
+    "fullLine": "<span className=\"font-mono text-rose-700\">AED {chq.amount?.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/cases/CaseDetailsModal.tsx",
+    "line": 1177,
+    "expr": "currentCase.claimAmount.toLocaleString",
+    "fullLine": "<span className=\"font-mono\">{currentCase.claimAmount.toLocaleString()} AED</span>"
+  },
+  {
+    "file": "src/components/cases/CaseDetailsModal.tsx",
+    "line": 1185,
+    "expr": "currentCase.outstanding.toLocaleString",
+    "fullLine": "<span className=\"font-mono\">{currentCase.outstanding.toLocaleString()} AED</span>"
+  },
+  {
+    "file": "src/components/cases/CaseDetailsModal.tsx",
+    "line": 1320,
+    "expr": "currentCase.settlement.totalAgreedAmount.toLocaleString",
+    "fullLine": "<span className=\"font-black text-emerald-900 font-mono text-base\">AED {currentCase.settlement.totalAgreedAmount.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/cases/CaseDetailsModal.tsx",
+    "line": 1387,
+    "expr": "inst.amount.toLocaleString",
+    "fullLine": "<span className=\"font-mono font-black text-slate-900 text-sm\">AED {inst.amount.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/cases/CaseDetailsModal.tsx",
+    "line": 1922,
+    "expr": "c.amount.toLocaleString",
+    "fullLine": "AED {c.amount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/cases/CaseDetailsModal.tsx",
+    "line": 2085,
+    "expr": "exp.totalAmount.toLocaleString",
+    "fullLine": "<span className=\"font-bold text-slate-900 text-sm\">AED {exp.totalAmount.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/cases/CaseDetailsModal.tsx",
+    "line": 2194,
+    "expr": "exp.totalAmount.toLocaleString",
+    "fullLine": "<span className=\"font-bold text-slate-800 text-xs\">AED {exp.totalAmount.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/cases/CaseDetailsModal.tsx",
+    "line": 2571,
+    "expr": "viewingCheque.amount.toLocaleString",
+    "fullLine": "<span className=\"font-mono font-black text-slate-900 text-sm\">AED {viewingCheque.amount.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/cases/CaseDetailsModal.tsx",
+    "line": 2575,
+    "expr": "viewingCheque.outstanding.toLocaleString",
+    "fullLine": "<span className=\"font-mono font-black text-rose-700 text-sm\">AED {viewingCheque.outstanding.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/cases/CaseDetailsModal.tsx",
+    "line": 2693,
+    "expr": "collectingCheque.outstanding.toLocaleString",
+    "fullLine": "? `الحد الأقصى المتاح للسداد: ${collectingCheque.outstanding.toLocaleString()} درهم`"
+  },
+  {
+    "file": "src/components/cases/CaseDetailsModal.tsx",
+    "line": 2694,
+    "expr": "collectingCheque.outstanding.toLocaleString",
+    "fullLine": ": `Maximum outstanding allowed: AED ${collectingCheque.outstanding.toLocaleString()}`}"
+  },
+  {
+    "file": "src/components/cases/CaseDocumentUploadModal.tsx",
+    "line": 221,
+    "expr": "caseItem.claimAmount.toLocaleString",
+    "fullLine": "{caseItem.claimAmount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/cases/CasesView.tsx",
+    "line": 207,
+    "expr": "totalClaim.toLocaleString",
+    "fullLine": "AED {totalClaim.toLocaleString()}"
+  },
+  {
+    "file": "src/components/cases/CasesView.tsx",
+    "line": 217,
+    "expr": "totalPaid.toLocaleString",
+    "fullLine": "AED {totalPaid.toLocaleString()}"
+  },
+  {
+    "file": "src/components/cases/CasesView.tsx",
+    "line": 227,
+    "expr": "totalOutstanding.toLocaleString",
+    "fullLine": "AED {totalOutstanding.toLocaleString()}"
+  },
+  {
+    "file": "src/components/cases/CasesView.tsx",
+    "line": 436,
+    "expr": "c.claimAmount.toLocaleString",
+    "fullLine": "AED {c.claimAmount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/cases/ConvertToCaseModal.tsx",
+    "line": 75,
+    "expr": "totalClaim.toLocaleString",
+    "fullLine": "AED {totalClaim.toLocaleString()}"
+  },
+  {
+    "file": "src/components/cheques/BatchChequeOcrModal.tsx",
+    "line": 976,
+    "expr": "t.amount.toLocaleString",
+    "fullLine": "#{t.installmentNumber} ({t.amount.toLocaleString()} AED)"
+  },
+  {
+    "file": "src/components/cheques/BatchChequeOcrModal.tsx",
+    "line": 1228,
+    "expr": "item.amount.toLocaleString",
+    "fullLine": "#{item.chequeNumber || (isAr ? \"بدون رقم\" : \"No Number\")} • {item.amount.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/cheques/CancelChequeModal.tsx",
+    "line": 231,
+    "expr": "cheque.amount.toLocaleString",
+    "fullLine": "{cheque.amount.toLocaleString()} {isAr ? \"د.إ\" : \"AED\"}"
+  },
+  {
+    "file": "src/components/cheques/ChequesView.tsx",
+    "line": 344,
+    "expr": "totalAmount.toLocaleString",
+    "fullLine": "AED {totalAmount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/cheques/ChequesView.tsx",
+    "line": 356,
+    "expr": "totalOutstanding.toLocaleString",
+    "fullLine": "AED {totalOutstanding.toLocaleString()}"
+  },
+  {
+    "file": "src/components/cheques/ChequesView.tsx",
+    "line": 652,
+    "expr": "cheque.amount.toLocaleString",
+    "fullLine": "AED {cheque.amount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/cheques/ChequesView.tsx",
+    "line": 970,
+    "expr": "statusChangeCheque.amount.toLocaleString",
+    "fullLine": "subtitle={statusChangeCheque ? `Cheque #${statusChangeCheque.chequeNumber} — AED ${statusChangeCheque.amount.toLocaleString()}` : \"\"}"
+  },
+  {
+    "file": "src/components/cheques/ChequesView.tsx",
+    "line": 1023,
+    "expr": "statusChangeCheque.amount.toLocaleString",
+    "fullLine": "<span className=\"font-mono font-black text-amber-700\">AED {statusChangeCheque.amount.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/cheques/DueChecksView.tsx",
+    "line": 240,
+    "expr": "totalChequesAmount.toLocaleString",
+    "fullLine": "AED {totalChequesAmount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/cheques/DueChecksView.tsx",
+    "line": 473,
+    "expr": "cheque.amount.toLocaleString",
+    "fullLine": "AED {cheque.amount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/cheques/DuplicateWarningModal.tsx",
+    "line": 111,
+    "expr": "existingCheque.amount.toLocaleString",
+    "fullLine": "<span className=\"font-bold font-mono text-amber-800 text-xs\">AED {existingCheque.amount.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/cheques/DuplicateWarningModal.tsx",
+    "line": 153,
+    "expr": "newChequeData.amount.toLocaleString",
+    "fullLine": "<span className=\"font-bold font-mono text-amber-800 text-xs\">AED {newChequeData.amount.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/cheques/LegalActionModal.tsx",
+    "line": 91,
+    "expr": "cheque.amount.toLocaleString",
+    "fullLine": "? `دعوى إيجارية ناشئة عن الشيك المرتجع رقم ${cheque.chequeNumber} - مسحوب على ${cheque.bankName} - بمبلغ ${cheque.amount.toLocaleString()} درهم`"
+  },
+  {
+    "file": "src/components/cheques/LegalActionModal.tsx",
+    "line": 92,
+    "expr": "cheque.amount.toLocaleString",
+    "fullLine": ": `Rental dispute case initiated from returned cheque #${cheque.chequeNumber} (${cheque.bankName}) - Amount AED ${cheque.amount.toLocaleString()}`"
+  },
+  {
+    "file": "src/components/cheques/LegalActionModal.tsx",
+    "line": 183,
+    "expr": "cheque.amount.toLocaleString",
+    "fullLine": "? `المستأجر: ${tenant ? tenant.nameAr : \"غير محدد\"} — المبلغ: AED ${cheque.amount.toLocaleString()}`"
+  },
+  {
+    "file": "src/components/cheques/LegalActionModal.tsx",
+    "line": 184,
+    "expr": "cheque.amount.toLocaleString",
+    "fullLine": ": `Tenant: ${tenant ? tenant.nameEn : \"N/A\"} — Amount: AED ${cheque.amount.toLocaleString()}`"
+  },
+  {
+    "file": "src/components/cheques/LegalActionModal.tsx",
+    "line": 258,
+    "expr": "cheque.outstanding.toLocaleString",
+    "fullLine": "AED {cheque.outstanding.toLocaleString()}"
+  },
+  {
+    "file": "src/components/cheques/LegalActionModal.tsx",
+    "line": 435,
+    "expr": "c.claimAmount.toLocaleString",
+    "fullLine": "AED {c.claimAmount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/cheques/LegalActionModal.tsx",
+    "line": 618,
+    "expr": "cheque.outstanding.toLocaleString",
+    "fullLine": "AED {cheque.outstanding.toLocaleString()}"
+  },
+  {
+    "file": "src/components/cheques/ReplaceChequeModal.tsx",
+    "line": 252,
+    "expr": "totalReplacementAmount.toLocaleString",
+    "fullLine": "? `مجموع الشيكات البديلة (${totalReplacementAmount.toLocaleString()} درهم) يجب أن يطابق تماماً رصيد الشيك الأصلي (${targetAmount.toLocaleString()} درهم).`"
+  },
+  {
+    "file": "src/components/cheques/ReplaceChequeModal.tsx",
+    "line": 252,
+    "expr": "targetAmount.toLocaleString",
+    "fullLine": "? `مجموع الشيكات البديلة (${totalReplacementAmount.toLocaleString()} درهم) يجب أن يطابق تماماً رصيد الشيك الأصلي (${targetAmount.toLocaleString()} درهم).`"
+  },
+  {
+    "file": "src/components/cheques/ReplaceChequeModal.tsx",
+    "line": 253,
+    "expr": "totalReplacementAmount.toLocaleString",
+    "fullLine": ": `Total replacement amount (${totalReplacementAmount.toLocaleString()} AED) must exactly match original cheque balance (${targetAmount.toLocaleString()} AED).`"
+  },
+  {
+    "file": "src/components/cheques/ReplaceChequeModal.tsx",
+    "line": 253,
+    "expr": "targetAmount.toLocaleString",
+    "fullLine": ": `Total replacement amount (${totalReplacementAmount.toLocaleString()} AED) must exactly match original cheque balance (${targetAmount.toLocaleString()} AED).`"
+  },
+  {
+    "file": "src/components/cheques/ReplaceChequeModal.tsx",
+    "line": 403,
+    "expr": "targetAmount.toLocaleString",
+    "fullLine": "{targetAmount.toLocaleString()} {isAr ? \"د.إ\" : \"AED\"}"
+  },
+  {
+    "file": "src/components/cheques/ReplaceChequeModal.tsx",
+    "line": 678,
+    "expr": "chq.amount.toLocaleString",
+    "fullLine": "{chq.amount.toLocaleString()} {isAr ? \"د.إ\" : \"AED\"}"
+  },
+  {
+    "file": "src/components/cheques/ReplaceChequeModal.tsx",
+    "line": 723,
+    "expr": "amountDifference.toLocaleString",
+    "fullLine": "? `فارق الرصيد: ${amountDifference > 0 ? `متبقي ${amountDifference.toLocaleString()} درهم غير مغطى` : `زيادة ${Math.abs(amountDifference).toLocaleString()} درهم عن المطلوب`}`"
+  },
+  {
+    "file": "src/components/cheques/ReplaceChequeModal.tsx",
+    "line": 724,
+    "expr": "amountDifference.toLocaleString",
+    "fullLine": ": `Discrepancy: ${amountDifference.toLocaleString()} AED`}"
+  },
+  {
+    "file": "src/components/cheques/ReplaceChequeModal.tsx",
+    "line": 728,
+    "expr": "totalReplacementAmount.toLocaleString",
+    "fullLine": "<span className=\"font-mono font-bold\">{totalReplacementAmount.toLocaleString()} د.إ</span> /{\" \"}"
+  },
+  {
+    "file": "src/components/cheques/ReplaceChequeModal.tsx",
+    "line": 729,
+    "expr": "targetAmount.toLocaleString",
+    "fullLine": "{isAr ? \"المطلوب\" : \"Target\"}: <span className=\"font-mono font-bold\">{targetAmount.toLocaleString()} د.إ</span>"
+  },
+  {
+    "file": "src/components/cheques/SmartChequeConflictModal.tsx",
+    "line": 178,
+    "expr": "amountDiff.toLocaleString",
+    "fullLine": "{isAr ? \"فرق المبلغ:\" : \"Difference:\"} {amountDiff.toLocaleString(undefined, { minimumFractionDigits: 2 })} AED"
+  },
+  {
+    "file": "src/components/cheques/SmartChequeConflictModal.tsx",
+    "line": 187,
+    "expr": "originalAmount.toLocaleString",
+    "fullLine": "{originalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} AED"
+  },
+  {
+    "file": "src/components/cheques/SmartChequeConflictModal.tsx",
+    "line": 196,
+    "expr": "extractedAmount.toLocaleString",
+    "fullLine": "{extractedAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} AED"
+  },
+  {
+    "file": "src/components/cheques/SmartChequeConflictModal.tsx",
+    "line": 393,
+    "expr": "extractedAmount.toLocaleString",
+    "fullLine": "? `استخدام بيانات المسح الذكي (${extractedAmount > 0 ? extractedAmount.toLocaleString() + \" درهم\" : \"OCR\"})`"
+  },
+  {
+    "file": "src/components/cheques/SmartChequeConflictModal.tsx",
+    "line": 394,
+    "expr": "extractedAmount.toLocaleString",
+    "fullLine": ": `Use OCR Data (${extractedAmount > 0 ? extractedAmount.toLocaleString() + \" AED\" : \"OCR\"})`}"
+  },
+  {
+    "file": "src/components/cheques/SmartChequeConflictModal.tsx",
+    "line": 416,
+    "expr": "originalAmount.toLocaleString",
+    "fullLine": "? `الاحتفاظ بالبيانات الأصلية (${originalAmount.toLocaleString()} درهم)`"
+  },
+  {
+    "file": "src/components/cheques/SmartChequeConflictModal.tsx",
+    "line": 417,
+    "expr": "originalAmount.toLocaleString",
+    "fullLine": ": `Keep Original Data (${originalAmount.toLocaleString()} AED)`}"
+  },
+  {
+    "file": "src/components/collections/AgingEngineView.tsx",
+    "line": 67,
+    "expr": "item.val.toLocaleString",
+    "fullLine": "{item.val.toLocaleString()}"
+  },
+  {
+    "file": "src/components/collections/AgingEngineView.tsx",
+    "line": 124,
+    "expr": "p.aging.current.toLocaleString",
+    "fullLine": "<td className=\"px-6 py-4 text-center font-mono text-xs\">{p.aging.current > 0 ? p.aging.current.toLocaleString() : \"-\"}</td>"
+  },
+  {
+    "file": "src/components/collections/AgingEngineView.tsx",
+    "line": 125,
+    "expr": "p.aging.days1_30.toLocaleString",
+    "fullLine": "<td className=\"px-6 py-4 text-center font-mono text-xs text-amber-600\">{p.aging.days1_30 > 0 ? p.aging.days1_30.toLocaleString() : \"-\"}</td>"
+  },
+  {
+    "file": "src/components/collections/AgingEngineView.tsx",
+    "line": 126,
+    "expr": "p.aging.days31_60.toLocaleString",
+    "fullLine": "<td className=\"px-6 py-4 text-center font-mono text-xs text-orange-600\">{p.aging.days31_60 > 0 ? p.aging.days31_60.toLocaleString() : \"-\"}</td>"
+  },
+  {
+    "file": "src/components/collections/AgingEngineView.tsx",
+    "line": 127,
+    "expr": "p.aging.days61_90.toLocaleString",
+    "fullLine": "<td className=\"px-6 py-4 text-center font-mono text-xs text-rose-500\">{p.aging.days61_90 > 0 ? p.aging.days61_90.toLocaleString() : \"-\"}</td>"
+  },
+  {
+    "file": "src/components/collections/AgingEngineView.tsx",
+    "line": 128,
+    "expr": "p.aging.days91_120.toLocaleString",
+    "fullLine": "<td className=\"px-6 py-4 text-center font-mono text-xs text-rose-600\">{p.aging.days91_120 > 0 ? p.aging.days91_120.toLocaleString() : \"-\"}</td>"
+  },
+  {
+    "file": "src/components/collections/AgingEngineView.tsx",
+    "line": 129,
+    "expr": "p.aging.days121Plus.toLocaleString",
+    "fullLine": "<td className=\"px-6 py-4 text-center font-mono text-xs text-rose-900 font-bold\">{p.aging.days121Plus > 0 ? p.aging.days121Plus.toLocaleString() : \"-\"}</td>"
+  },
+  {
+    "file": "src/components/collections/AgingEngineView.tsx",
+    "line": 131,
+    "expr": "p.outstanding.toLocaleString",
+    "fullLine": "{p.outstanding.toLocaleString()}"
+  },
+  {
+    "file": "src/components/collections/AgingEngineView.tsx",
+    "line": 150,
+    "expr": "totals.current.toLocaleString",
+    "fullLine": "<td className=\"px-6 py-4 text-center font-mono text-xs\">{totals.current.toLocaleString()}</td>"
+  },
+  {
+    "file": "src/components/collections/AgingEngineView.tsx",
+    "line": 151,
+    "expr": "totals.d1_30.toLocaleString",
+    "fullLine": "<td className=\"px-6 py-4 text-center font-mono text-xs\">{totals.d1_30.toLocaleString()}</td>"
+  },
+  {
+    "file": "src/components/collections/AgingEngineView.tsx",
+    "line": 152,
+    "expr": "totals.d31_60.toLocaleString",
+    "fullLine": "<td className=\"px-6 py-4 text-center font-mono text-xs\">{totals.d31_60.toLocaleString()}</td>"
+  },
+  {
+    "file": "src/components/collections/AgingEngineView.tsx",
+    "line": 153,
+    "expr": "totals.d61_90.toLocaleString",
+    "fullLine": "<td className=\"px-6 py-4 text-center font-mono text-xs\">{totals.d61_90.toLocaleString()}</td>"
+  },
+  {
+    "file": "src/components/collections/AgingEngineView.tsx",
+    "line": 154,
+    "expr": "totals.d91_120.toLocaleString",
+    "fullLine": "<td className=\"px-6 py-4 text-center font-mono text-xs\">{totals.d91_120.toLocaleString()}</td>"
+  },
+  {
+    "file": "src/components/collections/AgingEngineView.tsx",
+    "line": 155,
+    "expr": "totals.d121Plus.toLocaleString",
+    "fullLine": "<td className=\"px-6 py-4 text-center font-mono text-xs\">{totals.d121Plus.toLocaleString()}</td>"
+  },
+  {
+    "file": "src/components/collections/AgingEngineView.tsx",
+    "line": 156,
+    "expr": "totals.total.toLocaleString",
+    "fullLine": "<td className=\"px-6 py-4 text-right text-emerald-600 font-mono\">{totals.total.toLocaleString()}</td>"
+  },
+  {
+    "file": "src/components/collections/CollectionCenter.tsx",
+    "line": 193,
+    "expr": "summaryMetrics.totalOutstanding.toLocaleString",
+    "fullLine": "{summaryMetrics.totalOutstanding.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/collections/CollectionCenter.tsx",
+    "line": 200,
+    "expr": "summaryMetrics.totalOverdue.toLocaleString",
+    "fullLine": "<span className=\"font-bold\">{summaryMetrics.totalOverdue.toLocaleString()} AED</span>"
+  },
+  {
+    "file": "src/components/collections/CollectionDashboard.tsx",
+    "line": 124,
+    "expr": "card.value.toLocaleString",
+    "fullLine": "{card.value.toLocaleString()} <span className=\"text-xs font-normal text-slate-400\">AED</span>"
+  },
+  {
+    "file": "src/components/collections/CollectionHistoryView.tsx",
+    "line": 71,
+    "expr": "action.outstandingAtTime.toLocaleString",
+    "fullLine": "{action.outstandingAtTime.toLocaleString()}"
+  },
+  {
+    "file": "src/components/collections/CollectionsCalendar.tsx",
+    "line": 278,
+    "expr": "chq.amount.toLocaleString",
+    "fullLine": "<div className=\"text-xs font-black text-emerald-700\">AED {chq.amount.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/collections/CollectionsCalendar.tsx",
+    "line": 300,
+    "expr": "chq.outstanding.toLocaleString",
+    "fullLine": "<div className=\"text-xs font-black text-rose-700\">AED {chq.outstanding.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/collections/CollectionsCalendar.tsx",
+    "line": 301,
+    "expr": "chq.amount.toLocaleString",
+    "fullLine": "<div className=\"text-[10px] text-slate-400 font-medium\">{language === \"ar\" ? \"من أصل\" : \"of\"} {chq.amount.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/collections/CollectionsView.tsx",
+    "line": 377,
+    "expr": "totalCollectedAED.toLocaleString",
+    "fullLine": "AED {totalCollectedAED.toLocaleString()}"
+  },
+  {
+    "file": "src/components/collections/CollectionsView.tsx",
+    "line": 389,
+    "expr": "totalOutstandingQueueAED.toLocaleString",
+    "fullLine": "AED {totalOutstandingQueueAED.toLocaleString()}"
+  },
+  {
+    "file": "src/components/collections/CollectionsView.tsx",
+    "line": 721,
+    "expr": "group.totalChequeAmount.toLocaleString",
+    "fullLine": "AED {group.totalChequeAmount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/collections/CollectionsView.tsx",
+    "line": 731,
+    "expr": "group.totalCollected.toLocaleString",
+    "fullLine": "AED {group.totalCollected.toLocaleString()}"
+  },
+  {
+    "file": "src/components/collections/CollectionsView.tsx",
+    "line": 745,
+    "expr": "group.outstandingBalance.toLocaleString",
+    "fullLine": "AED {group.outstandingBalance.toLocaleString()}"
+  },
+  {
+    "file": "src/components/collections/CollectionsView.tsx",
+    "line": 901,
+    "expr": "rcp.amountApplied.toLocaleString",
+    "fullLine": "AED {rcp.amountApplied.toLocaleString()}"
+  },
+  {
+    "file": "src/components/collections/CollectionsView.tsx",
+    "line": 974,
+    "expr": "group.totalCollected.toLocaleString",
+    "fullLine": "? `تم سداد وقبض كامل قيمة الشيك (${group.totalCollected.toLocaleString()} AED) عبر ${group.receipts.length} دفعات.`"
+  },
+  {
+    "file": "src/components/collections/CollectionsView.tsx",
+    "line": 975,
+    "expr": "group.totalCollected.toLocaleString",
+    "fullLine": ": `Fully collected (${group.totalCollected.toLocaleString()} AED) across ${group.receipts.length} installments.`}"
+  },
+  {
+    "file": "src/components/collections/CollectionsView.tsx",
+    "line": 983,
+    "expr": "group.outstandingBalance.toLocaleString",
+    "fullLine": "? `متبقي للتحصيل: ${group.outstandingBalance.toLocaleString()} AED من أصل ${group.totalChequeAmount.toLocaleString()} AED`"
+  },
+  {
+    "file": "src/components/collections/CollectionsView.tsx",
+    "line": 983,
+    "expr": "group.totalChequeAmount.toLocaleString",
+    "fullLine": "? `متبقي للتحصيل: ${group.outstandingBalance.toLocaleString()} AED من أصل ${group.totalChequeAmount.toLocaleString()} AED`"
+  },
+  {
+    "file": "src/components/collections/CollectionsView.tsx",
+    "line": 984,
+    "expr": "group.outstandingBalance.toLocaleString",
+    "fullLine": ": `Outstanding balance: ${group.outstandingBalance.toLocaleString()} AED out of ${group.totalChequeAmount.toLocaleString()} AED`}"
+  },
+  {
+    "file": "src/components/collections/CollectionsView.tsx",
+    "line": 984,
+    "expr": "group.totalChequeAmount.toLocaleString",
+    "fullLine": ": `Outstanding balance: ${group.outstandingBalance.toLocaleString()} AED out of ${group.totalChequeAmount.toLocaleString()} AED`}"
+  },
+  {
+    "file": "src/components/collections/CollectionsView.tsx",
+    "line": 991,
+    "expr": "group.totalCollected.toLocaleString",
+    "fullLine": "{language === \"ar\" ? \"المجموع المقبوض:\" : \"Total Applied:\"} AED {group.totalCollected.toLocaleString()}"
+  },
+  {
+    "file": "src/components/collections/CollectionsView.tsx",
+    "line": 1076,
+    "expr": "cheque.amount.toLocaleString",
+    "fullLine": "AED {cheque.amount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/collections/CollectionsView.tsx",
+    "line": 1080,
+    "expr": "cheque.outstanding.toLocaleString",
+    "fullLine": "AED {cheque.outstanding.toLocaleString()}"
+  },
+  {
+    "file": "src/components/collections/CollectionsView.tsx",
+    "line": 1184,
+    "expr": "receiptToDelete.amountApplied.toLocaleString",
+    "fullLine": "itemCode={receiptToDelete ? `${receiptToDelete.amountApplied.toLocaleString()} AED` : \"\"}"
+  },
+  {
+    "file": "src/components/collections/FollowUpSystem.tsx",
+    "line": 133,
+    "expr": "action.outstandingAtTime.toLocaleString",
+    "fullLine": "AED {action.outstandingAtTime.toLocaleString()} <span className=\"text-[10px] font-normal text-slate-400\">{isAr ? \"عند الإجراء\" : \"at time\"}</span>"
+  },
+  {
+    "file": "src/components/collections/LegalEscalationView.tsx",
+    "line": 94,
+    "expr": "p.outstanding.toLocaleString",
+    "fullLine": "<div className=\"text-2xl font-bold text-rose-600 font-mono\">{p.outstanding.toLocaleString()} AED</div>"
+  },
+  {
+    "file": "src/components/collections/LegalEscalationView.tsx",
+    "line": 101,
+    "expr": "p.bouncedChequeAmount.toLocaleString",
+    "fullLine": "<div className=\"text-sm font-bold text-rose-600\">{p.bouncedChequeAmount.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/collections/LegalEscalationView.tsx",
+    "line": 105,
+    "expr": "p.aging.days121Plus.toLocaleString",
+    "fullLine": "<div className=\"text-sm font-bold text-rose-800 dark:text-rose-400\">{p.aging.days121Plus.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/collections/LegalEscalationView.tsx",
+    "line": 109,
+    "expr": "p.legalChargesDue.toLocaleString",
+    "fullLine": "<div className=\"text-sm font-bold text-slate-900 dark:text-white\">{p.legalChargesDue.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/collections/PendingAdministrativeFeeAlert.tsx",
+    "line": 63,
+    "expr": "totalOutstanding.toLocaleString",
+    "fullLine": "? `إجمالي المبلغ المستحق: ${totalOutstanding.toLocaleString()} درهم`"
+  },
+  {
+    "file": "src/components/collections/PendingAdministrativeFeeAlert.tsx",
+    "line": 64,
+    "expr": "totalOutstanding.toLocaleString",
+    "fullLine": ": `Total Outstanding: ${totalOutstanding.toLocaleString()} AED`}"
+  },
+  {
+    "file": "src/components/collections/PromisesView.tsx",
+    "line": 152,
+    "expr": "promise.amountPromised.toLocaleString",
+    "fullLine": "<div className=\"text-xl font-bold text-slate-900 dark:text-white\">{promise.amountPromised.toLocaleString()} AED</div>"
+  },
+  {
+    "file": "src/components/collections/ReceiptVoucherModal.tsx",
+    "line": 749,
+    "expr": "totalReceived.toLocaleString",
+    "fullLine": "AED {totalReceived.toLocaleString()}"
+  },
+  {
+    "file": "src/components/collections/ReceiptVoucherModal.tsx",
+    "line": 754,
+    "expr": "unallocatedAmount.toLocaleString",
+    "fullLine": "? `دفعة مقدمة غير مخصصة: AED ${unallocatedAmount.toLocaleString()}`"
+  },
+  {
+    "file": "src/components/collections/ReceiptVoucherModal.tsx",
+    "line": 755,
+    "expr": "unallocatedAmount.toLocaleString",
+    "fullLine": ": `Unallocated Advance: AED ${unallocatedAmount.toLocaleString()}`}"
+  },
+  {
+    "file": "src/components/collections/ReceiptVoucherModal.tsx",
+    "line": 838,
+    "expr": "totalApplied.toLocaleString",
+    "fullLine": "AED {totalApplied.toLocaleString()}"
+  },
+  {
+    "file": "src/components/collections/ReceiptVoucherModal.tsx",
+    "line": 865,
+    "expr": "alloc.allocatedAmount.toLocaleString",
+    "fullLine": "<td className=\"py-1 px-2 text-end font-mono font-bold text-slate-900\">AED {alloc.allocatedAmount.toLocaleString()}</td>"
+  },
+  {
+    "file": "src/components/collections/ReceiptVoucherModal.tsx",
+    "line": 884,
+    "expr": "totalAmount.toLocaleString",
+    "fullLine": "{printLanguage === \"ar\" ? `القيمة الإجمالية: AED ${totalAmount.toLocaleString()}` : `Total Amount: AED ${totalAmount.toLocaleString()}`}"
+  },
+  {
+    "file": "src/components/collections/ReceiptVoucherModal.tsx",
+    "line": 884,
+    "expr": "totalAmount.toLocaleString",
+    "fullLine": "{printLanguage === \"ar\" ? `القيمة الإجمالية: AED ${totalAmount.toLocaleString()}` : `Total Amount: AED ${totalAmount.toLocaleString()}`}"
+  },
+  {
+    "file": "src/components/collections/ReceiptVoucherModal.tsx",
+    "line": 907,
+    "expr": "col.amountApplied.toLocaleString",
+    "fullLine": "<span className=\"font-mono font-bold text-slate-900\">AED {col.amountApplied.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/collections/ReceiptVoucherModal.tsx",
+    "line": 926,
+    "expr": "currentOutstanding.toLocaleString",
+    "fullLine": "<span className=\"font-mono text-xs text-amber-900 font-black\">AED {currentOutstanding.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/collections/ReceiptVoucherModal.tsx",
+    "line": 955,
+    "expr": "totalReceived.toLocaleString",
+    "fullLine": "VERIFY ID: #{receipt.receiptNumber} | AED {totalReceived.toLocaleString()}"
+  },
+  {
+    "file": "src/components/collections/RecordPaymentModal.tsx",
+    "line": 133,
+    "expr": "outstanding.toLocaleString",
+    "fullLine": "subtitle={`Cheque #${cheque.chequeNumber} — Outstanding: AED ${outstanding.toLocaleString()}`}"
+  },
+  {
+    "file": "src/components/collections/RecordPaymentModal.tsx",
+    "line": 164,
+    "expr": "cheque.amount.toLocaleString",
+    "fullLine": "<span className=\"font-mono font-bold text-slate-900\">AED {cheque.amount.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/collections/RecordPaymentModal.tsx",
+    "line": 168,
+    "expr": "outstanding.toLocaleString",
+    "fullLine": "<span className=\"font-mono font-black text-amber-800 text-sm\">AED {outstanding.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/collections/RecordPaymentModal.tsx",
+    "line": 185,
+    "expr": "outstanding.toLocaleString",
+    "fullLine": "? `سيقوم النظام تلقائياً بتطبيق الحد الأقصى للمطالبة (${outstanding.toLocaleString()} درهم) وتصفير المتبقي، مع إشعار الفائض (${(amountEntered - outstanding).toLocaleString()} درهم) في سجل التدقيق.`"
+  },
+  {
+    "file": "src/components/collections/RecordPaymentModal.tsx",
+    "line": 186,
+    "expr": "outstanding.toLocaleString",
+    "fullLine": ": `The system will strictly apply exactly AED ${outstanding.toLocaleString()} to close this cheque balance. Excess AED ${(amountEntered - outstanding).toLocaleString()} will be flagged in the audit log.`}"
+  },
+  {
+    "file": "src/components/collections/RecordPaymentModal.tsx",
+    "line": 385,
+    "expr": "appliedAmount.toLocaleString",
+    "fullLine": "AED {appliedAmount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/collections/RecordPaymentModal.tsx",
+    "line": 393,
+    "expr": "finalBouncedFee.toLocaleString",
+    "fullLine": "AED {finalBouncedFee.toLocaleString()}"
+  },
+  {
+    "file": "src/components/collections/RecordPaymentModal.tsx",
+    "line": 401,
+    "expr": "totalAmountCollected.toLocaleString",
+    "fullLine": "AED {totalAmountCollected.toLocaleString()}"
+  },
+  {
+    "file": "src/components/collections/RecordPaymentModal.tsx",
+    "line": 415,
+    "expr": "remainingAfterPayment.toLocaleString",
+    "fullLine": "{remainingAfterPayment === 0 ? \"FULLY SETTLED (0 AED)\" : `AED ${remainingAfterPayment.toLocaleString()}`}"
+  },
+  {
+    "file": "src/components/collections/RecordPaymentModal.tsx",
+    "line": 433,
+    "expr": "amountEntered.toLocaleString",
+    "fullLine": "? `سيتم حفظ وتأكيد استلام (AED ${amountEntered.toLocaleString()}) للشيك رقم #${cheque.chequeNumber}. لا يمكن تعديل السند بعد تأكيد الحفظ.`"
+  },
+  {
+    "file": "src/components/collections/RecordPaymentModal.tsx",
+    "line": 434,
+    "expr": "amountEntered.toLocaleString",
+    "fullLine": ": `This will authorize and save a payment of AED ${amountEntered.toLocaleString()} against Cheque #${cheque.chequeNumber}. This cannot be edited once saved.`}"
+  },
+  {
+    "file": "src/components/common/ConfirmDeleteModal.tsx",
+    "line": 277,
+    "expr": "cat.totalAmount.toLocaleString",
+    "fullLine": "{cat.totalAmount.toLocaleString()} {isAr ? \"د.إ\" : \"AED\"}"
+  },
+  {
+    "file": "src/components/common/ConfirmDeleteModal.tsx",
+    "line": 318,
+    "expr": "item.amount.toLocaleString",
+    "fullLine": "{item.amount.toLocaleString()} {isAr ? \"د.إ\" : \"AED\"}"
+  },
+  {
+    "file": "src/components/dashboard/DashboardView.tsx",
+    "line": 1111,
+    "expr": "financialKPIs.totalBouncedAmount.toLocaleString",
+    "fullLine": "{financialKPIs.totalBouncedAmount.toLocaleString()} <span className=\"text-xs font-bold text-slate-400\">{isAr ? \"د.إ\" : \"AED\"}</span>"
+  },
+  {
+    "file": "src/components/dashboard/DashboardView.tsx",
+    "line": 1129,
+    "expr": "financialKPIs.totalCollectedAmount.toLocaleString",
+    "fullLine": "{financialKPIs.totalCollectedAmount.toLocaleString()} <span className=\"text-xs font-bold text-slate-400\">{isAr ? \"د.إ\" : \"AED\"}</span>"
+  },
+  {
+    "file": "src/components/dashboard/DashboardView.tsx",
+    "line": 1147,
+    "expr": "financialKPIs.totalOutstandingAmount.toLocaleString",
+    "fullLine": "{financialKPIs.totalOutstandingAmount.toLocaleString()} <span className=\"text-xs font-bold text-slate-400\">{isAr ? \"د.إ\" : \"AED\"}</span>"
+  },
+  {
+    "file": "src/components/dashboard/DashboardView.tsx",
+    "line": 1219,
+    "expr": "financialKPIs.casesClaimAmount.toLocaleString",
+    "fullLine": "{financialKPIs.casesClaimAmount.toLocaleString()} <span className=\"text-xs font-bold text-slate-400\">{isAr ? \"د.إ\" : \"AED\"}</span>"
+  },
+  {
+    "file": "src/components/dashboard/ExecutiveMaintenanceDashboard.tsx",
+    "line": 590,
+    "expr": "totalCost.toLocaleString",
+    "fullLine": "{totalCost.toLocaleString()} <span className=\"text-[10px] text-slate-400\">{isAr ? \"د.إ\" : \"AED\"}</span>"
+  },
+  {
+    "file": "src/components/dashboard/ExecutiveMaintenanceDashboard.tsx",
+    "line": 599,
+    "expr": "paidCost.toLocaleString",
+    "fullLine": "{paidCost.toLocaleString()} <span className=\"text-[10px] text-emerald-500\">{isAr ? \"د.إ\" : \"AED\"}</span>"
+  },
+  {
+    "file": "src/components/dashboard/ExecutiveMaintenanceDashboard.tsx",
+    "line": 608,
+    "expr": "remainingCost.toLocaleString",
+    "fullLine": "{remainingCost.toLocaleString()} <span className=\"text-[10px] text-amber-500\">{isAr ? \"د.إ\" : \"AED\"}</span>"
+  },
+  {
+    "file": "src/components/dashboard/ExecutiveMaintenanceDashboard.tsx",
+    "line": 621,
+    "expr": "ownerCost.toLocaleString",
+    "fullLine": "<div className=\"font-black text-slate-800 mt-0.5\">{ownerCost.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/dashboard/ExecutiveMaintenanceDashboard.tsx",
+    "line": 625,
+    "expr": "tenantCost.toLocaleString",
+    "fullLine": "<div className=\"font-black text-slate-800 mt-0.5\">{tenantCost.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/dashboard/ExecutiveMaintenanceDashboard.tsx",
+    "line": 629,
+    "expr": "managementCost.toLocaleString",
+    "fullLine": "<div className=\"font-black text-slate-800 mt-0.5\">{managementCost.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/dashboard/RiskAssessmentDashboard.tsx",
+    "line": 341,
+    "expr": "summary.totalExposureAED.toLocaleString",
+    "fullLine": "AED {summary.totalExposureAED.toLocaleString()}"
+  },
+  {
+    "file": "src/components/dashboard/RiskAssessmentDashboard.tsx",
+    "line": 652,
+    "expr": "tp.bouncedAmountAED.toLocaleString",
+    "fullLine": "AED {tp.bouncedAmountAED.toLocaleString()}"
+  },
+  {
+    "file": "src/components/dashboard/alerts/DepositDelayAlert.tsx",
+    "line": 296,
+    "expr": "item.amount.toLocaleString",
+    "fullLine": "{item.type} — AED {item.amount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/financials/AdminFeeExceptionCenterView.tsx",
+    "line": 354,
+    "expr": "summary.totalReductionAmount.toLocaleString",
+    "fullLine": "{summary.totalReductionAmount.toLocaleString()} <span className=\"text-xs\">AED</span>"
+  },
+  {
+    "file": "src/components/financials/AdminFeeExceptionCenterView.tsx",
+    "line": 372,
+    "expr": "summary.totalAppliedFees.toLocaleString",
+    "fullLine": "{summary.totalAppliedFees.toLocaleString()} <span className=\"text-xs\">AED</span>"
+  },
+  {
+    "file": "src/components/financials/AdminFeeExceptionCenterView.tsx",
+    "line": 375,
+    "expr": "summary.totalExpectedFees.toLocaleString",
+    "fullLine": "{isAr ? `من أصل ${summary.totalExpectedFees.toLocaleString()} متوقع` : `From ${summary.totalExpectedFees.toLocaleString()} expected`}"
+  },
+  {
+    "file": "src/components/financials/AdminFeeExceptionCenterView.tsx",
+    "line": 375,
+    "expr": "summary.totalExpectedFees.toLocaleString",
+    "fullLine": "{isAr ? `من أصل ${summary.totalExpectedFees.toLocaleString()} متوقع` : `From ${summary.totalExpectedFees.toLocaleString()} expected`}"
+  },
+  {
+    "file": "src/components/financials/AdminFeeExceptionCenterView.tsx",
+    "line": 733,
+    "expr": "record.expectedAmount.toLocaleString",
+    "fullLine": "{record.expectedAmount.toLocaleString()}{\" \"}"
+  },
+  {
+    "file": "src/components/financials/AdminFeeExceptionCenterView.tsx",
+    "line": 746,
+    "expr": "record.actualAmount.toLocaleString",
+    "fullLine": "{record.actualAmount.toLocaleString()}{\" \"}"
+  },
+  {
+    "file": "src/components/financials/AdminFeeExceptionCenterView.tsx",
+    "line": 755,
+    "expr": "record.reductionAmount.toLocaleString",
+    "fullLine": "-{record.reductionAmount.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/financials/AdminFeeExceptionCenterView.tsx",
+    "line": 893,
+    "expr": "record.expectedAmount.toLocaleString",
+    "fullLine": "{record.expectedAmount.toLocaleString()} <span className=\"text-xs\">AED</span>"
+  },
+  {
+    "file": "src/components/financials/AdminFeeExceptionCenterView.tsx",
+    "line": 898,
+    "expr": "record.expectedVat.toLocaleString",
+    "fullLine": "<span>{record.expectedVat.toLocaleString()} AED</span>"
+  },
+  {
+    "file": "src/components/financials/AdminFeeExceptionCenterView.tsx",
+    "line": 902,
+    "expr": "record.expectedNetRevenue.toLocaleString",
+    "fullLine": "<span>{record.expectedNetRevenue.toLocaleString()} AED</span>"
+  },
+  {
+    "file": "src/components/financials/AdminFeeExceptionCenterView.tsx",
+    "line": 914,
+    "expr": "record.actualAmount.toLocaleString",
+    "fullLine": "{record.actualAmount.toLocaleString()} <span className=\"text-xs\">AED</span>"
+  },
+  {
+    "file": "src/components/financials/AdminFeeExceptionCenterView.tsx",
+    "line": 919,
+    "expr": "record.actualVat.toLocaleString",
+    "fullLine": "<span>{record.actualVat.toLocaleString()} AED</span>"
+  },
+  {
+    "file": "src/components/financials/AdminFeeExceptionCenterView.tsx",
+    "line": 923,
+    "expr": "record.actualNetRevenue.toLocaleString",
+    "fullLine": "<span>{record.actualNetRevenue.toLocaleString()} AED</span>"
+  },
+  {
+    "file": "src/components/financials/AdminFeeExceptionCenterView.tsx",
+    "line": 943,
+    "expr": "record.reductionAmount.toLocaleString",
+    "fullLine": "{record.reductionAmount.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/financials/AdminFeeExceptionCenterView.tsx",
+    "line": 980,
+    "expr": "record.collectedAmount.toLocaleString",
+    "fullLine": "{record.collectionStatus} (المحصل: {record.collectedAmount.toLocaleString()} AED / المتبقي: {record.outstandingBalance.toLocaleString()} AED)"
+  },
+  {
+    "file": "src/components/financials/AdminFeeExceptionCenterView.tsx",
+    "line": 980,
+    "expr": "record.outstandingBalance.toLocaleString",
+    "fullLine": "{record.collectionStatus} (المحصل: {record.collectedAmount.toLocaleString()} AED / المتبقي: {record.outstandingBalance.toLocaleString()} AED)"
+  },
+  {
+    "file": "src/components/financials/DailyDepositsView.tsx",
+    "line": 1258,
+    "expr": "item.amount.toLocaleString",
+    "fullLine": "<div><span className=\"text-slate-400\">Amount:</span> AED {item.amount.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/financials/DailyDepositsView.tsx",
+    "line": 1339,
+    "expr": "item.amount.toLocaleString",
+    "fullLine": "AED {item.amount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/financials/DailyDepositsView.tsx",
+    "line": 1398,
+    "expr": "targetItem.amount.toLocaleString",
+    "fullLine": "<strong className=\"text-teal-600 font-mono text-sm\">AED {targetItem.amount.toLocaleString()}</strong>"
+  },
+  {
+    "file": "src/components/financials/DailyDepositsView.tsx",
+    "line": 1761,
+    "expr": "viewProofItem.amount.toLocaleString",
+    "fullLine": "<strong className=\"text-emerald-700 font-mono text-base font-black\">AED {viewProofItem.amount.toLocaleString()}</strong>"
+  },
+  {
+    "file": "src/components/financials/DailyRevenueView.tsx",
+    "line": 281,
+    "expr": "metrics.pendingAmount.toLocaleString",
+    "fullLine": "<div className=\"text-lg font-black text-amber-600 font-mono\">AED {metrics.pendingAmount.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/financials/DailyRevenueView.tsx",
+    "line": 286,
+    "expr": "metrics.collectedToday.toLocaleString",
+    "fullLine": "<div className=\"text-lg font-black text-emerald-600 font-mono\">AED {metrics.collectedToday.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/financials/DailyRevenueView.tsx",
+    "line": 389,
+    "expr": "rev.totalCommissionAmount.toLocaleString",
+    "fullLine": "{rev.totalCommissionAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/DailyRevenueView.tsx",
+    "line": 392,
+    "expr": "vatAmount?.toLocaleString",
+    "fullLine": "{rev.vatAmount?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || \"0.00\"}"
+  },
+  {
+    "file": "src/components/financials/DailyRevenueView.tsx",
+    "line": 396,
+    "expr": "netRevenueAmount?.toLocaleString",
+    "fullLine": "{rev.netRevenueAmount?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || rev.totalCommissionAmount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/financials/DailyRevenueView.tsx",
+    "line": 396,
+    "expr": "rev.totalCommissionAmount.toLocaleString",
+    "fullLine": "{rev.netRevenueAmount?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || rev.totalCommissionAmount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/financials/DailyRevenueView.tsx",
+    "line": 594,
+    "expr": "selectedRevenue.outstandingBalance.toLocaleString",
+    "fullLine": "<span className=\"font-mono font-black text-slate-900 dark:text-white\">AED {selectedRevenue.outstandingBalance.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 741,
+    "expr": "ex.reductionAmount.toLocaleString",
+    "fullLine": "descEn: `Potential revenue reduction of AED ${ex.reductionAmount.toLocaleString()} requires executive review.`,"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 742,
+    "expr": "ex.reductionAmount.toLocaleString",
+    "fullLine": "descAr: `تخفيض محتمل في الإيراد بمقدار ${ex.reductionAmount.toLocaleString()} د.إ يتطلب مراجعة واعتماد الإدارة.`,"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 756,
+    "expr": "grossOutstanding.toLocaleString",
+    "fullLine": "descEn: `Total uncollected administrative fees of AED ${agingAnalysis[\"90+\"].grossOutstanding.toLocaleString()} past 90 days due date.`,"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 757,
+    "expr": "grossOutstanding.toLocaleString",
+    "fullLine": "descAr: `إجمالي رسوم غير محصلة بقيمة ${agingAnalysis[\"90+\"].grossOutstanding.toLocaleString()} د.إ تجاوزت 90 يوماً من الاستحقاق.`,"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 772,
+    "expr": "ex.reductionAmount.toLocaleString",
+    "fullLine": "descEn: `Fee reduced by AED ${ex.reductionAmount.toLocaleString()}. Reason: ${ex.reason || \"Manual override\"}`,"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 773,
+    "expr": "ex.reductionAmount.toLocaleString",
+    "fullLine": "descAr: `تم تخفيض الرسوم بمقدار ${ex.reductionAmount.toLocaleString()} د.إ. السبب: ${ex.reason || \"تعديل يدوي\"}`,"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 789,
+    "expr": "midGross.toLocaleString",
+    "fullLine": "descEn: `Outstanding balance of AED ${midGross.toLocaleString()} requiring follow-up collection.`,"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 790,
+    "expr": "midGross.toLocaleString",
+    "fullLine": "descAr: `مستحقات غير محصلة بقيمة ${midGross.toLocaleString()} د.إ تتطلب متابعة تحصيل نشطة.`,"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 1169,
+    "expr": "kpis.totalDue.toLocaleString",
+    "fullLine": "AED {kpis.totalDue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 1188,
+    "expr": "kpis.totalCollected.toLocaleString",
+    "fullLine": "AED {kpis.totalCollected.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 1209,
+    "expr": "kpis.totalOutstanding.toLocaleString",
+    "fullLine": "AED {kpis.totalOutstanding.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 1228,
+    "expr": "kpis.netOfficeRevenue.toLocaleString",
+    "fullLine": "AED {kpis.netOfficeRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 1232,
+    "expr": "kpis.outputVat.toLocaleString",
+    "fullLine": "<span className=\"font-bold font-mono text-indigo-900\">AED {kpis.outputVat.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 1302,
+    "expr": "grossOutstanding.toLocaleString",
+    "fullLine": "AED {agingAnalysis[\"90+\"].grossOutstanding.toLocaleString()}"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 1529,
+    "expr": "continuousSummary.totalCollections.toLocaleString",
+    "fullLine": "<span className=\"font-bold\">AED {continuousSummary.totalCollections.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 1564,
+    "expr": "continuousSummary.totalOwnerTransfers.toLocaleString",
+    "fullLine": "<span className=\"font-bold\">AED {continuousSummary.totalOwnerTransfers.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 1568,
+    "expr": "continuousSummary.totalOwnerPayables.toLocaleString",
+    "fullLine": "<span className=\"font-bold\">AED {continuousSummary.totalOwnerPayables.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 1599,
+    "expr": "continuousSummary.outstandingChequesAmount.toLocaleString",
+    "fullLine": "<span className=\"font-bold\">AED {continuousSummary.outstandingChequesAmount.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 1603,
+    "expr": "continuousSummary.activeLegalCasesAmount.toLocaleString",
+    "fullLine": "<span className=\"font-bold\">AED {continuousSummary.activeLegalCasesAmount.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 1632,
+    "expr": "continuousSummary.totalDailyDeposits.toLocaleString",
+    "fullLine": "<span className=\"font-bold\">AED {continuousSummary.totalDailyDeposits.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 1661,
+    "expr": "kpis.outputVat.toLocaleString",
+    "fullLine": "<span className=\"font-bold\">AED {kpis.outputVat.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 1921,
+    "expr": "kpis.totalDue.toLocaleString",
+    "fullLine": "<span className=\"font-mono text-slate-900 text-sm\">AED {kpis.totalDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 1925,
+    "expr": "kpis.netOfficeRevenue.toLocaleString",
+    "fullLine": "<span className=\"font-mono\">AED {kpis.netOfficeRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 1929,
+    "expr": "kpis.outputVat.toLocaleString",
+    "fullLine": "<span className=\"font-mono\">AED {kpis.outputVat.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 1945,
+    "expr": "kpis.totalCollected.toLocaleString",
+    "fullLine": "<span className=\"font-mono font-bold\">AED {kpis.totalCollected.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 1949,
+    "expr": "kpis.collectedNet.toLocaleString",
+    "fullLine": "<span className=\"font-mono font-bold\">AED {kpis.collectedNet.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 1953,
+    "expr": "kpis.collectedVat.toLocaleString",
+    "fullLine": "<span className=\"font-mono font-bold\">AED {kpis.collectedVat.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 1991,
+    "expr": "row.cur.toLocaleString",
+    "fullLine": "{row.isPct ? `${row.cur.toFixed(1)}%` : row.isCount ? row.cur : `AED ${row.cur.toLocaleString()}`}"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 1994,
+    "expr": "row.prev.toLocaleString",
+    "fullLine": "{row.isPct ? `${row.prev.toFixed(1)}%` : row.isCount ? row.prev : `AED ${row.prev.toLocaleString()}`}"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2004,
+    "expr": "row.delta.diff.toLocaleString",
+    "fullLine": "{row.delta.diff > 0 ? \"+\" : \"\"}{row.delta.diff.toLocaleString()}"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2115,
+    "expr": "kpis.oldestPending.outstanding.toLocaleString",
+    "fullLine": "{isAr ? \"المالك:\" : \"Owner:\"} {kpis.oldestPending.ownerName} | {isAr ? \"المبلغ المتبقي:\" : \"Outstanding:\"} <span className=\"font-mono font-bold text-rose-600\">AED {kpis.oldestPending.outstanding.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2132,
+    "expr": "kpis.highestPending.outstanding.toLocaleString",
+    "fullLine": "{isAr ? \"الطرف:\" : \"Party:\"} {kpis.highestPending.ownerName} | {isAr ? \"المبلغ:\" : \"Amount:\"} <span className=\"font-mono font-bold text-indigo-700 text-base\">AED {kpis.highestPending.outstanding.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2135,
+    "expr": "kpis.highestPending.collected.toLocaleString",
+    "fullLine": "{isAr ? \"المحصل:\" : \"Collected:\"} AED {kpis.highestPending.collected.toLocaleString()} / AED {kpis.highestPending.gross.toLocaleString()}"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2135,
+    "expr": "kpis.highestPending.gross.toLocaleString",
+    "fullLine": "{isAr ? \"المحصل:\" : \"Collected:\"} AED {kpis.highestPending.collected.toLocaleString()} / AED {kpis.highestPending.gross.toLocaleString()}"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2165,
+    "expr": "grossOutstanding.toLocaleString",
+    "fullLine": "<span className=\"text-base font-black font-mono text-slate-900\">AED {agingAnalysis[\"ALL\"].grossOutstanding.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2199,
+    "expr": "data.grossOutstanding.toLocaleString",
+    "fullLine": "AED {data.grossOutstanding.toLocaleString()}"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2202,
+    "expr": "data.netOutstanding.toLocaleString",
+    "fullLine": "<div>Net: AED {data.netOutstanding.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2203,
+    "expr": "data.vatOutstanding.toLocaleString",
+    "fullLine": "<div>VAT: AED {data.vatOutstanding.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2245,
+    "expr": "feeExceptionsData.summary.totalReductionAmount.toLocaleString",
+    "fullLine": "AED {feeExceptionsData.summary.totalReductionAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2257,
+    "expr": "feeExceptionsData.summary.totalVatDifference.toLocaleString",
+    "fullLine": "AED {feeExceptionsData.summary.totalVatDifference.toLocaleString(undefined, { minimumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2318,
+    "expr": "ex.expectedAmount.toLocaleString",
+    "fullLine": "<div className=\"font-bold text-slate-700\">AED {ex.expectedAmount.toLocaleString()} → AED {ex.actualAmount.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2318,
+    "expr": "ex.actualAmount.toLocaleString",
+    "fullLine": "<div className=\"font-bold text-slate-700\">AED {ex.expectedAmount.toLocaleString()} → AED {ex.actualAmount.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2319,
+    "expr": "ex.reductionAmount.toLocaleString",
+    "fullLine": "<div className=\"text-rose-600 font-bold text-xs\">Δ -AED {ex.reductionAmount.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2375,
+    "expr": "req.reductionAmount.toLocaleString",
+    "fullLine": "<div className=\"text-base font-black text-rose-700\">AED {req.reductionAmount.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2425,
+    "expr": "kpis.totalDue.toLocaleString",
+    "fullLine": "<span className=\"text-sm font-black font-mono text-slate-900\">AED {kpis.totalDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2429,
+    "expr": "kpis.outputVat.toLocaleString",
+    "fullLine": "<span className=\"text-sm font-black font-mono text-indigo-700\">AED {kpis.outputVat.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2433,
+    "expr": "kpis.netOfficeRevenue.toLocaleString",
+    "fullLine": "<span className=\"text-sm font-black font-mono text-emerald-700\">AED {kpis.netOfficeRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2437,
+    "expr": "kpis.collectedVat.toLocaleString",
+    "fullLine": "<span className=\"text-sm font-black font-mono text-slate-700\">AED {kpis.collectedVat.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2464,
+    "expr": "ownerTenantAnalysis.owner.gross.toLocaleString",
+    "fullLine": "<span className=\"font-bold text-slate-900\">AED {ownerTenantAnalysis.owner.gross.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2468,
+    "expr": "ownerTenantAnalysis.owner.collected.toLocaleString",
+    "fullLine": "<span className=\"font-bold\">AED {ownerTenantAnalysis.owner.collected.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2472,
+    "expr": "ownerTenantAnalysis.owner.outstanding.toLocaleString",
+    "fullLine": "<span className=\"font-bold\">AED {ownerTenantAnalysis.owner.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2476,
+    "expr": "ownerTenantAnalysis.owner.net.toLocaleString",
+    "fullLine": "<span className=\"font-bold text-slate-800\">AED {ownerTenantAnalysis.owner.net.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2480,
+    "expr": "ownerTenantAnalysis.owner.vat.toLocaleString",
+    "fullLine": "<span className=\"font-bold text-indigo-700\">AED {ownerTenantAnalysis.owner.vat.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2502,
+    "expr": "ownerTenantAnalysis.tenant.gross.toLocaleString",
+    "fullLine": "<span className=\"font-bold text-slate-900\">AED {ownerTenantAnalysis.tenant.gross.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2506,
+    "expr": "ownerTenantAnalysis.tenant.collected.toLocaleString",
+    "fullLine": "<span className=\"font-bold\">AED {ownerTenantAnalysis.tenant.collected.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2510,
+    "expr": "ownerTenantAnalysis.tenant.outstanding.toLocaleString",
+    "fullLine": "<span className=\"font-bold\">AED {ownerTenantAnalysis.tenant.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2514,
+    "expr": "ownerTenantAnalysis.tenant.net.toLocaleString",
+    "fullLine": "<span className=\"font-bold text-slate-800\">AED {ownerTenantAnalysis.tenant.net.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2518,
+    "expr": "ownerTenantAnalysis.tenant.vat.toLocaleString",
+    "fullLine": "<span className=\"font-bold text-indigo-700\">AED {ownerTenantAnalysis.tenant.vat.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2583,
+    "expr": "risk.impact.toLocaleString",
+    "fullLine": "<div className=\"text-sm font-black text-slate-900\">AED {risk.impact.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2713,
+    "expr": "row.gross.toLocaleString",
+    "fullLine": "<td className=\"p-3 text-right font-bold text-slate-900\">AED {row.gross.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2714,
+    "expr": "row.vatAmount.toLocaleString",
+    "fullLine": "<td className=\"p-3 text-right text-indigo-700 font-bold\">AED {row.vatAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2715,
+    "expr": "row.netRevenue.toLocaleString",
+    "fullLine": "<td className=\"p-3 text-right text-emerald-700 font-bold\">AED {row.netRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2716,
+    "expr": "row.collected.toLocaleString",
+    "fullLine": "<td className=\"p-3 text-right text-slate-700\">AED {row.collected.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>"
+  },
+  {
+    "file": "src/components/financials/FinancialControlCenterView.tsx",
+    "line": 2717,
+    "expr": "row.outstanding.toLocaleString",
+    "fullLine": "<td className=\"p-3 text-right font-bold text-amber-700\">AED {row.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>"
+  },
+  {
+    "file": "src/components/financials/FinancialReconciliationCenter.tsx",
+    "line": 283,
+    "expr": "summaryMetrics.officeRevenueCreated.toLocaleString",
+    "fullLine": "{summaryMetrics.officeRevenueCreated.toLocaleString()} <span className=\"text-xs font-normal text-slate-400\">AED</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialReconciliationCenter.tsx",
+    "line": 286,
+    "expr": "summaryMetrics.officeCollected.toLocaleString",
+    "fullLine": "{isAr ? \"المحصل:\" : \"Collected:\"} <span className=\"text-emerald-600 font-bold\">{summaryMetrics.officeCollected.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialReconciliationCenter.tsx",
+    "line": 298,
+    "expr": "summaryMetrics.ownerPayable.toLocaleString",
+    "fullLine": "{summaryMetrics.ownerPayable.toLocaleString()} <span className=\"text-xs font-normal text-slate-400\">AED</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialReconciliationCenter.tsx",
+    "line": 301,
+    "expr": "summaryMetrics.ownerPaid.toLocaleString",
+    "fullLine": "{isAr ? \"المدفوع:\" : \"Paid:\"} <span className=\"text-amber-600 font-bold\">{summaryMetrics.ownerPaid.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/financials/FinancialReconciliationCenter.tsx",
+    "line": 362,
+    "expr": "summaryMetrics.officeCollected.toLocaleString",
+    "fullLine": "<div className=\"text-3xl font-black text-teal-600\">{summaryMetrics.officeCollected.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/financials/FinancialReconciliationCenter.tsx",
+    "line": 367,
+    "expr": "summaryMetrics.ownerPaid.toLocaleString",
+    "fullLine": "<div className=\"text-3xl font-black text-amber-600\">{summaryMetrics.ownerPaid.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/financials/FinancialReconciliationCenter.tsx",
+    "line": 508,
+    "expr": "d.amount.toLocaleString",
+    "fullLine": "<td className=\"px-4 py-4 text-xs font-bold text-slate-900 dark:text-white\">{d.amount.toLocaleString()}</td>"
+  },
+  {
+    "file": "src/components/financials/FinancialReconciliationCenter.tsx",
+    "line": 551,
+    "expr": "t.amount.toLocaleString",
+    "fullLine": "<td className=\"px-4 py-4 text-xs text-slate-900 dark:text-white font-bold\">{t.amount.toLocaleString()}</td>"
+  },
+  {
+    "file": "src/components/financials/FinancialReportsView.tsx",
+    "line": 1311,
+    "expr": "executiveKPIs.totalGrossRevenue.toLocaleString",
+    "fullLine": "{executiveKPIs.totalGrossRevenue.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/financials/FinancialReportsView.tsx",
+    "line": 1324,
+    "expr": "executiveKPIs.totalOperatingExpenses.toLocaleString",
+    "fullLine": "{executiveKPIs.totalOperatingExpenses.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/financials/FinancialReportsView.tsx",
+    "line": 1337,
+    "expr": "executiveKPIs.netOperatingIncome.toLocaleString",
+    "fullLine": "{executiveKPIs.netOperatingIncome.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/financials/FinancialReportsView.tsx",
+    "line": 1375,
+    "expr": "executiveKPIs.bouncedChequesTotal.toLocaleString",
+    "fullLine": "{isAr ? `إجمالي المبالغ المتعثرة: ${executiveKPIs.bouncedChequesTotal.toLocaleString()} AED` : `Total defaulted: ${executiveKPIs.bouncedChequesTotal.toLocaleString()} AED`}"
+  },
+  {
+    "file": "src/components/financials/FinancialReportsView.tsx",
+    "line": 1375,
+    "expr": "executiveKPIs.bouncedChequesTotal.toLocaleString",
+    "fullLine": "{isAr ? `إجمالي المبالغ المتعثرة: ${executiveKPIs.bouncedChequesTotal.toLocaleString()} AED` : `Total defaulted: ${executiveKPIs.bouncedChequesTotal.toLocaleString()} AED`}"
+  },
+  {
+    "file": "src/components/financials/FinancialReportsView.tsx",
+    "line": 1566,
+    "expr": "group.totalDebit.toLocaleString",
+    "fullLine": "{group.totalDebit.toLocaleString(undefined, { minimumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/FinancialReportsView.tsx",
+    "line": 1569,
+    "expr": "group.totalCredit.toLocaleString",
+    "fullLine": "{group.totalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/FinancialReportsView.tsx",
+    "line": 1572,
+    "expr": "group.netBalance.toLocaleString",
+    "fullLine": "{group.netBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/FinancialReportsView.tsx",
+    "line": 1596,
+    "expr": "groupedResult.grandTotalDebit.toLocaleString",
+    "fullLine": "{groupedResult.grandTotalDebit.toLocaleString(undefined, { minimumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/FinancialReportsView.tsx",
+    "line": 1602,
+    "expr": "groupedResult.grandTotalCredit.toLocaleString",
+    "fullLine": "{groupedResult.grandTotalCredit.toLocaleString(undefined, { minimumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/FinancialReportsView.tsx",
+    "line": 1608,
+    "expr": "groupedResult.grandTotalNet.toLocaleString",
+    "fullLine": "{groupedResult.grandTotalNet.toLocaleString(undefined, { minimumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/FinancialReversalsView.tsx",
+    "line": 102,
+    "expr": "r.reversedAmount.toLocaleString",
+    "fullLine": "<div className=\"text-xs font-mono font-bold text-rose-600\">-{r.reversedAmount.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/financials/FinancialReversalsView.tsx",
+    "line": 128,
+    "expr": "selectedReversal.originalAmount.toLocaleString",
+    "fullLine": "{ labelAr: \"المبلغ الأصلي\", labelEn: \"Original Amount\", value: `AED ${selectedReversal.originalAmount.toLocaleString()}` },"
+  },
+  {
+    "file": "src/components/financials/FinancialReversalsView.tsx",
+    "line": 129,
+    "expr": "selectedReversal.reversedAmount.toLocaleString",
+    "fullLine": "{ labelAr: \"المبلغ الملغى\", labelEn: \"Reversed Amount\", value: `AED ${selectedReversal.reversedAmount.toLocaleString()}` },"
+  },
+  {
+    "file": "src/components/financials/FinancialReversalsView.tsx",
+    "line": 159,
+    "expr": "selectedReversal.originalAmount.toLocaleString",
+    "fullLine": "<div className=\"text-lg font-black text-slate-900 dark:text-white font-mono\">{selectedReversal.originalAmount.toLocaleString()} <span className=\"text-xs font-normal opacity-50\">AED</span></div>"
+  },
+  {
+    "file": "src/components/financials/FinancialReversalsView.tsx",
+    "line": 163,
+    "expr": "selectedReversal.reversedAmount.toLocaleString",
+    "fullLine": "<div className=\"text-lg font-black text-rose-600 font-mono\">-{selectedReversal.reversedAmount.toLocaleString()} <span className=\"text-xs font-normal opacity-50\">AED</span></div>"
+  },
+  {
+    "file": "src/components/financials/GeneralLedgerView.tsx",
+    "line": 219,
+    "expr": "stats.totalPostedDebit.toLocaleString",
+    "fullLine": "{stats.totalPostedDebit.toLocaleString(\"en-US\", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} AED"
+  },
+  {
+    "file": "src/components/financials/GeneralLedgerView.tsx",
+    "line": 236,
+    "expr": "stats.totalPostedCredit.toLocaleString",
+    "fullLine": "{stats.totalPostedCredit.toLocaleString(\"en-US\", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} AED"
+  },
+  {
+    "file": "src/components/financials/GeneralLedgerView.tsx",
+    "line": 491,
+    "expr": "je.totalDebit.toLocaleString",
+    "fullLine": "{je.totalDebit.toLocaleString(\"en-US\", { minimumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/GeneralLedgerView.tsx",
+    "line": 494,
+    "expr": "je.totalCredit.toLocaleString",
+    "fullLine": "{je.totalCredit.toLocaleString(\"en-US\", { minimumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/OfficePettyCashView.tsx",
+    "line": 534,
+    "expr": "activeMonthRecord.openingAmount.toLocaleString",
+    "fullLine": "{activeMonthRecord.openingAmount.toLocaleString()} <span className=\"text-sm font-normal\">AED</span>"
+  },
+  {
+    "file": "src/components/financials/OfficePettyCashView.tsx",
+    "line": 554,
+    "expr": "activeMonthRecord.totalExpenses.toLocaleString",
+    "fullLine": "{activeMonthRecord.totalExpenses.toLocaleString()} <span className=\"text-sm font-normal text-slate-500\">AED</span>"
+  },
+  {
+    "file": "src/components/financials/OfficePettyCashView.tsx",
+    "line": 574,
+    "expr": "activeMonthRecord.closingBalance.toLocaleString",
+    "fullLine": "{activeMonthRecord.closingBalance.toLocaleString()} <span className=\"text-sm font-normal text-slate-500\">AED</span>"
+  },
+  {
+    "file": "src/components/financials/OfficePettyCashView.tsx",
+    "line": 752,
+    "expr": "activeMonthRecord.openingAmount.toLocaleString",
+    "fullLine": "{ labelAr: \"الرصيد الافتتاحي\", labelEn: \"Opening Balance\", value: `AED ${activeMonthRecord.openingAmount.toLocaleString()}` },"
+  },
+  {
+    "file": "src/components/financials/OfficePettyCashView.tsx",
+    "line": 753,
+    "expr": "activeMonthRecord.totalExpenses.toLocaleString",
+    "fullLine": "{ labelAr: \"إجمالي المصروفات\", labelEn: \"Total Spent\", value: `AED ${activeMonthRecord.totalExpenses.toLocaleString()}` },"
+  },
+  {
+    "file": "src/components/financials/OfficePettyCashView.tsx",
+    "line": 754,
+    "expr": "activeMonthRecord.closingBalance.toLocaleString",
+    "fullLine": "{ labelAr: \"الرصيد المتبقي\", labelEn: \"Current Balance\", value: `AED ${activeMonthRecord.closingBalance.toLocaleString()}` },"
+  },
+  {
+    "file": "src/components/financials/OfficePettyCashView.tsx",
+    "line": 816,
+    "expr": "e.amount.toLocaleString",
+    "fullLine": "{e.amount.toLocaleString()} <span className=\"text-[10px] font-normal text-slate-400\">AED</span>"
+  },
+  {
+    "file": "src/components/financials/OfficePettyCashView.tsx",
+    "line": 881,
+    "expr": "computedMonthExpensesSum.toLocaleString",
+    "fullLine": "{isAr ? \"مجموع الصفحة:\" : \"Page Total:\"} {computedMonthExpensesSum.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/financials/OfficePettyCashView.tsx",
+    "line": 1403,
+    "expr": "activeMonthRecord?.openingAmount.toLocaleString",
+    "fullLine": "<span className=\"font-bold text-slate-900 dark:text-white\">{activeMonthRecord?.openingAmount.toLocaleString()} AED</span>"
+  },
+  {
+    "file": "src/components/financials/OfficePettyCashView.tsx",
+    "line": 1407,
+    "expr": "activeMonthRecord?.totalExpenses.toLocaleString",
+    "fullLine": "<span className=\"font-bold text-rose-600\">{activeMonthRecord?.totalExpenses.toLocaleString()} AED</span>"
+  },
+  {
+    "file": "src/components/financials/OfficePettyCashView.tsx",
+    "line": 1411,
+    "expr": "activeMonthRecord?.closingBalance.toLocaleString",
+    "fullLine": "<span className=\"text-emerald-600\">{activeMonthRecord?.closingBalance.toLocaleString()} AED</span>"
+  },
+  {
+    "file": "src/components/financials/OwnerPaymentVoucherModal.tsx",
+    "line": 254,
+    "expr": "netAmount.toLocaleString",
+    "fullLine": "AED {netAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/OwnerPaymentVoucherModal.tsx",
+    "line": 322,
+    "expr": "payableDetails.totalRentCollected.toLocaleString",
+    "fullLine": "{payableDetails.totalRentCollected.toLocaleString(undefined, { minimumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/OwnerPaymentVoucherModal.tsx",
+    "line": 331,
+    "expr": "payableDetails.totalOwnerCommissions.toLocaleString",
+    "fullLine": "- {payableDetails.totalOwnerCommissions.toLocaleString(undefined, { minimumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/OwnerPaymentVoucherModal.tsx",
+    "line": 341,
+    "expr": "payableDetails.totalOwnerExpenses.toLocaleString",
+    "fullLine": "- {payableDetails.totalOwnerExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/OwnerPaymentVoucherModal.tsx",
+    "line": 352,
+    "expr": "netAmount.toLocaleString",
+    "fullLine": "{netAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/OwnerPaymentVoucherModal.tsx",
+    "line": 363,
+    "expr": "netAmount.toLocaleString",
+    "fullLine": "AED {netAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/PeriodReconciliationModal.tsx",
+    "line": 312,
+    "expr": "report.totalCollections.toLocaleString",
+    "fullLine": "{report.totalCollections.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span className=\"text-[10px] font-normal text-slate-400\">{isAr ? \"د.إ\" : \"AED\"}</span>"
+  },
+  {
+    "file": "src/components/financials/PeriodReconciliationModal.tsx",
+    "line": 319,
+    "expr": "report.totalExpenses.toLocaleString",
+    "fullLine": "{report.totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span className=\"text-[10px] font-normal text-slate-400\">{isAr ? \"د.إ\" : \"AED\"}</span>"
+  },
+  {
+    "file": "src/components/financials/PeriodReconciliationModal.tsx",
+    "line": 326,
+    "expr": "report.totalOwnerTransfers.toLocaleString",
+    "fullLine": "{report.totalOwnerTransfers.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span className=\"text-[10px] font-normal text-slate-400\">{isAr ? \"د.إ\" : \"AED\"}</span>"
+  },
+  {
+    "file": "src/components/financials/PeriodReconciliationModal.tsx",
+    "line": 333,
+    "expr": "report.totalVat.toLocaleString",
+    "fullLine": "{report.totalVat.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span className=\"text-[10px] font-normal text-slate-400\">{isAr ? \"د.إ\" : \"AED\"}</span>"
+  },
+  {
+    "file": "src/components/financials/PeriodReconciliationModal.tsx",
+    "line": 340,
+    "expr": "report.totalOwnerPayable.toLocaleString",
+    "fullLine": "{report.totalOwnerPayable.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span className=\"text-[10px] font-normal text-slate-400\">{isAr ? \"د.إ\" : \"AED\"}</span>"
+  },
+  {
+    "file": "src/components/financials/PeriodReconciliationModal.tsx",
+    "line": 384,
+    "expr": "area.totalExpected.toLocaleString",
+    "fullLine": "? `المتوقع: ${area.totalExpected.toLocaleString('en-US', { minimumFractionDigits: 2 })} د.إ | الفعلي: ${area.totalActual.toLocaleString('en-US', { minimumFractionDigits: 2 })} د.إ`"
+  },
+  {
+    "file": "src/components/financials/PeriodReconciliationModal.tsx",
+    "line": 384,
+    "expr": "area.totalActual.toLocaleString",
+    "fullLine": "? `المتوقع: ${area.totalExpected.toLocaleString('en-US', { minimumFractionDigits: 2 })} د.إ | الفعلي: ${area.totalActual.toLocaleString('en-US', { minimumFractionDigits: 2 })} د.إ`"
+  },
+  {
+    "file": "src/components/financials/PeriodReconciliationModal.tsx",
+    "line": 385,
+    "expr": "area.totalExpected.toLocaleString",
+    "fullLine": ": `Expected: ${area.totalExpected.toLocaleString('en-US', { minimumFractionDigits: 2 })} AED | Actual: ${area.totalActual.toLocaleString('en-US', { minimumFractionDigits: 2 })} AED`}"
+  },
+  {
+    "file": "src/components/financials/PeriodReconciliationModal.tsx",
+    "line": 385,
+    "expr": "area.totalActual.toLocaleString",
+    "fullLine": ": `Expected: ${area.totalExpected.toLocaleString('en-US', { minimumFractionDigits: 2 })} AED | Actual: ${area.totalActual.toLocaleString('en-US', { minimumFractionDigits: 2 })} AED`}"
+  },
+  {
+    "file": "src/components/financials/PeriodReconciliationModal.tsx",
+    "line": 413,
+    "expr": "area.difference.toLocaleString",
+    "fullLine": "{Math.abs(area.difference) < 0.001 ? \"0.00\" : area.difference.toLocaleString('en-US', { minimumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/PeriodReconciliationModal.tsx",
+    "line": 430,
+    "expr": "area.totalExpected.toLocaleString",
+    "fullLine": "<span className=\"font-mono font-bold\">{area.totalExpected.toLocaleString('en-US', { minimumFractionDigits: 2 })} AED</span>"
+  },
+  {
+    "file": "src/components/financials/PeriodReconciliationModal.tsx",
+    "line": 434,
+    "expr": "area.totalActual.toLocaleString",
+    "fullLine": "<span className=\"font-mono font-bold\">{area.totalActual.toLocaleString('en-US', { minimumFractionDigits: 2 })} AED</span>"
+  },
+  {
+    "file": "src/components/financials/PeriodReconciliationModal.tsx",
+    "line": 439,
+    "expr": "area.difference.toLocaleString",
+    "fullLine": "{area.difference.toLocaleString('en-US', { minimumFractionDigits: 2 })} AED"
+  },
+  {
+    "file": "src/components/financials/PeriodReconciliationModal.tsx",
+    "line": 470,
+    "expr": "diff.difference.toLocaleString",
+    "fullLine": "{diff.difference > 0 && `Diff: ${diff.difference.toLocaleString('en-US', { minimumFractionDigits: 2 })} AED`}"
+  },
+  {
+    "file": "src/components/financials/PeriodReconciliationModal.tsx",
+    "line": 532,
+    "expr": "diff.difference.toLocaleString",
+    "fullLine": "{diff.difference.toLocaleString('en-US', { minimumFractionDigits: 2 })} AED"
+  },
+  {
+    "file": "src/components/financials/PeriodReconciliationModal.tsx",
+    "line": 612,
+    "expr": "activeCertification.totalCollections.toLocaleString",
+    "fullLine": "<span className=\"text-xs font-mono font-black text-slate-800 mt-0.5 block\">{activeCertification.totalCollections.toLocaleString()} AED</span>"
+  },
+  {
+    "file": "src/components/financials/PeriodReconciliationModal.tsx",
+    "line": 616,
+    "expr": "activeCertification.totalExpenses.toLocaleString",
+    "fullLine": "<span className=\"text-xs font-mono font-black text-slate-800 mt-0.5 block\">{activeCertification.totalExpenses.toLocaleString()} AED</span>"
+  },
+  {
+    "file": "src/components/financials/PeriodReconciliationModal.tsx",
+    "line": 620,
+    "expr": "activeCertification.totalOwnerTransfers.toLocaleString",
+    "fullLine": "<span className=\"text-xs font-mono font-black text-slate-800 mt-0.5 block\">{activeCertification.totalOwnerTransfers.toLocaleString()} AED</span>"
+  },
+  {
+    "file": "src/components/financials/PeriodReconciliationModal.tsx",
+    "line": 624,
+    "expr": "activeCertification.totalVat.toLocaleString",
+    "fullLine": "<span className=\"text-xs font-mono font-black text-slate-800 mt-0.5 block\">{activeCertification.totalVat.toLocaleString()} AED</span>"
+  },
+  {
+    "file": "src/components/financials/ProductionGovernanceCenterView.tsx",
+    "line": 485,
+    "expr": "reconciliation.totalGrossAdminFees.toLocaleString",
+    "fullLine": "{reconciliation.totalGrossAdminFees.toLocaleString(\"en-US\", { minimumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/PropertyExpensesView.tsx",
+    "line": 229,
+    "expr": "claimAmount?.toLocaleString",
+    "fullLine": "subLabel: `${isAr ? \"العقار:\" : \"Property:\"} ${propTitle} | ${isAr ? \"الوحدة:\" : \"Unit:\"} ${cUnit?.unitNumber || \"—\"} | ${isAr ? \"المطالبة:\" : \"Claim:\"} ${c.claimAmount?.toLocaleString()} AED`,"
+  },
+  {
+    "file": "src/components/financials/PropertyExpensesView.tsx",
+    "line": 248,
+    "expr": "m.totalCost.toLocaleString",
+    "fullLine": "subLabel: `${isAr ? \"التكلفة:\" : \"Cost:\"} ${m.totalCost.toLocaleString()} AED | ${isAr ? \"الحالة:\" : \"Status:\"} ${m.status}`,"
+  },
+  {
+    "file": "src/components/financials/PropertyExpensesView.tsx",
+    "line": 662,
+    "expr": "kpis.totalAll.toLocaleString",
+    "fullLine": "<div className=\"text-lg font-bold font-mono text-slate-900 mt-1\">{kpis.totalAll.toLocaleString()} AED</div>"
+  },
+  {
+    "file": "src/components/financials/PropertyExpensesView.tsx",
+    "line": 666,
+    "expr": "kpis.totalOwner.toLocaleString",
+    "fullLine": "<div className=\"text-lg font-bold font-mono text-emerald-600 mt-1\">{kpis.totalOwner.toLocaleString()} AED</div>"
+  },
+  {
+    "file": "src/components/financials/PropertyExpensesView.tsx",
+    "line": 670,
+    "expr": "kpis.totalTenant.toLocaleString",
+    "fullLine": "<div className=\"text-lg font-bold font-mono text-blue-600 mt-1\">{kpis.totalTenant.toLocaleString()} AED</div>"
+  },
+  {
+    "file": "src/components/financials/PropertyExpensesView.tsx",
+    "line": 674,
+    "expr": "kpis.totalOffice.toLocaleString",
+    "fullLine": "<div className=\"text-lg font-bold font-mono text-slate-600 mt-1\">{kpis.totalOffice.toLocaleString()} AED</div>"
+  },
+  {
+    "file": "src/components/financials/PropertyExpensesView.tsx",
+    "line": 854,
+    "expr": "exp.totalAmount.toLocaleString",
+    "fullLine": "{exp.totalAmount.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/financials/SaqrOfficeAccountView.tsx",
+    "line": 396,
+    "expr": "netOfficeBalance.toLocaleString",
+    "fullLine": "{isAr ? `${netOfficeBalance.toLocaleString()} درهم` : `AED ${netOfficeBalance.toLocaleString()}`}"
+  },
+  {
+    "file": "src/components/financials/SaqrOfficeAccountView.tsx",
+    "line": 396,
+    "expr": "netOfficeBalance.toLocaleString",
+    "fullLine": "{isAr ? `${netOfficeBalance.toLocaleString()} درهم` : `AED ${netOfficeBalance.toLocaleString()}`}"
+  },
+  {
+    "file": "src/components/financials/SaqrOfficeAccountView.tsx",
+    "line": 400,
+    "expr": "totalDeposits.toLocaleString",
+    "fullLine": "+{totalDeposits.toLocaleString()}"
+  },
+  {
+    "file": "src/components/financials/SaqrOfficeAccountView.tsx",
+    "line": 403,
+    "expr": "totalWithdrawals.toLocaleString",
+    "fullLine": "-{totalWithdrawals.toLocaleString()}"
+  },
+  {
+    "file": "src/components/financials/SaqrOfficeAccountView.tsx",
+    "line": 418,
+    "expr": "totalBouncedPenalties.toLocaleString",
+    "fullLine": "{isAr ? `${totalBouncedPenalties.toLocaleString()} درهم` : `AED ${totalBouncedPenalties.toLocaleString()}`}"
+  },
+  {
+    "file": "src/components/financials/SaqrOfficeAccountView.tsx",
+    "line": 418,
+    "expr": "totalBouncedPenalties.toLocaleString",
+    "fullLine": "{isAr ? `${totalBouncedPenalties.toLocaleString()} درهم` : `AED ${totalBouncedPenalties.toLocaleString()}`}"
+  },
+  {
+    "file": "src/components/financials/SaqrOfficeAccountView.tsx",
+    "line": 431,
+    "expr": "totalAdminFees.toLocaleString",
+    "fullLine": "{isAr ? `${totalAdminFees.toLocaleString()} درهم` : `AED ${totalAdminFees.toLocaleString()}`}"
+  },
+  {
+    "file": "src/components/financials/SaqrOfficeAccountView.tsx",
+    "line": 431,
+    "expr": "totalAdminFees.toLocaleString",
+    "fullLine": "{isAr ? `${totalAdminFees.toLocaleString()} درهم` : `AED ${totalAdminFees.toLocaleString()}`}"
+  },
+  {
+    "file": "src/components/financials/SaqrOfficeAccountView.tsx",
+    "line": 444,
+    "expr": "totalCleaningGuard.toLocaleString",
+    "fullLine": "{isAr ? `${totalCleaningGuard.toLocaleString()} درهم` : `AED ${totalCleaningGuard.toLocaleString()}`}"
+  },
+  {
+    "file": "src/components/financials/SaqrOfficeAccountView.tsx",
+    "line": 444,
+    "expr": "totalCleaningGuard.toLocaleString",
+    "fullLine": "{isAr ? `${totalCleaningGuard.toLocaleString()} درهم` : `AED ${totalCleaningGuard.toLocaleString()}`}"
+  },
+  {
+    "file": "src/components/financials/SaqrOfficeAccountView.tsx",
+    "line": 457,
+    "expr": "totalWithdrawals.toLocaleString",
+    "fullLine": "{isAr ? `${totalWithdrawals.toLocaleString()} درهم` : `AED ${totalWithdrawals.toLocaleString()}`}"
+  },
+  {
+    "file": "src/components/financials/SaqrOfficeAccountView.tsx",
+    "line": 457,
+    "expr": "totalWithdrawals.toLocaleString",
+    "fullLine": "{isAr ? `${totalWithdrawals.toLocaleString()} درهم` : `AED ${totalWithdrawals.toLocaleString()}`}"
+  },
+  {
+    "file": "src/components/financials/SaqrOfficeAccountView.tsx",
+    "line": 576,
+    "expr": "tx.amount.toLocaleString",
+    "fullLine": "{tx.type === \"DEPOSIT\" ? \"+\" : \"-\"} AED {tx.amount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/financials/SaqrOfficeAccountView.tsx",
+    "line": 580,
+    "expr": "tx.netRevenue.toLocaleString",
+    "fullLine": "<span>{isAr ? \"الصافي:\" : \"Net:\"} {tx.netRevenue.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/financials/SaqrOfficeAccountView.tsx",
+    "line": 581,
+    "expr": "tx.vatAmount.toLocaleString",
+    "fullLine": "<span>{isAr ? \"ضريبة:\" : \"VAT:\"} {tx.vatAmount.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/financials/VatManagementView.tsx",
+    "line": 237,
+    "expr": "totalOutputVat.toLocaleString",
+    "fullLine": "AED {totalOutputVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/VatManagementView.tsx",
+    "line": 250,
+    "expr": "totalTaxableBase.toLocaleString",
+    "fullLine": "AED {totalTaxableBase.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/VatManagementView.tsx",
+    "line": 263,
+    "expr": "totalGrossAmount.toLocaleString",
+    "fullLine": "AED {totalGrossAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/financials/VatManagementView.tsx",
+    "line": 337,
+    "expr": "row.grossAmount.toLocaleString",
+    "fullLine": "<td className=\"px-4 py-3 font-bold text-slate-800\">{row.grossAmount.toLocaleString()} AED</td>"
+  },
+  {
+    "file": "src/components/financials/VatManagementView.tsx",
+    "line": 338,
+    "expr": "row.taxableAmount.toLocaleString",
+    "fullLine": "<td className=\"px-4 py-3 text-emerald-700\">{row.taxableAmount.toLocaleString()} AED</td>"
+  },
+  {
+    "file": "src/components/financials/VatManagementView.tsx",
+    "line": 340,
+    "expr": "row.outputVatAmount.toLocaleString",
+    "fullLine": "<td className=\"px-4 py-3 font-bold text-indigo-700\">{row.outputVatAmount.toLocaleString()} AED</td>"
+  },
+  {
+    "file": "src/components/financials/VatManagementView.tsx",
+    "line": 357,
+    "expr": "totalGrossAmount.toLocaleString",
+    "fullLine": "<td className=\"px-4 py-3 font-mono text-slate-900\">{totalGrossAmount.toLocaleString()} AED</td>"
+  },
+  {
+    "file": "src/components/financials/VatManagementView.tsx",
+    "line": 358,
+    "expr": "totalTaxableBase.toLocaleString",
+    "fullLine": "<td className=\"px-4 py-3 font-mono text-emerald-800\">{totalTaxableBase.toLocaleString()} AED</td>"
+  },
+  {
+    "file": "src/components/financials/VatManagementView.tsx",
+    "line": 361,
+    "expr": "totalOutputVat.toLocaleString",
+    "fullLine": "{totalOutputVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} AED"
+  },
+  {
+    "file": "src/components/leases/DeferredPaymentsTab.tsx",
+    "line": 137,
+    "expr": "collectionAmount.toLocaleString",
+    "fullLine": "? `تم تحصيل مبلغ ${collectionAmount.toLocaleString()} درهم بنجاح وإصدار سند قبض إلكتروني رقم #${res.receipt?.receiptNumber}.`"
+  },
+  {
+    "file": "src/components/leases/DeferredPaymentsTab.tsx",
+    "line": 191,
+    "expr": "totalDeferredAmount.toLocaleString",
+    "fullLine": "{totalDeferredAmount.toLocaleString()} <span className=\"text-xs text-slate-400 font-normal\">AED</span>"
+  },
+  {
+    "file": "src/components/leases/DeferredPaymentsTab.tsx",
+    "line": 200,
+    "expr": "totalOutstandingAmount.toLocaleString",
+    "fullLine": "{totalOutstandingAmount.toLocaleString()} <span className=\"text-xs text-amber-700 font-normal\">AED</span>"
+  },
+  {
+    "file": "src/components/leases/DeferredPaymentsTab.tsx",
+    "line": 209,
+    "expr": "totalCollectedAmount.toLocaleString",
+    "fullLine": "{totalCollectedAmount.toLocaleString()} <span className=\"text-xs text-emerald-700 font-normal\">AED</span>"
+  },
+  {
+    "file": "src/components/leases/LeaseRenewalsTab.tsx",
+    "line": 164,
+    "expr": "totalRenewedValue.toLocaleString",
+    "fullLine": "{totalRenewedValue.toLocaleString()} <span className=\"text-xs text-slate-300 font-normal\">AED</span>"
+  },
+  {
+    "file": "src/components/leases/LeaseRenewalsTab.tsx",
+    "line": 387,
+    "expr": "item.amount.toLocaleString",
+    "fullLine": "{item.amount.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/leases/LeaseTerminationModal.tsx",
+    "line": 256,
+    "expr": "validationResult.remainingFutureContractValue.toLocaleString",
+    "fullLine": "notes: `غرامة فسخ مبكر 30% لعقد #${lease.leaseNumber} (القيمة المتبقية: AED ${validationResult.remainingFutureContractValue.toLocaleString()})`,"
+  },
+  {
+    "file": "src/components/leases/LeaseTerminationModal.tsx",
+    "line": 415,
+    "expr": "validationResult.remainingFutureContractValue.toLocaleString",
+    "fullLine": "AED {validationResult.remainingFutureContractValue.toLocaleString()}"
+  },
+  {
+    "file": "src/components/leases/LeaseTerminationModal.tsx",
+    "line": 427,
+    "expr": "validationResult.calculatedEarlyTerminationFee.toLocaleString",
+    "fullLine": "AED {validationResult.calculatedEarlyTerminationFee.toLocaleString()}"
+  },
+  {
+    "file": "src/components/leases/LeaseTerminationModal.tsx",
+    "line": 579,
+    "expr": "validationResult.totalOutstandingObligations.toLocaleString",
+    "fullLine": "AED {validationResult.totalOutstandingObligations.toLocaleString()}"
+  },
+  {
+    "file": "src/components/leases/LeaseTerminationModal.tsx",
+    "line": 594,
+    "expr": "item.amount.toLocaleString",
+    "fullLine": "AED {item.amount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 762,
+    "expr": "scheduleTotal.toLocaleString",
+    "fullLine": "? `مجموع الدفعات (${scheduleTotal.toLocaleString()} درهم) لا يطابق إجمالي قيمة العقد الجديد (${Number(totalContractValue || 0).toLocaleString()} درهم) لمدة ${durationYears} ${durationYears === 1 ? \"سنة\" : \"سنوات\"}. الفارق: ${(totalContractValue - scheduleTotal).toLocaleString()} درهم`"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 763,
+    "expr": "scheduleTotal.toLocaleString",
+    "fullLine": ": `Schedule sum (${scheduleTotal.toLocaleString()} AED) does not match total contract value (${Number(totalContractValue || 0).toLocaleString()} AED) for ${durationYears} year(s). Difference: ${(totalContractValue - scheduleTotal).toLocaleString()} AED`"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 1399,
+    "expr": "amt.toLocaleString",
+    "fullLine": "+{amt.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 1454,
+    "expr": "rentDifference.toLocaleString",
+    "fullLine": "{rentDifference.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 1613,
+    "expr": "finalTotal.toLocaleString",
+    "fullLine": "<span className=\"font-mono text-emerald-900\">AED {finalTotal.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 1617,
+    "expr": "finalVat.toLocaleString",
+    "fullLine": "<span className=\"font-mono text-amber-900\">AED {finalVat.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 1621,
+    "expr": "finalNet.toLocaleString",
+    "fullLine": "<span className=\"font-mono text-emerald-900\">AED {finalNet.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 1789,
+    "expr": "finalTotal.toLocaleString",
+    "fullLine": "<span className=\"font-mono text-emerald-900\">AED {finalTotal.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 1793,
+    "expr": "finalVat.toLocaleString",
+    "fullLine": "<span className=\"font-mono text-amber-900\">AED {finalVat.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 1797,
+    "expr": "finalNet.toLocaleString",
+    "fullLine": "<span className=\"font-mono text-emerald-900\">AED {finalNet.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 2258,
+    "expr": "totalContractValue.toLocaleString",
+    "fullLine": "? `مجموع الدفعات يطابق إجمالي قيمة العقد (${totalContractValue.toLocaleString()} درهم) لمدة ${durationYears} ${durationYears === 1 ? \"سنة\" : \"سنوات\"}`"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 2259,
+    "expr": "totalContractValue.toLocaleString",
+    "fullLine": ": `Schedule matches total contract value (${totalContractValue.toLocaleString()} AED) for ${durationYears} year(s)`"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 2261,
+    "expr": "scheduleTotal.toLocaleString",
+    "fullLine": "? `تنبيه: مجموع الدفعات (${scheduleTotal.toLocaleString()} درهم) لا يطابق إجمالي قيمة العقد (${totalContractValue.toLocaleString()} درهم) لمدة ${durationYears} ${durationYears === 1 ? \"سنة\" : \"سنوات\"}`"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 2261,
+    "expr": "totalContractValue.toLocaleString",
+    "fullLine": "? `تنبيه: مجموع الدفعات (${scheduleTotal.toLocaleString()} درهم) لا يطابق إجمالي قيمة العقد (${totalContractValue.toLocaleString()} درهم) لمدة ${durationYears} ${durationYears === 1 ? \"سنة\" : \"سنوات\"}`"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 2262,
+    "expr": "scheduleTotal.toLocaleString",
+    "fullLine": ": `Warning: Installments (${scheduleTotal.toLocaleString()} AED) do not match total contract value (${totalContractValue.toLocaleString()} AED)`}"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 2262,
+    "expr": "totalContractValue.toLocaleString",
+    "fullLine": ": `Warning: Installments (${scheduleTotal.toLocaleString()} AED) do not match total contract value (${totalContractValue.toLocaleString()} AED)`}"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 2268,
+    "expr": "scheduleTotal.toLocaleString",
+    "fullLine": "<span className=\"font-black\">{scheduleTotal.toLocaleString()} AED</span>"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 2272,
+    "expr": "newAnnualRent.toLocaleString",
+    "fullLine": "{isRtl ? `السنوي: ${newAnnualRent.toLocaleString()} د.إ` : `Annual: ${newAnnualRent.toLocaleString()} AED`}"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 2272,
+    "expr": "newAnnualRent.toLocaleString",
+    "fullLine": "{isRtl ? `السنوي: ${newAnnualRent.toLocaleString()} د.إ` : `Annual: ${newAnnualRent.toLocaleString()} AED`}"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 2556,
+    "expr": "ocrWarning.currentAmount.toLocaleString",
+    "fullLine": "{ocrWarning.currentAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} AED"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 2566,
+    "expr": "ocrWarning.extractedAmount.toLocaleString",
+    "fullLine": "{ocrWarning.extractedAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} AED"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 2609,
+    "expr": "ocrWarning.extractedAmount.toLocaleString",
+    "fullLine": "? `استخدام مبلغ الشيك (${ocrWarning.extractedAmount.toLocaleString()} درهم)`"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 2610,
+    "expr": "ocrWarning.extractedAmount.toLocaleString",
+    "fullLine": ": `Use Scanned Amount (${ocrWarning.extractedAmount.toLocaleString()} AED)`}"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 2635,
+    "expr": "ocrWarning.currentAmount.toLocaleString",
+    "fullLine": "? `الاحتفاظ بقيمة القسط (${ocrWarning.currentAmount.toLocaleString()} درهم)`"
+  },
+  {
+    "file": "src/components/leases/RenewalView.tsx",
+    "line": 2636,
+    "expr": "ocrWarning.currentAmount.toLocaleString",
+    "fullLine": ": `Keep Installment Amount (${ocrWarning.currentAmount.toLocaleString()} AED)`}"
+  },
+  {
+    "file": "src/components/maintenance/MaintenanceDetailsModal.tsx",
+    "line": 639,
+    "expr": "request.totalCost.toLocaleString",
+    "fullLine": "{ labelAr: \"إجمالي التكلفة\", labelEn: \"Total Cost\", value: `AED ${request.totalCost.toLocaleString()}` },"
+  },
+  {
+    "file": "src/components/master/ContractPaymentCenterModal.tsx",
+    "line": 275,
+    "expr": "totalAdvanceToAllocate.toLocaleString",
+    "fullLine": "? `تم تسوية وتوزيع ${totalAdvanceToAllocate.toLocaleString()} درهم بنجاح!`"
+  },
+  {
+    "file": "src/components/master/ContractPaymentCenterModal.tsx",
+    "line": 276,
+    "expr": "totalAdvanceToAllocate.toLocaleString",
+    "fullLine": ": `Successfully liquidated and allocated ${totalAdvanceToAllocate.toLocaleString()} AED!`"
+  },
+  {
+    "file": "src/components/master/ContractPaymentCenterModal.tsx",
+    "line": 324,
+    "expr": "totalUnallocatedAdvance.toLocaleString",
+    "fullLine": "{totalUnallocatedAdvance.toLocaleString()}"
+  },
+  {
+    "file": "src/components/master/ContractPaymentCenterModal.tsx",
+    "line": 506,
+    "expr": "unallocated.toLocaleString",
+    "fullLine": "{language === \"ar\" ? \"غير موزع: \" : \"Unallocated: \"} {unallocated.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/ContractPaymentCenterModal.tsx",
+    "line": 515,
+    "expr": "a.max.toLocaleString",
+    "fullLine": "<div className=\"text-[9px] text-slate-400\">Max: {a.max.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/master/ContractPaymentCenterModal.tsx",
+    "line": 579,
+    "expr": "inst.amount.toLocaleString",
+    "fullLine": "+ Inst #{inst.installmentNumber} ({inst.amount.toLocaleString()})"
+  },
+  {
+    "file": "src/components/master/ContractPaymentCenterModal.tsx",
+    "line": 593,
+    "expr": "chq.outstanding.toLocaleString",
+    "fullLine": "+ Chq {chq.chequeNumber} ({chq.outstanding.toLocaleString()})"
+  },
+  {
+    "file": "src/components/master/ContractPaymentCenterModal.tsx",
+    "line": 605,
+    "expr": "comm.outstandingBalance.toLocaleString",
+    "fullLine": "+ Fee {comm.partyType} ({comm.outstandingBalance.toLocaleString()})"
+  },
+  {
+    "file": "src/components/master/ContractPaymentCenterModal.tsx",
+    "line": 651,
+    "expr": "totalUnallocatedAdvance.toLocaleString",
+    "fullLine": "AED {totalUnallocatedAdvance.toLocaleString()}"
+  },
+  {
+    "file": "src/components/master/ContractPaymentCenterModal.tsx",
+    "line": 684,
+    "expr": "a.max.toLocaleString",
+    "fullLine": "<div className=\"text-[9px] text-slate-400\">Max: {a.max.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/master/ContractPaymentCenterModal.tsx",
+    "line": 733,
+    "expr": "inst.amount.toLocaleString",
+    "fullLine": "+ Inst #{inst.installmentNumber} ({inst.amount.toLocaleString()})"
+  },
+  {
+    "file": "src/components/master/ContractPaymentCenterModal.tsx",
+    "line": 745,
+    "expr": "chq.outstanding.toLocaleString",
+    "fullLine": "+ Chq {chq.chequeNumber} ({chq.outstanding.toLocaleString()})"
+  },
+  {
+    "file": "src/components/master/ContractPaymentCenterModal.tsx",
+    "line": 762,
+    "expr": "comm.outstandingBalance.toLocaleString",
+    "fullLine": "+ Comm {comm.partyType} ({comm.outstandingBalance.toLocaleString()})"
+  },
+  {
+    "file": "src/components/master/ContractPaymentCenterModal.tsx",
+    "line": 830,
+    "expr": "col.amountEntered.toLocaleString",
+    "fullLine": "AED {col.amountEntered.toLocaleString()}"
+  },
+  {
+    "file": "src/components/master/ContractPaymentCenterModal.tsx",
+    "line": 870,
+    "expr": "inst.amount.toLocaleString",
+    "fullLine": "<div className=\"font-mono font-bold text-slate-700\">AED {inst.amount.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/master/Lease360Workspace.tsx",
+    "line": 370,
+    "expr": "financialSummary.annualRent.toLocaleString",
+    "fullLine": "{financialSummary.annualRent.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Lease360Workspace.tsx",
+    "line": 380,
+    "expr": "financialSummary.totalCollected.toLocaleString",
+    "fullLine": "{financialSummary.totalCollected.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Lease360Workspace.tsx",
+    "line": 390,
+    "expr": "financialSummary.balanceRemaining.toLocaleString",
+    "fullLine": "{financialSummary.balanceRemaining.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Lease360Workspace.tsx",
+    "line": 1027,
+    "expr": "lease.securityDepositSettlement.totalHeldAmount.toLocaleString",
+    "fullLine": "{lease.securityDepositSettlement.totalHeldAmount.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Lease360Workspace.tsx",
+    "line": 1033,
+    "expr": "lease.securityDepositSettlement.totalDeductions.toLocaleString",
+    "fullLine": "{lease.securityDepositSettlement.totalDeductions.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Lease360Workspace.tsx",
+    "line": 1039,
+    "expr": "lease.securityDepositSettlement.netRefundAmount.toLocaleString",
+    "fullLine": "{lease.securityDepositSettlement.netRefundAmount.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Lease360Workspace.tsx",
+    "line": 1119,
+    "expr": "h.amount.toLocaleString",
+    "fullLine": "{h.amount.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Lease360Workspace.tsx",
+    "line": 1436,
+    "expr": "totalDed.toLocaleString",
+    "fullLine": "{isAr ? `إجمالي الخصومات: AED ${totalDed.toLocaleString()}` : `Total Deductions: AED ${totalDed.toLocaleString()}`}"
+  },
+  {
+    "file": "src/components/master/Lease360Workspace.tsx",
+    "line": 1436,
+    "expr": "totalDed.toLocaleString",
+    "fullLine": "{isAr ? `إجمالي الخصومات: AED ${totalDed.toLocaleString()}` : `Total Deductions: AED ${totalDed.toLocaleString()}`}"
+  },
+  {
+    "file": "src/components/master/Lease360Workspace.tsx",
+    "line": 1440,
+    "expr": "netRefund.toLocaleString",
+    "fullLine": "{netRefund.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/LeaseEditorModal.tsx",
+    "line": 1760,
+    "expr": "annualRent?.toLocaleString",
+    "fullLine": "subLabel: `${(u.unitType || u.type || \"\").replace(/_/g, \" \")} • AED ${u.annualRent?.toLocaleString() || 0}${isCurrentContractUnit ? ` • ${language === \"ar\" ? \"الوحدة المرتبطة بهذا العقد\" : \"Linked to this lease\"}` : \"\"}`,"
+  },
+  {
+    "file": "src/components/master/LeaseEditorModal.tsx",
+    "line": 3318,
+    "expr": "summary.amount.toLocaleString",
+    "fullLine": "<span className=\"font-bold text-emerald-800\">AED {summary.amount.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/master/LeaseEditorModal.tsx",
+    "line": 3322,
+    "expr": "summary.vatAmount.toLocaleString",
+    "fullLine": "<span className=\"font-bold text-amber-800\">AED {summary.vatAmount.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/master/LeaseEditorModal.tsx",
+    "line": 3326,
+    "expr": "summary.netRevenue.toLocaleString",
+    "fullLine": "<span className=\"font-black text-emerald-900\">AED {summary.netRevenue.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/master/LeaseEditorModal.tsx",
+    "line": 3490,
+    "expr": "summary.amount.toLocaleString",
+    "fullLine": "<span className=\"font-bold text-emerald-800\">AED {summary.amount.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/master/LeaseEditorModal.tsx",
+    "line": 3494,
+    "expr": "summary.vatAmount.toLocaleString",
+    "fullLine": "<span className=\"font-bold text-amber-800\">AED {summary.vatAmount.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/master/LeaseEditorModal.tsx",
+    "line": 3498,
+    "expr": "summary.netRevenue.toLocaleString",
+    "fullLine": "<span className=\"font-black text-emerald-900\">AED {summary.netRevenue.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 275,
+    "expr": "amount.toLocaleString",
+    "fullLine": "? `المبلغ المدخل (${amount.toLocaleString()} درهم) يتجاوز إجمالي الرصيد المتبقي المستحق على عقد الإيجار (${leaseInstallmentsRemaining.toLocaleString()} درهم). يرجى تعديل المبلغ ليتوافق مع التزامات العقد ولتجنب التحصيل الزائد.`"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 275,
+    "expr": "leaseInstallmentsRemaining.toLocaleString",
+    "fullLine": "? `المبلغ المدخل (${amount.toLocaleString()} درهم) يتجاوز إجمالي الرصيد المتبقي المستحق على عقد الإيجار (${leaseInstallmentsRemaining.toLocaleString()} درهم). يرجى تعديل المبلغ ليتوافق مع التزامات العقد ولتجنب التحصيل الزائد.`"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 276,
+    "expr": "amount.toLocaleString",
+    "fullLine": ": `The entered payment amount (${amount.toLocaleString()} AED) exceeds the total outstanding balance of the lease contract (${leaseInstallmentsRemaining.toLocaleString()} AED). Please adjust the amount to prevent over-collection.`"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 276,
+    "expr": "leaseInstallmentsRemaining.toLocaleString",
+    "fullLine": ": `The entered payment amount (${amount.toLocaleString()} AED) exceeds the total outstanding balance of the lease contract (${leaseInstallmentsRemaining.toLocaleString()} AED). Please adjust the amount to prevent over-collection.`"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 412,
+    "expr": "totalAdvanceToAllocate.toLocaleString",
+    "fullLine": "? `تم تسوية وتوزيع ${totalAdvanceToAllocate.toLocaleString()} درهم بنجاح!`"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 413,
+    "expr": "totalAdvanceToAllocate.toLocaleString",
+    "fullLine": ": `Successfully liquidated and allocated ${totalAdvanceToAllocate.toLocaleString()} AED!`"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 589,
+    "expr": "amountToCollect.toLocaleString",
+    "fullLine": "alert(isAr ? `تم تسجيل التحصيل الجزئي بقيمة AED ${amountToCollect.toLocaleString()} بنجاح!` : `Partial collection of AED ${amountToCollect} recorded successfully!`);"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 729,
+    "expr": "inst.amount.toLocaleString",
+    "fullLine": "`- المبلغ: AED ${inst.amount.toLocaleString()}\\n` +"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 739,
+    "expr": "inst.amount.toLocaleString",
+    "fullLine": "`- Amount: AED ${inst.amount.toLocaleString()}\\n` +"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 1094,
+    "expr": "totalCollected.toLocaleString",
+    "fullLine": "AED {totalCollected.toLocaleString()}"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 1104,
+    "expr": "totalOutstanding.toLocaleString",
+    "fullLine": "AED {totalOutstanding.toLocaleString()}"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 1107,
+    "expr": "bouncedAmount.toLocaleString",
+    "fullLine": "{bouncedCount} {isAr ? \"شيكات مرتجعة بقيمة\" : \"bounced cheques worth\"} AED {bouncedAmount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 1117,
+    "expr": "securityDeposit?.toLocaleString",
+    "fullLine": "Security Deposit: AED {lease.securityDeposit?.toLocaleString() || \"0\"}"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 1319,
+    "expr": "inst.amount.toLocaleString",
+    "fullLine": "<td className=\"py-3 px-4 font-bold text-slate-900 font-mono\">AED {inst.amount.toLocaleString()}</td>"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 1340,
+    "expr": "fin.totalAmount.toLocaleString",
+    "fullLine": "<span>{isAr ? `محصل بالكامل — AED ${fin.totalAmount.toLocaleString()}` : `Fully Collected — AED ${fin.totalAmount.toLocaleString()}`}</span>"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 1340,
+    "expr": "fin.totalAmount.toLocaleString",
+    "fullLine": "<span>{isAr ? `محصل بالكامل — AED ${fin.totalAmount.toLocaleString()}` : `Fully Collected — AED ${fin.totalAmount.toLocaleString()}`}</span>"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 1410,
+    "expr": "totalUnallocatedAdvance.toLocaleString",
+    "fullLine": "AED {totalUnallocatedAdvance.toLocaleString()}"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 1620,
+    "expr": "unallocated.toLocaleString",
+    "fullLine": "{isAr ? \"غير موزع: \" : \"Unallocated: \"} {unallocated.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 1630,
+    "expr": "a.max.toLocaleString",
+    "fullLine": "<div className=\"text-[9px] text-slate-400 font-mono\">Max: {a.max.toLocaleString()} AED</div>"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 1679,
+    "expr": "inst.amount.toLocaleString",
+    "fullLine": "+ Inst #{inst.installmentNumber} ({inst.amount.toLocaleString()})"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 1691,
+    "expr": "chq.outstanding.toLocaleString",
+    "fullLine": "+ Chq {chq.chequeNumber} ({chq.outstanding.toLocaleString()})"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 1703,
+    "expr": "comm.outstandingBalance.toLocaleString",
+    "fullLine": "+ Fee {comm.partyType} ({comm.outstandingBalance.toLocaleString()})"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 1751,
+    "expr": "totalUnallocatedAdvance.toLocaleString",
+    "fullLine": "AED {totalUnallocatedAdvance.toLocaleString()}"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 1785,
+    "expr": "a.max.toLocaleString",
+    "fullLine": "<div className=\"text-[9px] text-slate-400 font-mono\">Max: {a.max.toLocaleString()} AED</div>"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 1835,
+    "expr": "inst.amount.toLocaleString",
+    "fullLine": "+ Inst #{inst.installmentNumber} ({inst.amount.toLocaleString()})"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 1847,
+    "expr": "chq.outstanding.toLocaleString",
+    "fullLine": "+ Chq {chq.chequeNumber} ({chq.outstanding.toLocaleString()})"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 1864,
+    "expr": "comm.outstandingBalance.toLocaleString",
+    "fullLine": "+ Fee {comm.partyType} ({comm.outstandingBalance.toLocaleString()})"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 1914,
+    "expr": "inst.amount.toLocaleString",
+    "fullLine": "<div className=\"font-mono font-bold text-xs text-slate-900\">AED {inst.amount.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 1967,
+    "expr": "col.amountEntered.toLocaleString",
+    "fullLine": "AED {col.amountEntered.toLocaleString()}"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 2061,
+    "expr": "ownerComm.totalCommissionAmount.toLocaleString",
+    "fullLine": "<span className=\"font-bold font-mono text-slate-900\">AED {ownerComm.totalCommissionAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 2129,
+    "expr": "tenantComm.totalCommissionAmount.toLocaleString",
+    "fullLine": "<span className=\"font-bold font-mono text-slate-900\">AED {tenantComm.totalCommissionAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 2436,
+    "expr": "chq.amount.toLocaleString",
+    "fullLine": "<td className=\"py-3 px-4 font-mono font-bold text-slate-900\">AED {chq.amount.toLocaleString()}</td>"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 2512,
+    "expr": "safetyConfirmData.fin.totalAmount.toLocaleString",
+    "fullLine": "AED {safetyConfirmData.fin.totalAmount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 2518,
+    "expr": "safetyConfirmData.fin.collected.toLocaleString",
+    "fullLine": "AED {safetyConfirmData.fin.collected.toLocaleString()}"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 2524,
+    "expr": "safetyConfirmData.fin.remaining.toLocaleString",
+    "fullLine": "AED {safetyConfirmData.fin.remaining.toLocaleString()}"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 2623,
+    "expr": "partialModalData.fin.totalAmount.toLocaleString",
+    "fullLine": "<span className=\"font-bold text-slate-800\">AED {partialModalData.fin.totalAmount.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 2627,
+    "expr": "partialModalData.fin.collected.toLocaleString",
+    "fullLine": "<span className=\"font-bold text-emerald-600\">AED {partialModalData.fin.collected.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 2631,
+    "expr": "partialModalData.fin.remaining.toLocaleString",
+    "fullLine": "<span className=\"font-extrabold text-amber-700\">AED {partialModalData.fin.remaining.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 2643,
+    "expr": "partialModalData.fin.collected.toLocaleString",
+    "fullLine": "<span className=\"text-emerald-700 font-extrabold text-xs font-mono\">AED {partialModalData.fin.collected.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 2652,
+    "expr": "partialModalData.fin.remaining.toLocaleString",
+    "fullLine": "<span className=\"text-rose-700 font-extrabold text-xs font-mono\">AED {partialModalData.fin.remaining.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 2717,
+    "expr": "partialModalData.deferredAmount.toLocaleString",
+    "fullLine": "{isAr ? `تأجيل المبلغ المتبقي (AED ${partialModalData.deferredAmount.toLocaleString()}) كالتزام مستقل` : `Defer remaining amount (AED ${partialModalData.deferredAmount.toLocaleString()}) as promise`}"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 2717,
+    "expr": "partialModalData.deferredAmount.toLocaleString",
+    "fullLine": "{isAr ? `تأجيل المبلغ المتبقي (AED ${partialModalData.deferredAmount.toLocaleString()}) كالتزام مستقل` : `Defer remaining amount (AED ${partialModalData.deferredAmount.toLocaleString()}) as promise`}"
+  },
+  {
+    "file": "src/components/master/LeaseWorkspaceModal.tsx",
+    "line": 2828,
+    "expr": "deferWholeModalData.fin.remaining.toLocaleString",
+    "fullLine": "AED {deferWholeModalData.fin.remaining.toLocaleString()}"
+  },
+  {
+    "file": "src/components/master/Owner360Workspace.tsx",
+    "line": 243,
+    "expr": "payableDetails.currentPayableBalance.toLocaleString",
+    "fullLine": "{ labelAr: \"صافي المستحق\", labelEn: \"Net Payable\", value: `AED ${payableDetails.currentPayableBalance.toLocaleString()}` },"
+  },
+  {
+    "file": "src/components/master/Owner360Workspace.tsx",
+    "line": 338,
+    "expr": "payableDetails.grossRentCollected.toLocaleString",
+    "fullLine": "{payableDetails.grossRentCollected.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Owner360Workspace.tsx",
+    "line": 346,
+    "expr": "payableDetails.totalDeductions.toLocaleString",
+    "fullLine": "{payableDetails.totalDeductions.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Owner360Workspace.tsx",
+    "line": 356,
+    "expr": "payableDetails.totalTransferred.toLocaleString",
+    "fullLine": "{payableDetails.totalTransferred.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Owner360Workspace.tsx",
+    "line": 366,
+    "expr": "payableDetails.currentPayableBalance.toLocaleString",
+    "fullLine": "{payableDetails.currentPayableBalance.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Owner360Workspace.tsx",
+    "line": 749,
+    "expr": "trsf.amount.toLocaleString",
+    "fullLine": "{trsf.amount.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/OwnerOccupancyAnalytics.tsx",
+    "line": 356,
+    "expr": "stats.lifetimeRevenue.toLocaleString",
+    "fullLine": "{stats.lifetimeRevenue.toLocaleString()} <span className=\"text-xs font-normal text-slate-400\">AED</span>"
+  },
+  {
+    "file": "src/components/master/Property360Workspace.tsx",
+    "line": 460,
+    "expr": "financialSummary.grossCollected.toLocaleString",
+    "fullLine": "{financialSummary.grossCollected.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Property360Workspace.tsx",
+    "line": 470,
+    "expr": "financialSummary.totalExpenses.toLocaleString",
+    "fullLine": "{financialSummary.totalExpenses.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Property360Workspace.tsx",
+    "line": 480,
+    "expr": "financialSummary.netOperatingIncome.toLocaleString",
+    "fullLine": "{financialSummary.netOperatingIncome.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Property360Workspace.tsx",
+    "line": 785,
+    "expr": "financialSummary.grossCollected.toLocaleString",
+    "fullLine": "{financialSummary.grossCollected.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Property360Workspace.tsx",
+    "line": 792,
+    "expr": "financialSummary.totalExpenses.toLocaleString",
+    "fullLine": "{financialSummary.totalExpenses.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Property360Workspace.tsx",
+    "line": 799,
+    "expr": "financialSummary.netOperatingIncome.toLocaleString",
+    "fullLine": "{financialSummary.netOperatingIncome.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Property360Workspace.tsx",
+    "line": 990,
+    "expr": "trsf.amount.toLocaleString",
+    "fullLine": "{trsf.amount.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/PropertyOccupancyAnalytics.tsx",
+    "line": 312,
+    "expr": "stats.lifetimeRevenue.toLocaleString",
+    "fullLine": "{stats.lifetimeRevenue.toLocaleString()} <span className=\"text-xs font-normal text-slate-400\">AED</span>"
+  },
+  {
+    "file": "src/components/master/PropertyOperationsDashboard.tsx",
+    "line": 349,
+    "expr": "item.previousRent.toLocaleString",
+    "fullLine": "{item.previousRent.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/PropertyOperationsDashboard.tsx",
+    "line": 352,
+    "expr": "item.estimatedLostRevenue.toLocaleString",
+    "fullLine": "{item.estimatedLostRevenue.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Tenant360Workspace.tsx",
+    "line": 372,
+    "expr": "financialSummary.totalContractValue.toLocaleString",
+    "fullLine": "{financialSummary.totalContractValue.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Tenant360Workspace.tsx",
+    "line": 380,
+    "expr": "financialSummary.totalPaid.toLocaleString",
+    "fullLine": "{financialSummary.totalPaid.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Tenant360Workspace.tsx",
+    "line": 388,
+    "expr": "financialSummary.outstandingBalance.toLocaleString",
+    "fullLine": "{financialSummary.outstandingBalance.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Tenant360Workspace.tsx",
+    "line": 396,
+    "expr": "financialSummary.totalBouncedAmount.toLocaleString",
+    "fullLine": "{financialSummary.totalBouncedAmount.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Tenant360Workspace.tsx",
+    "line": 701,
+    "expr": "chq.amount.toLocaleString",
+    "fullLine": "{chq.amount.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/TenantDetailsDrawer.tsx",
+    "line": 222,
+    "expr": "totalChequesAmount.toLocaleString",
+    "fullLine": "AED {totalChequesAmount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/master/TenantDetailsDrawer.tsx",
+    "line": 232,
+    "expr": "totalBouncedAmount.toLocaleString",
+    "fullLine": "AED {totalBouncedAmount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/master/TenantDetailsDrawer.tsx",
+    "line": 242,
+    "expr": "totalOutstanding.toLocaleString",
+    "fullLine": "AED {totalOutstanding.toLocaleString()}"
+  },
+  {
+    "file": "src/components/master/TenantDetailsDrawer.tsx",
+    "line": 252,
+    "expr": "totalCollected.toLocaleString",
+    "fullLine": "AED {totalCollected.toLocaleString()}"
+  },
+  {
+    "file": "src/components/master/TenantDetailsDrawer.tsx",
+    "line": 421,
+    "expr": "chq.amount.toLocaleString",
+    "fullLine": "<span className=\"font-bold text-slate-900 font-mono\">AED {chq.amount.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/master/TenantDetailsDrawer.tsx",
+    "line": 424,
+    "expr": "chq.outstanding.toLocaleString",
+    "fullLine": "(Outstanding: AED {chq.outstanding.toLocaleString()})"
+  },
+  {
+    "file": "src/components/master/TenantDetailsDrawer.tsx",
+    "line": 465,
+    "expr": "cas.claimAmount.toLocaleString",
+    "fullLine": "<strong className=\"text-slate-900 font-mono\">AED {cas.claimAmount.toLocaleString()}</strong>"
+  },
+  {
+    "file": "src/components/master/TenantOccupancyAnalytics.tsx",
+    "line": 323,
+    "expr": "stats.totalRentCommitted.toLocaleString",
+    "fullLine": "{stats.totalRentCommitted.toLocaleString()} <span className=\"text-xs font-normal text-slate-400\">AED</span>"
+  },
+  {
+    "file": "src/components/master/TenantOccupancyAnalytics.tsx",
+    "line": 326,
+    "expr": "stats.avgRent.toLocaleString",
+    "fullLine": "{isAr ? \"متوسط العقد:\" : \"Avg lease:\"} {stats.avgRent.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Unit360Workspace.tsx",
+    "line": 420,
+    "expr": "vacancyInfo.estimatedLostRevenue.toLocaleString",
+    "fullLine": "{vacancyInfo.estimatedLostRevenue.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/Unit360Workspace.tsx",
+    "line": 590,
+    "expr": "chq.amount.toLocaleString",
+    "fullLine": "{chq.amount.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/master/UnitOccupancyAnalytics.tsx",
+    "line": 329,
+    "expr": "stats.lifetimeRevenue.toLocaleString",
+    "fullLine": "{stats.lifetimeRevenue.toLocaleString()}{\" \"}"
+  },
+  {
+    "file": "src/components/operations/OperationalControlCenter.tsx",
+    "line": 925,
+    "expr": "currentReportResult.totalAmount.toLocaleString",
+    "fullLine": "{currentReportResult.totalAmount && ` • ${isAr ? \"الإجمالي المالي:\" : \"Total:\"} ${currentReportResult.totalAmount.toLocaleString()} AED`}"
+  },
+  {
+    "file": "src/components/operations/OperationalControlCenter.tsx",
+    "line": 957,
+    "expr": "grpData.subtotalAmount.toLocaleString",
+    "fullLine": "{grpData.subtotalAmount ? ` • ${grpData.subtotalAmount.toLocaleString()} AED` : \"\"}"
+  },
+  {
+    "file": "src/components/operations/OperationalControlCenter.tsx",
+    "line": 986,
+    "expr": "row.amount.toLocaleString",
+    "fullLine": "{row.amount !== undefined ? `${row.amount.toLocaleString()} AED` : \"---\"}"
+  },
+  {
+    "file": "src/components/printing/ChequeEnvelopePrintModal.tsx",
+    "line": 88,
+    "expr": "inst.amount.toLocaleString",
+    "fullLine": "const amtStr = inst.amount ? `${inst.amount.toLocaleString()} AED` : \"\";"
+  },
+  {
+    "file": "src/components/printing/ChequeEnvelopePrintModal.tsx",
+    "line": 138,
+    "expr": "inst.amount.toLocaleString",
+    "fullLine": "const amtStr = inst.amount ? `${inst.amount.toLocaleString()} AED` : \"\";"
+  },
+  {
+    "file": "src/components/printing/ChequeEnvelopePrintModal.tsx",
+    "line": 294,
+    "expr": "item.amount.toLocaleString",
+    "fullLine": "{item.amount.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/printing/ChequesBundlePrintModal.tsx",
+    "line": 195,
+    "expr": "totalActiveAmount.toLocaleString",
+    "fullLine": "AED {totalActiveAmount.toLocaleString()} ({activeCheques.length})"
+  },
+  {
+    "file": "src/components/printing/ChequesBundlePrintModal.tsx",
+    "line": 229,
+    "expr": "chq.amount.toLocaleString",
+    "fullLine": "{chq.amount.toLocaleString()} AED"
+  },
+  {
+    "file": "src/components/printing/ChequesBundlePrintModal.tsx",
+    "line": 280,
+    "expr": "c.amount.toLocaleString",
+    "fullLine": "<td className=\"p-2 font-bold\">{c.amount.toLocaleString()} AED</td>"
+  },
+  {
+    "file": "src/components/printing/ReceiptAndVoucherPrintingCenter.tsx",
+    "line": 404,
+    "expr": "stats.totalAll.toLocaleString",
+    "fullLine": "<div className=\"text-xl sm:text-2xl font-black font-mono\">{stats.totalAll.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/printing/ReceiptAndVoucherPrintingCenter.tsx",
+    "line": 428,
+    "expr": "stats.totalReceipts.toLocaleString",
+    "fullLine": "<div className=\"text-xl sm:text-2xl font-black font-mono\">{stats.totalReceipts.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/printing/ReceiptAndVoucherPrintingCenter.tsx",
+    "line": 452,
+    "expr": "stats.totalSecurityDeposits.toLocaleString",
+    "fullLine": "<div className=\"text-xl sm:text-2xl font-black font-mono\">{stats.totalSecurityDeposits.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/printing/ReceiptAndVoucherPrintingCenter.tsx",
+    "line": 476,
+    "expr": "stats.totalOwnerVouchers.toLocaleString",
+    "fullLine": "<div className=\"text-xl sm:text-2xl font-black font-mono\">{stats.totalOwnerVouchers.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/printing/ReceiptAndVoucherPrintingCenter.tsx",
+    "line": 500,
+    "expr": "stats.totalExpenses.toLocaleString",
+    "fullLine": "<div className=\"text-xl sm:text-2xl font-black font-mono\">{stats.totalExpenses.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/printing/ReceiptAndVoucherPrintingCenter.tsx",
+    "line": 524,
+    "expr": "stats.totalPettyCash.toLocaleString",
+    "fullLine": "<div className=\"text-xl sm:text-2xl font-black font-mono\">{stats.totalPettyCash.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/printing/ReceiptAndVoucherPrintingCenter.tsx",
+    "line": 548,
+    "expr": "stats.totalCheques.toLocaleString",
+    "fullLine": "<div className=\"text-xl sm:text-2xl font-black font-mono\">{stats.totalCheques.toLocaleString()}</div>"
+  },
+  {
+    "file": "src/components/printing/ReceiptAndVoucherPrintingCenter.tsx",
+    "line": 712,
+    "expr": "filteredDocuments.length.toLocaleString",
+    "fullLine": "{filteredDocuments.length.toLocaleString()} {isAr ? \"سند\" : \"docs\"}"
+  },
+  {
+    "file": "src/components/printing/ReceiptAndVoucherPrintingCenter.tsx",
+    "line": 812,
+    "expr": "doc.amount.toLocaleString",
+    "fullLine": "AED {doc.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/printing/UnifiedDocumentPreviewModal.tsx",
+    "line": 456,
+    "expr": "doc.amount.toLocaleString",
+    "fullLine": "AED {doc.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/printing/UnifiedDocumentPreviewModal.tsx",
+    "line": 526,
+    "expr": "item.amount.toLocaleString",
+    "fullLine": "AED {item.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/printing/UnifiedDocumentPreviewModal.tsx",
+    "line": 536,
+    "expr": "doc.amount.toLocaleString",
+    "fullLine": "AED {doc.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/printing/UnifiedDocumentPreviewModal.tsx",
+    "line": 547,
+    "expr": "doc.amount.toLocaleString",
+    "fullLine": "AED {doc.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}"
+  },
+  {
+    "file": "src/components/public/PublicReceiptVerification.tsx",
+    "line": 128,
+    "expr": "data.amount.toLocaleString",
+    "fullLine": "<span className=\"text-sm font-mono font-black text-slate-900\">AED {data.amount.toLocaleString()}</span>"
+  },
+  {
+    "file": "src/components/reports/ReportsView.tsx",
+    "line": 431,
+    "expr": "totalBounced.toLocaleString",
+    "fullLine": "<td className=\"py-3 px-4 font-mono font-bold text-rose-700\">AED {totalBounced.toLocaleString()}</td>"
+  },
+  {
+    "file": "src/components/reports/ReportsView.tsx",
+    "line": 432,
+    "expr": "totalCollected.toLocaleString",
+    "fullLine": "<td className=\"py-3 px-4 font-mono font-bold text-emerald-700\">AED {totalCollected.toLocaleString()}</td>"
+  },
+  {
+    "file": "src/components/reports/ReportsView.tsx",
+    "line": 841,
+    "expr": "totalBounced.toLocaleString",
+    "fullLine": "<p className={`text-xs font-black text-slate-900 mt-1 ${isEditMode ? \"outline-dashed outline-1 outline-amber-400\" : \"\"}`} contentEditable={isEditMode} suppressContentEditableWarning>AED {totalBounced.toLocaleString()}</p>"
+  },
+  {
+    "file": "src/components/reports/ReportsView.tsx",
+    "line": 845,
+    "expr": "totalRecovered.toLocaleString",
+    "fullLine": "<p className={`text-xs font-black text-emerald-800 mt-1 ${isEditMode ? \"outline-dashed outline-1 outline-amber-400\" : \"\"}`} contentEditable={isEditMode} suppressContentEditableWarning>AED {totalRecovered.toLocaleString()}</p>"
+  },
+  {
+    "file": "src/components/reports/ReportsView.tsx",
+    "line": 849,
+    "expr": "totalOutstanding.toLocaleString",
+    "fullLine": "<p className={`text-xs font-black text-rose-700 mt-1 ${isEditMode ? \"outline-dashed outline-1 outline-amber-400\" : \"\"}`} contentEditable={isEditMode} suppressContentEditableWarning>AED {totalOutstanding.toLocaleString()}</p>"
+  },
+  {
+    "file": "src/components/reports/ReportsView.tsx",
+    "line": 869,
+    "expr": "totalBounced.toLocaleString",
+    "fullLine": "<p className={`text-xs font-black text-slate-900 mt-1 ${isEditMode ? \"outline-dashed outline-1 outline-amber-400\" : \"\"}`} contentEditable={isEditMode} suppressContentEditableWarning>AED {totalBounced.toLocaleString()}</p>"
+  },
+  {
+    "file": "src/components/reports/ReportsView.tsx",
+    "line": 873,
+    "expr": "totalCollected.toLocaleString",
+    "fullLine": "<p className={`text-xs font-black text-emerald-800 mt-1 ${isEditMode ? \"outline-dashed outline-1 outline-amber-400\" : \"\"}`} contentEditable={isEditMode} suppressContentEditableWarning>AED {totalCollected.toLocaleString()}</p>"
+  },
+  {
+    "file": "src/components/reports/ReportsView.tsx",
+    "line": 891,
+    "expr": "totalClaim.toLocaleString",
+    "fullLine": "<p className={`text-xs font-black text-slate-900 mt-1 ${isEditMode ? \"outline-dashed outline-1 outline-amber-400\" : \"\"}`} contentEditable={isEditMode} suppressContentEditableWarning>AED {totalClaim.toLocaleString()}</p>"
+  },
+  {
+    "file": "src/components/reports/ReportsView.tsx",
+    "line": 895,
+    "expr": "totalPaid.toLocaleString",
+    "fullLine": "<p className={`text-xs font-black text-emerald-800 mt-1 ${isEditMode ? \"outline-dashed outline-1 outline-amber-400\" : \"\"}`} contentEditable={isEditMode} suppressContentEditableWarning>AED {totalPaid.toLocaleString()}</p>"
+  },
+  {
+    "file": "src/components/reports/ReportsView.tsx",
+    "line": 899,
+    "expr": "totalPending.toLocaleString",
+    "fullLine": "<p className={`text-xs font-black text-purple-900 mt-1 ${isEditMode ? \"outline-dashed outline-1 outline-amber-400\" : \"\"}`} contentEditable={isEditMode} suppressContentEditableWarning>AED {totalPending.toLocaleString()}</p>"
+  },
+  {
+    "file": "src/components/reports/ReportsView.tsx",
+    "line": 921,
+    "expr": "totalDefault.toLocaleString",
+    "fullLine": "<p className={`text-xs font-black text-rose-900 mt-1 ${isEditMode ? \"outline-dashed outline-1 outline-amber-400\" : \"\"}`} contentEditable={isEditMode} suppressContentEditableWarning>AED {totalDefault.toLocaleString()}</p>"
+  },
+  {
+    "file": "src/components/reports/ReportsView.tsx",
+    "line": 989,
+    "expr": "totalBounced.toLocaleString",
+    "fullLine": "<td className={`py-2 px-3 border-e border-slate-200 font-mono ${isEditMode ? \"outline-dashed outline-1 outline-amber-400 bg-amber-50/30\" : \"\"}`} contentEditable={isEditMode} suppressContentEditableWarning>AED {totalBounced.toLocaleString()}</td>"
+  },
+  {
+    "file": "src/components/reports/ReportsView.tsx",
+    "line": 990,
+    "expr": "totalCollected.toLocaleString",
+    "fullLine": "<td className={`py-2 px-3 border-e border-slate-200 font-mono text-emerald-800 ${isEditMode ? \"outline-dashed outline-1 outline-amber-400 bg-amber-50/30\" : \"\"}`} contentEditable={isEditMode} suppressContentEditableWarning>AED {totalCollected.toLocaleString()}</td>"
+  },
+  {
+    "file": "src/components/settings/FirebaseConnectionTester.tsx",
+    "line": 277,
+    "expr": "val.toLocaleString",
+    "fullLine": "return `${val.toLocaleString()} ${sizes[i]}`;"
+  },
+  {
+    "file": "src/components/settings/FirebaseConnectionTester.tsx",
+    "line": 1345,
+    "expr": "storageBreakdown.totalDocsCount.toLocaleString",
+    "fullLine": "{storageBreakdown.totalDocsCount.toLocaleString()}"
+  },
+  {
+    "file": "src/components/settings/FirebaseConnectionTester.tsx",
+    "line": 1374,
+    "expr": "cat.count.toLocaleString",
+    "fullLine": "{cat.count.toLocaleString()} {language === \"ar\" ? \"سجل / مستند\" : \"records\"}"
+  },
+  {
+    "file": "src/components/settings/FirebaseConnectionTester.tsx",
+    "line": 1414,
+    "expr": "DAILY_READ_QUOTA.toLocaleString",
+    "fullLine": "{DAILY_READ_QUOTA.toLocaleString()}"
+  },
+  {
+    "file": "src/components/settings/FirebaseConnectionTester.tsx",
+    "line": 1426,
+    "expr": "DAILY_WRITE_QUOTA.toLocaleString",
+    "fullLine": "{DAILY_WRITE_QUOTA.toLocaleString()}"
+  },
+  {
+    "file": "src/components/settings/FirebaseConnectionTester.tsx",
+    "line": 1438,
+    "expr": "DAILY_DELETE_QUOTA.toLocaleString",
+    "fullLine": "{DAILY_DELETE_QUOTA.toLocaleString()}"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 2177,
+    "expr": "totalOutstanding.toLocaleString",
+    "fullLine": "if (totalOutstanding > 0) factors.push(`AED ${totalOutstanding.toLocaleString()} currently outstanding`);"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 3171,
+    "expr": "newRenewal.newAnnualRent.toLocaleString",
+    "fullLine": "`تم إنشاء طلب تجديد لعقد الإيجار #${newRenewal.originalLeaseNumber} بإيجار جديد ${newRenewal.newAnnualRent.toLocaleString()} درهم (نسبة الزيادة: ${(newRenewal.increasePercentage || 0).toFixed(2)}%) وحالته قيد الاعتماد.`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 4358,
+    "expr": "previousValues.annualRent.toLocaleString",
+    "fullLine": "? `تعديل معتمد للقيمة الإيجارية للعقد #${lease.leaseNumber} (القيمة السابقة: ${previousValues.annualRent.toLocaleString()}، القيمة الجديدة: ${newAnnualRent.toLocaleString()}، الفارق: ${Math.abs(rentDiff).toLocaleString()} AED). ملاحظات: ${reviewNotes || mod.modificationReason || \"اعتماد تعديل مالي\"}`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 4358,
+    "expr": "newAnnualRent.toLocaleString",
+    "fullLine": "? `تعديل معتمد للقيمة الإيجارية للعقد #${lease.leaseNumber} (القيمة السابقة: ${previousValues.annualRent.toLocaleString()}، القيمة الجديدة: ${newAnnualRent.toLocaleString()}، الفارق: ${Math.abs(rentDiff).toLocaleString()} AED). ملاحظات: ${reviewNotes || mod.modificationReason || \"اعتماد تعديل مالي\"}`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 4359,
+    "expr": "previousValues.annualRent.toLocaleString",
+    "fullLine": ": `Approved rent adjustment for lease #${lease.leaseNumber} (Original: ${previousValues.annualRent.toLocaleString()}, New: ${newAnnualRent.toLocaleString()}, Diff: ${Math.abs(rentDiff).toLocaleString()} AED). Notes: ${reviewNotes || mod.modificationReason || \"Approved financial modification\"}`,"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 4359,
+    "expr": "newAnnualRent.toLocaleString",
+    "fullLine": ": `Approved rent adjustment for lease #${lease.leaseNumber} (Original: ${previousValues.annualRent.toLocaleString()}, New: ${newAnnualRent.toLocaleString()}, Diff: ${Math.abs(rentDiff).toLocaleString()} AED). Notes: ${reviewNotes || mod.modificationReason || \"Approved financial modification\"}`,"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 4379,
+    "expr": "previousValues.securityDeposit.toLocaleString",
+    "fullLine": "? `تعديل معتمد لمبلغ تأمين الصيانة المسترد للعقد #${lease.leaseNumber} (القيمة السابقة: ${previousValues.securityDeposit.toLocaleString()}، القيمة الجديدة: ${newSecurityDeposit.toLocaleString()}، الفارق: ${Math.abs(depositDiff).toLocaleString()} AED - أمانة مستردة)`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 4379,
+    "expr": "newSecurityDeposit.toLocaleString",
+    "fullLine": "? `تعديل معتمد لمبلغ تأمين الصيانة المسترد للعقد #${lease.leaseNumber} (القيمة السابقة: ${previousValues.securityDeposit.toLocaleString()}، القيمة الجديدة: ${newSecurityDeposit.toLocaleString()}، الفارق: ${Math.abs(depositDiff).toLocaleString()} AED - أمانة مستردة)`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 4380,
+    "expr": "previousValues.securityDeposit.toLocaleString",
+    "fullLine": ": `Approved refundable security deposit adjustment for lease #${lease.leaseNumber} (Original: ${previousValues.securityDeposit.toLocaleString()}, New: ${newSecurityDeposit.toLocaleString()}, Diff: ${Math.abs(depositDiff).toLocaleString()} AED - refundable holding)`,"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 4380,
+    "expr": "newSecurityDeposit.toLocaleString",
+    "fullLine": ": `Approved refundable security deposit adjustment for lease #${lease.leaseNumber} (Original: ${previousValues.securityDeposit.toLocaleString()}, New: ${newSecurityDeposit.toLocaleString()}, Diff: ${Math.abs(depositDiff).toLocaleString()} AED - refundable holding)`,"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 4502,
+    "expr": "newDef.deferredAmount.toLocaleString",
+    "fullLine": "`تم تسجيل دفعة مؤجلة بمبلغ ${newDef.deferredAmount.toLocaleString()} AED للمستأجر ${newDef.tenantName} تستحق بتاريخ ${newDef.expectedDueDate}.`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 4561,
+    "expr": "params.amount.toLocaleString",
+    "fullLine": "`تم تحصيل مبلغ ${params.amount.toLocaleString()} AED من الدفعة المؤجلة #${target.deferredNumber} للمستأجر ${target.tenantName} (${params.paymentMethod}).`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 4659,
+    "expr": "params.amount.toLocaleString",
+    "fullLine": "? `مبلغ التحصيل (${params.amount.toLocaleString()} د.إ) يتجاوز الرصيد المستحق الفعلي (${(tenantBalance.outstanding || 0).toLocaleString()} د.إ).`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 4660,
+    "expr": "params.amount.toLocaleString",
+    "fullLine": ": `Collection amount (${params.amount.toLocaleString()} AED) exceeds the actual outstanding balance (${(tenantBalance.outstanding || 0).toLocaleString()} AED).`,"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 5182,
+    "expr": "params.amount.toLocaleString",
+    "fullLine": "`Recorded ${params.paymentMethod} collection of ${params.amount.toLocaleString()} AED for Lease Contract ${leaseObj?.leaseNumber || params.leaseId}. ` +"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 5183,
+    "expr": "totalAllocated.toLocaleString",
+    "fullLine": "`Allocated ${totalAllocated.toLocaleString()} AED across ${params.allocations.length} targets.`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 5296,
+    "expr": "rec.amountEntered.toLocaleString",
+    "fullLine": "const msgContent = `سند قبض إلكتروني #${rec.receiptNumber}\\nالمستلم من: ${rec.payerName}\\nالمبلغ: ${rec.amountEntered.toLocaleString()} درهم\\nالتاريخ: ${rec.paymentDate}\\nطريقة الدفع: ${rec.paymentMethod}\\nشركة صقر الإمارات للعقارات.`;"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 5320,
+    "expr": "chq.amount.toLocaleString",
+    "fullLine": "let msgContent = `عزيزي ${tenant?.nameAr || tenant?.nameEn || \"المستأجر\"}، تذكير بموعد استحقاق الشيك رقم ${chq.chequeNumber} المسحوب على بنك ${chq.bankName} بمبلغ ${chq.amount.toLocaleString()} درهم وتاريخ استحقاقه ${chq.dueDate} (${daysText}). يرجى التأكد من توفر الرصيد الكافي.`;"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 5326,
+    "expr": "chq.amount.toLocaleString",
+    "fullLine": ".replace(/{chequeAmount}/g, chq.amount.toLocaleString())"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 5404,
+    "expr": "def.outstandingAmount.toLocaleString",
+    "fullLine": "? `تذكير: نود تذكيركم بموعد سداد الدفعة المؤجلة بمبلغ ${def.outstandingAmount.toLocaleString()} درهم المستحقة في تاريخ ${def.expectedDueDate} لعقد الإيجار #${def.leaseNumber || \"\"}.`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 5405,
+    "expr": "def.outstandingAmount.toLocaleString",
+    "fullLine": ": `تنبيه متابعة: الدفعة المؤجلة #${def.deferredNumber} للمستأجر ${def.tenantName} بمبلغ ${def.outstandingAmount.toLocaleString()} درهم مستحقة بتاريخ ${def.expectedDueDate}. يرجى المتابعة والتحصيل.`;"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 5570,
+    "expr": "newCheque.amount.toLocaleString",
+    "fullLine": "`Created cheque record #${newCheque.chequeNumber} for AED ${newCheque.amount.toLocaleString()} (Status: ${initialStatus})`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 6014,
+    "expr": "totalReplacementAmount.toLocaleString",
+    "fullLine": "? `مجموع الشيكات البديلة (${totalReplacementAmount.toLocaleString()} درهم) لا يطابق رصيد الشيك الأصلي (${targetOutstanding.toLocaleString()} درهم).`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 6014,
+    "expr": "targetOutstanding.toLocaleString",
+    "fullLine": "? `مجموع الشيكات البديلة (${totalReplacementAmount.toLocaleString()} درهم) لا يطابق رصيد الشيك الأصلي (${targetOutstanding.toLocaleString()} درهم).`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 6015,
+    "expr": "totalReplacementAmount.toLocaleString",
+    "fullLine": ": `Total replacement cheques (AED ${totalReplacementAmount.toLocaleString()}) does not match original cheque outstanding balance (AED ${targetOutstanding.toLocaleString()}).`,"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 6015,
+    "expr": "targetOutstanding.toLocaleString",
+    "fullLine": ": `Total replacement cheques (AED ${totalReplacementAmount.toLocaleString()}) does not match original cheque outstanding balance (AED ${targetOutstanding.toLocaleString()}).`,"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 6255,
+    "expr": "origCheque.amount.toLocaleString",
+    "fullLine": "`Replaced cheque #${origCheque.chequeNumber} (AED ${origCheque.amount.toLocaleString()}) with ${finalReplacementCheques.length} replacement cheque(s): ${finalReplacementCheques.map(c => '#' + c.chequeNumber).join(', ')}`,"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 6384,
+    "expr": "target.amount.toLocaleString",
+    "fullLine": "`Cancelled cheque #${target.chequeNumber} (AED ${target.amount.toLocaleString()}) - Type: ${params.cancellationType}`,"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 6483,
+    "expr": "newCheque.amount.toLocaleString",
+    "fullLine": "`Created bounced cheque record #${newCheque.chequeNumber} for AED ${newCheque.amount.toLocaleString()} from lease installment #${installmentNumber}`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 6766,
+    "expr": "appliedAmount.toLocaleString",
+    "fullLine": "notes: `تحصيل مالي: تم تطبيق ${appliedAmount.toLocaleString()} درهم بموجب السند #${receiptNumber}. المتبقي: ${Math.max(0, newOutstanding).toLocaleString()} درهم.`,"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 6875,
+    "expr": "result.appliedAmount.toLocaleString",
+    "fullLine": "logAudit(\"FINANCIAL_PAYMENT\", \"COLLECTION\", result.receipt.id, `Receipt #${result.receipt.receiptNumber}`, `Collected ${result.appliedAmount.toLocaleString()} AED against Cheque #${result.updatedChqWithAudit.chequeNumber}.`);"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 7052,
+    "expr": "totalAmount.toLocaleString",
+    "fullLine": "`Created ${resultObligation.partyType} commission obligation of AED ${totalAmount.toLocaleString()} for Lease ${resultObligation.leaseId} (Key: ${deterministicDocId})`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 7372,
+    "expr": "amount.toLocaleString",
+    "fullLine": "`تحصيل رسوم إدارية بمبلغ ${amount.toLocaleString()} AED (${paymentMethod})`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 7485,
+    "expr": "matchedDeposit.amount.toLocaleString",
+    "fullLine": "? `مبلغ حافظة الإيداع (${matchedDeposit.amount.toLocaleString()} د.إ) أقل من الرسوم الإدارية المستحقة (${expectedAmount.toLocaleString()} د.إ).`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 7485,
+    "expr": "expectedAmount.toLocaleString",
+    "fullLine": "? `مبلغ حافظة الإيداع (${matchedDeposit.amount.toLocaleString()} د.إ) أقل من الرسوم الإدارية المستحقة (${expectedAmount.toLocaleString()} د.إ).`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 7486,
+    "expr": "matchedDeposit.amount.toLocaleString",
+    "fullLine": ": `Daily deposit amount (${matchedDeposit.amount.toLocaleString()} AED) is less than the due administrative fee (${expectedAmount.toLocaleString()} AED).`,"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 7486,
+    "expr": "expectedAmount.toLocaleString",
+    "fullLine": ": `Daily deposit amount (${matchedDeposit.amount.toLocaleString()} AED) is less than the due administrative fee (${expectedAmount.toLocaleString()} AED).`,"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 7671,
+    "expr": "amountToCollect.toLocaleString",
+    "fullLine": "`تسوية مالية وإيداع رسوم إدارية بمبلغ ${amountToCollect.toLocaleString()} AED (${verificationStatus || \"VERIFIED\"}) [${effectivePaymentMethod}]`,"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 7914,
+    "expr": "amount.toLocaleString",
+    "fullLine": "`تحصيل أمانات تأمين صيانة مستأجر لعقد #${lease.leaseNumber} بمبلغ AED ${amount.toLocaleString()} (حساب 2020 - سند #${receiptNumber})`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 8415,
+    "expr": "existing.totalCommissionAmount.toLocaleString",
+    "fullLine": "`تم إلغاء الرسوم الإدارية بقيمة ${existing.totalCommissionAmount.toLocaleString()} AED. السبب: ${reason}`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 8553,
+    "expr": "collection.amountEntered.toLocaleString",
+    "fullLine": "`Allocated payment receipt #${collection.receiptNumber} (${collection.amountEntered.toLocaleString()} AED) across ${params.allocations.length} target(s)`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 8707,
+    "expr": "targetCollection.amountEntered.toLocaleString",
+    "fullLine": "`Reversed payment receipt #${targetCollection.receiptNumber} (${targetCollection.amountEntered.toLocaleString()} AED). Reason: ${reason}`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 8784,
+    "expr": "totalAvailableAdvance.toLocaleString",
+    "fullLine": "? `رصيد الدفعة المقدمة غير كافٍ. المتاح: ${totalAvailableAdvance.toLocaleString()} درهم، المطلوب توزيعه: ${totalToAllocate.toLocaleString()} درهم.`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 8784,
+    "expr": "totalToAllocate.toLocaleString",
+    "fullLine": "? `رصيد الدفعة المقدمة غير كافٍ. المتاح: ${totalAvailableAdvance.toLocaleString()} درهم، المطلوب توزيعه: ${totalToAllocate.toLocaleString()} درهم.`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 8785,
+    "expr": "totalAvailableAdvance.toLocaleString",
+    "fullLine": ": `Insufficient unallocated advance balance. Available: ${totalAvailableAdvance.toLocaleString()} AED, Requested: ${totalToAllocate.toLocaleString()} AED.`,"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 8785,
+    "expr": "totalToAllocate.toLocaleString",
+    "fullLine": ": `Insufficient unallocated advance balance. Available: ${totalAvailableAdvance.toLocaleString()} AED, Requested: ${totalToAllocate.toLocaleString()} AED.`,"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 8915,
+    "expr": "totalToAllocate.toLocaleString",
+    "fullLine": "`تم تسوية دفعة مقدمة غير موزعة بمبلغ ${totalToAllocate.toLocaleString()} AED لعقد الإيجار #${leaseObj.leaseNumber} وتوزيعها على الالتزامات.`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 8993,
+    "expr": "targetAlloc.allocatedAmount.toLocaleString",
+    "fullLine": "`Reversed allocation of AED ${targetAlloc.allocatedAmount.toLocaleString()} to target ${targetAlloc.targetId}. Reason: ${reason}`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 9018,
+    "expr": "newAdj.amount.toLocaleString",
+    "fullLine": "`Recorded financial ${newAdj.adjustmentType} adjustment of AED ${newAdj.amount.toLocaleString()} for ${newAdj.targetEntityType} (${newAdj.targetEntityId}). Reason: ${newAdj.reason}`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 9232,
+    "expr": "data.amountPromised.toLocaleString",
+    "fullLine": "logAudit(\"CREATE\", \"PAYMENT_PROMISE\", id, `Promise #${promiseNumber}`, `Tenant promised to pay AED ${data.amountPromised.toLocaleString()} on ${data.expectedPaymentDate}`);"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 9269,
+    "expr": "amount.toLocaleString",
+    "fullLine": "logAudit(\"UPDATE\", \"PAYMENT_PROMISE\", promiseId, `Promise #${existing.promiseNumber}`, `Fulfilled promise with AED ${amount.toLocaleString()}. Status: ${updated.status}`);"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 9371,
+    "expr": "data.amount.toLocaleString",
+    "fullLine": "`تم إصدار تحويل للمالك بمبلغ ${data.amount.toLocaleString()} AED (${data.paymentMethod}) - حالة: ${newTransfer.status}`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 9749,
+    "expr": "existing.amount.toLocaleString",
+    "fullLine": "entityName: `تحويل مالك #${existing.transferNumber} بمبلغ ${existing.amount.toLocaleString()} AED`,"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 9781,
+    "expr": "existing.amount.toLocaleString",
+    "fullLine": "`تم إثبات الإيداع والتسوية المالية بنجاح بمبلغ ${existing.amount.toLocaleString()} AED - مرجع: ${updatedTransfer.transactionReferenceNumber || \"لا يوجد\"}`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 10016,
+    "expr": "existing.amount.toLocaleString",
+    "fullLine": "`تم عكس تحويل المالك بمبلغ ${existing.amount.toLocaleString()} AED وإنشاء قيد عكس مالي. السبب: ${reason}`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 10122,
+    "expr": "totalAmount.toLocaleString",
+    "fullLine": "logAudit(\"LINK_EXPENSE\", \"CASE\", updatedCase.id, updatedCase.caseNumber, `تم ربط المصروف القضائي #${expenseNumber} تلقائياً بالقضية بمبلغ ${totalAmount.toLocaleString()} AED.`);"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 10132,
+    "expr": "totalAmount.toLocaleString",
+    "fullLine": "`تم تسجيل مصروف جديد بمبلغ ${totalAmount.toLocaleString()} AED (${data.category}) - يتحمله: ${data.costBearer}`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 10509,
+    "expr": "totalAmount.toLocaleString",
+    "fullLine": "`تم تحديث بيانات المصروف. المبلغ الجديد: ${totalAmount.toLocaleString()} AED`,"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 10646,
+    "expr": "existing.totalAmount.toLocaleString",
+    "fullLine": "`تم عكس وإلغاء المصروف بمبلغ ${existing.totalAmount.toLocaleString()} AED. السبب: ${reason}`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 11142,
+    "expr": "newCase.claimAmount.toLocaleString",
+    "fullLine": "`Converted ${params.chequeIds.length} returned cheques into rental case ${newCase.caseNumber} with claim AED ${newCase.claimAmount.toLocaleString()}`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 11195,
+    "expr": "chq.amount.toLocaleString",
+    "fullLine": "notes: `Original Bounced Cheque #${chq.chequeNumber} - AED ${chq.amount.toLocaleString()} - Reason: ${chq.returnReason || \"BOUNCED\"}`,"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 11313,
+    "expr": "chq.amount.toLocaleString",
+    "fullLine": "notes: `Returned Cheque #${chq.chequeNumber} - Amount AED ${chq.amount.toLocaleString()} - Reason: ${chq.returnReason || \"BOUNCED\"}`,"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 11371,
+    "expr": "newCase.claimAmount.toLocaleString",
+    "fullLine": "`Created new rental dispute case ${newCase.caseNumber} in ${defaultCourtName} (${emirate} / ${city}) from returned cheque #${chq.chequeNumber} (Claim AED ${newCase.claimAmount.toLocaleString()})`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 11478,
+    "expr": "caseOutstanding.toLocaleString",
+    "fullLine": "const errorMsgAr = `لا يمكن إغلاق أو تسوية أو أرشفة القضية لوجود مستحقات مالية غير مسددة بالكامل. المتبقي المستحق: ${caseOutstanding.toLocaleString()} درهم، ومتبقي الشيكات الراجعة: ${unpaidChequeAmount.toLocaleString()} درهم.`;"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 11478,
+    "expr": "unpaidChequeAmount.toLocaleString",
+    "fullLine": "const errorMsgAr = `لا يمكن إغلاق أو تسوية أو أرشفة القضية لوجود مستحقات مالية غير مسددة بالكامل. المتبقي المستحق: ${caseOutstanding.toLocaleString()} درهم، ومتبقي الشيكات الراجعة: ${unpaidChequeAmount.toLocaleString()} درهم.`;"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 11479,
+    "expr": "caseOutstanding.toLocaleString",
+    "fullLine": "const errorMsgEn = `Cannot close, settle, or archive this case because there are outstanding financial obligations. Case outstanding: AED ${caseOutstanding.toLocaleString()}, Cheques outstanding: AED ${unpaidChequeAmount.toLocaleString()}.`;"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 11479,
+    "expr": "unpaidChequeAmount.toLocaleString",
+    "fullLine": "const errorMsgEn = `Cannot close, settle, or archive this case because there are outstanding financial obligations. Case outstanding: AED ${caseOutstanding.toLocaleString()}, Cheques outstanding: AED ${unpaidChequeAmount.toLocaleString()}.`;"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 11570,
+    "expr": "expense.totalAmount.toLocaleString",
+    "fullLine": "logAudit(\"LINK_EXPENSE\", \"CASE\", caseId, targetCase.caseNumber, `Linked legal expense #${expense.expenseNumber} (AED ${expense.totalAmount.toLocaleString()}) to case. Reason: ${reason || \"Cost Recovery\"}`);"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 11647,
+    "expr": "feePerUnit.toLocaleString",
+    "fullLine": "logAudit(\"UPDATE_BOUNCED_FEE\", \"CASE\", caseId, targetCase.caseNumber, `Updated bounced cheque fee per unit to AED ${feePerUnit.toLocaleString()}. Reason: ${reason || \"Modification\"}`);"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 12194,
+    "expr": "agreement.totalAgreedAmount.toLocaleString",
+    "fullLine": "`Recorded settlement agreement for AED ${agreement.totalAgreedAmount.toLocaleString()} across ${agreement.installmentsCount} installments`"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 12550,
+    "expr": "cheque.amount.toLocaleString",
+    "fullLine": "let textMessage = `عزيزي ${tenantName}، تم بنجاح تحصيل الشيك رقم ${cheque.chequeNumber} بمبلغ ${cheque.amount.toLocaleString()} درهم. شكراً لك.`;"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 12556,
+    "expr": "cheque.amount.toLocaleString",
+    "fullLine": ".replace(/{chequeAmount}/g, cheque.amount.toLocaleString())"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 12582,
+    "expr": "cheque.amount.toLocaleString",
+    "fullLine": "let textMessage = `تحية طيبة،\\n${tenantName}\\n\\nنود إعلامكم بأنه تم إرجاع الشيك الخاص بكم رقم (${cheque.chequeNumber}) بقيمة (${cheque.amount.toLocaleString()} درهم إماراتي) والمستحق بتاريخ (${cheque.dueDate}).\\n\\nيرجى المبادرة بتسوية المبلغ المذكور في أقرب وقت ممكن لتجنب اتخاذ الإجراءات القانونية اللازمة.\\n\\nشكراً لتعاونكم.`;"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 12588,
+    "expr": "cheque.amount.toLocaleString",
+    "fullLine": ".replace(/{chequeAmount}/g, cheque.amount.toLocaleString())"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 13679,
+    "expr": "totalFinancialCost.toLocaleString",
+    "fullLine": "details: `تم ترحيل مصروف الصيانة بقيمة AED ${totalFinancialCost.toLocaleString()} لحساب ${bearer} (${postedIds.join(\", \")})`,"
+  },
+  {
+    "file": "src/context/DataContext.tsx",
+    "line": 13708,
+    "expr": "totalFinancialCost.toLocaleString",
+    "fullLine": "`تم ترحيل قيد مصروفات الصيانة بمبلغ AED ${totalFinancialCost.toLocaleString()} لصالح (${bearer}) - سجلات المصروفات: ${postedIds.join(\", \")}`"
+  },
+  {
+    "file": "src/services/continuousFinancialControlEngine.ts",
+    "line": 278,
+    "expr": "amount.toLocaleString",
+    "fullLine": "descriptionAr: `سند قبض ${col.receiptNumber || col.id} بمبلغ ${amount.toLocaleString()} درهم بدون قيد يومية مرحل`,"
+  },
+  {
+    "file": "src/services/continuousFinancialControlEngine.ts",
+    "line": 526,
+    "expr": "amount?.toLocaleString",
+    "fullLine": "descriptionAr: `شيك مرتجع برقم ${ch.chequeNumber} بمبلغ ${ch.amount?.toLocaleString()} درهم غير مربوط بقضية قانونية أو حركة عكس`,"
+  },
+  {
+    "file": "src/services/continuousFinancialControlEngine.ts",
+    "line": 741,
+    "expr": "totalGlDiff.toLocaleString",
+    "fullLine": ": `عدم توازن حرج في دفتر الأستاذ العام بمبلغ ${totalGlDiff.toLocaleString()} درهم يتطلب قفل الترحيل`;"
+  },
+  {
+    "file": "src/services/financialEngine.ts",
+    "line": 975,
+    "expr": "dHeld.toLocaleString",
+    "fullLine": "(hDisc > 0.01 ? `المحجوز (الفعلي: ${dHeld.toLocaleString()}, المسجل: ${pHeld.toLocaleString()}) ` : \"\") +"
+  },
+  {
+    "file": "src/services/financialEngine.ts",
+    "line": 975,
+    "expr": "pHeld.toLocaleString",
+    "fullLine": "(hDisc > 0.01 ? `المحجوز (الفعلي: ${dHeld.toLocaleString()}, المسجل: ${pHeld.toLocaleString()}) ` : \"\") +"
+  },
+  {
+    "file": "src/services/financialEngine.ts",
+    "line": 976,
+    "expr": "dPaid.toLocaleString",
+    "fullLine": "(pDisc > 0.01 ? `المسدد (الفعلي: ${dPaid.toLocaleString()}, المسجل: ${pPaid.toLocaleString()})` : \"\");"
+  },
+  {
+    "file": "src/services/financialEngine.ts",
+    "line": 976,
+    "expr": "pPaid.toLocaleString",
+    "fullLine": "(pDisc > 0.01 ? `المسدد (الفعلي: ${dPaid.toLocaleString()}, المسجل: ${pPaid.toLocaleString()})` : \"\");"
+  },
+  {
+    "file": "src/services/financialEngine.ts",
+    "line": 1545,
+    "expr": "com.totalCommissionAmount.toLocaleString",
+    "fullLine": "? `رسوم توثيق وتصديق عقد الإيجار (${com.totalCommissionAmount.toLocaleString()} درهم)`"
+  },
+  {
+    "file": "src/services/financialEngine.ts",
+    "line": 1734,
+    "expr": "amount.toLocaleString",
+    "fullLine": "error: `مبلغ التحويل (${amount.toLocaleString()} AED) يتجاوز الرصيد المستحق للمالك (${currentPayableBalance.toLocaleString()} AED).`,"
+  },
+  {
+    "file": "src/services/financialEngine.ts",
+    "line": 1734,
+    "expr": "currentPayableBalance.toLocaleString",
+    "fullLine": "error: `مبلغ التحويل (${amount.toLocaleString()} AED) يتجاوز الرصيد المستحق للمالك (${currentPayableBalance.toLocaleString()} AED).`,"
+  },
+  {
+    "file": "src/services/ocr/documentSessionService.ts",
+    "line": 172,
+    "expr": "norm.amount.toLocaleString",
+    "fullLine": "notes: `المبلغ المقروء (${norm.amount.toLocaleString()}) يختلف عن مبلغ القسط المحدد (${targetInstallment.amount.toLocaleString()})`,"
+  },
+  {
+    "file": "src/services/ocr/documentSessionService.ts",
+    "line": 172,
+    "expr": "targetInstallment.amount.toLocaleString",
+    "fullLine": "notes: `المبلغ المقروء (${norm.amount.toLocaleString()}) يختلف عن مبلغ القسط المحدد (${targetInstallment.amount.toLocaleString()})`,"
+  },
+  {
+    "file": "src/services/periodReconciliationEngine.ts",
+    "line": 162,
+    "expr": "entryDebit.toLocaleString",
+    "fullLine": "descriptionAr: `قيد اليومية ${entry.entryNumber} غير متوازن: المدين (${entryDebit.toLocaleString()}) لا يتطابق مع الدائن (${entryCredit.toLocaleString()})`,"
+  },
+  {
+    "file": "src/services/periodReconciliationEngine.ts",
+    "line": 162,
+    "expr": "entryCredit.toLocaleString",
+    "fullLine": "descriptionAr: `قيد اليومية ${entry.entryNumber} غير متوازن: المدين (${entryDebit.toLocaleString()}) لا يتطابق مع الدائن (${entryCredit.toLocaleString()})`,"
+  },
+  {
+    "file": "src/services/periodReconciliationEngine.ts",
+    "line": 244,
+    "expr": "glNetDifference.toLocaleString",
+    "fullLine": ": (glStatus === \"FAIL\" ? `يوجد فرق مالي قدره ${glNetDifference.toLocaleString()} درهم أو قيود غير متوازنة.` : \"توجد مسودات غير مرحلة.\"),"
+  },
+  {
+    "file": "src/services/periodReconciliationEngine.ts",
+    "line": 294,
+    "expr": "amount.toLocaleString",
+    "fullLine": "descriptionAr: `سند قبض مؤكد ${col.receiptNumber || col.id} بمبلغ ${amount.toLocaleString()} درهم بدون قيد يومية مرحل`,"
+  },
+  {
+    "file": "src/services/periodReconciliationEngine.ts",
+    "line": 570,
+    "expr": "totalVatActual.toLocaleString",
+    "fullLine": "? `تم التحقق من ضريبة القيمة المضافة بمبلغ ${totalVatActual.toLocaleString()} درهم دون أي فروقات.`"
+  },
+  {
+    "file": "src/services/periodReconciliationEngine.ts",
+    "line": 606,
+    "expr": "chq.amount.toLocaleString",
+    "fullLine": "descriptionAr: `شيك مرتجع برقم ${chq.chequeNumber} بمبلغ ${chq.amount.toLocaleString()} درهم يتطلب متابعة قانونية أو تسوية بديلة`,"
+  },
+  {
+    "file": "src/tests/phase1FinancialTests.ts",
+    "line": 313,
+    "expr": "baseRent.toLocaleString",
+    "fullLine": "`Calculated owner commission for AED ${baseRent.toLocaleString()} is AED ${calc.amount.toLocaleString()} (Rate: ${calc.rate}%).`,"
+  },
+  {
+    "file": "src/tests/phase1FinancialTests.ts",
+    "line": 313,
+    "expr": "calc.amount.toLocaleString",
+    "fullLine": "`Calculated owner commission for AED ${baseRent.toLocaleString()} is AED ${calc.amount.toLocaleString()} (Rate: ${calc.rate}%).`,"
+  },
+  {
+    "file": "src/tests/phase1FinancialTests.ts",
+    "line": 331,
+    "expr": "baseRent.toLocaleString",
+    "fullLine": "`Calculated tenant commission for AED ${baseRent.toLocaleString()} is AED ${calc.amount.toLocaleString()} (Rate: ${calc.rate}%).`,"
+  },
+  {
+    "file": "src/tests/phase1FinancialTests.ts",
+    "line": 331,
+    "expr": "calc.amount.toLocaleString",
+    "fullLine": "`Calculated tenant commission for AED ${baseRent.toLocaleString()} is AED ${calc.amount.toLocaleString()} (Rate: ${calc.rate}%).`,"
+  },
+  {
+    "file": "src/tests/phase1FinancialTests.ts",
+    "line": 664,
+    "expr": "endBalance?.toLocaleString",
+    "fullLine": "`runningBalance verified as strictly derived: Final balance is AED ${endBalance?.toLocaleString()} (Matches sum of transactions).`,"
+  },
+  {
+    "file": "src/utils/integrityChecker.ts",
+    "line": 123,
+    "expr": "totalRent.toLocaleString",
+    "fullLine": "descriptionAr: `يوجد لدى المستأجر (${activeLeases.length}) عقد إيجار نشط أو قيد التجديد بإجمالي قيمة إيجارية ${totalRent.toLocaleString()} درهم.`,"
+  },
+  {
+    "file": "src/utils/integrityChecker.ts",
+    "line": 124,
+    "expr": "totalRent.toLocaleString",
+    "fullLine": "descriptionEn: `Tenant has (${activeLeases.length}) active or renewed lease contracts with total rent value AED ${totalRent.toLocaleString()}.`,"
+  },
+  {
+    "file": "src/utils/integrityChecker.ts",
+    "line": 170,
+    "expr": "totalOutstanding.toLocaleString",
+    "fullLine": "descriptionAr: `مسجل على المستأجر (${pendingCheques.length}) شيك معلق أو مرتجع أو قيد التحصيل بإجمالي التزامات ${totalOutstanding.toLocaleString()} درهم.`,"
+  },
+  {
+    "file": "src/utils/integrityChecker.ts",
+    "line": 171,
+    "expr": "totalOutstanding.toLocaleString",
+    "fullLine": "descriptionEn: `Tenant is linked to (${pendingCheques.length}) uncleared, bounced, or legal cheques totaling AED ${totalOutstanding.toLocaleString()} outstanding.`,"
+  },
+  {
+    "file": "src/utils/integrityChecker.ts",
+    "line": 204,
+    "expr": "totalClaims.toLocaleString",
+    "fullLine": "descriptionAr: `توجد (${activeCases.length}) قضية إيجارية نشطة قيد التداول القضائي ضد هذا المستأجر بإجمالي مطالبات ${totalClaims.toLocaleString()} درهم.`,"
+  },
+  {
+    "file": "src/utils/integrityChecker.ts",
+    "line": 205,
+    "expr": "totalClaims.toLocaleString",
+    "fullLine": "descriptionEn: `There are (${activeCases.length}) active legal cases open against this tenant totaling AED ${totalClaims.toLocaleString()}.`,"
+  },
+  {
+    "file": "src/utils/integrityChecker.ts",
+    "line": 331,
+    "expr": "totalRent.toLocaleString",
+    "fullLine": "descriptionAr: `توجد (${activeOwnerLeases.length}) عقود إيجارية نشطة تابعة للمالك بإيراد سنوي ${totalRent.toLocaleString()} درهم.`,"
+  },
+  {
+    "file": "src/utils/integrityChecker.ts",
+    "line": 332,
+    "expr": "totalRent.toLocaleString",
+    "fullLine": "descriptionEn: `There are (${activeOwnerLeases.length}) active leases generating AED ${totalRent.toLocaleString()} annual rent.`,"
+  },
+  {
+    "file": "src/utils/integrityChecker.ts",
+    "line": 365,
+    "expr": "totalOutstanding.toLocaleString",
+    "fullLine": "descriptionAr: `يوجد (${ownerPendingCheques.length}) شيك معلق أو قيد التحصيل لصالح المالك بإجمالي ${totalOutstanding.toLocaleString()} درهم.`,"
+  },
+  {
+    "file": "src/utils/integrityChecker.ts",
+    "line": 366,
+    "expr": "totalOutstanding.toLocaleString",
+    "fullLine": "descriptionEn: `Owner is linked to (${ownerPendingCheques.length}) pending/unsettled cheques totaling AED ${totalOutstanding.toLocaleString()}.`,"
+  },
+  {
+    "file": "src/utils/integrityChecker.ts",
+    "line": 619,
+    "expr": "totalOutstanding.toLocaleString",
+    "fullLine": "descriptionAr: `يوجد بالعقد (${leaseCheques.length}) شيك غير محصل أو مرتجع بإجمالي مستحق ${totalOutstanding.toLocaleString()} درهم.`,"
+  },
+  {
+    "file": "src/utils/integrityChecker.ts",
+    "line": 620,
+    "expr": "totalOutstanding.toLocaleString",
+    "fullLine": "descriptionEn: `Contract contains (${leaseCheques.length}) pending or bounced cheques with outstanding balance of AED ${totalOutstanding.toLocaleString()}.`,"
+  },
+  {
+    "file": "src/utils/integrityChecker.ts",
+    "line": 714,
+    "expr": "cheque.totalApplied.toLocaleString",
+    "fullLine": "descriptionAr: `تم تسجيل سندات قبض وتحصيل جزئي بمبلغ ${cheque.totalApplied.toLocaleString()} درهم على هذا الشيك (المتبقي: ${cheque.outstanding.toLocaleString()} د.إ).`,"
+  },
+  {
+    "file": "src/utils/integrityChecker.ts",
+    "line": 714,
+    "expr": "cheque.outstanding.toLocaleString",
+    "fullLine": "descriptionAr: `تم تسجيل سندات قبض وتحصيل جزئي بمبلغ ${cheque.totalApplied.toLocaleString()} درهم على هذا الشيك (المتبقي: ${cheque.outstanding.toLocaleString()} د.إ).`,"
+  },
+  {
+    "file": "src/utils/integrityChecker.ts",
+    "line": 715,
+    "expr": "cheque.totalApplied.toLocaleString",
+    "fullLine": "descriptionEn: `Partial collection receipts totaling AED ${cheque.totalApplied.toLocaleString()} are recorded on this cheque.`,"
+  },
+  {
+    "file": "src/utils/integrityChecker.ts",
+    "line": 721,
+    "expr": "cheque.totalApplied.toLocaleString",
+    "fullLine": "title: `تحصيل جزئي: ${cheque.totalApplied.toLocaleString()} د.إ`,"
+  },
+  {
+    "file": "src/utils/integrityChecker.ts",
+    "line": 722,
+    "expr": "cheque.outstanding.toLocaleString",
+    "fullLine": "subtitle: `المتبقي: ${cheque.outstanding.toLocaleString()} د.إ`,"
+  },
+  {
+    "file": "src/utils/integrityChecker.ts",
+    "line": 785,
+    "expr": "unpaidTotal.toLocaleString",
+    "fullLine": "descriptionAr: `توجد اتفاقية تسوية سارية بها (${unpaidSchedule.length}) قسط متبقٍ بإجمالي ${unpaidTotal.toLocaleString()} درهم.`,"
+  },
+  {
+    "file": "src/utils/integrityChecker.ts",
+    "line": 786,
+    "expr": "unpaidTotal.toLocaleString",
+    "fullLine": "descriptionEn: `There is an active settlement with (${unpaidSchedule.length}) unpaid installments totaling AED ${unpaidTotal.toLocaleString()}.`,"
+  },
+  {
+    "file": "src/utils/integrityChecker.ts",
+    "line": 846,
+    "expr": "unpaidTotal.toLocaleString",
+    "fullLine": "descriptionAr: `توجد (${unpaidInvoices.length}) فواتير غير مسددة مسجلة على طلب الصيانة بإجمالي ${unpaidTotal.toLocaleString()} درهم.`,"
+  },
+  {
+    "file": "src/utils/integrityChecker.ts",
+    "line": 847,
+    "expr": "unpaidTotal.toLocaleString",
+    "fullLine": "descriptionEn: `There are (${unpaidInvoices.length}) unpaid invoices on this request totaling AED ${unpaidTotal.toLocaleString()}.`,"
+  },
+  {
+    "file": "src/utils/leaseTerminationValidator.ts",
+    "line": 165,
+    "expr": "amount.toLocaleString",
+    "fullLine": "blockReasonsAr.push(`يوجد شيك مرتجع غير مسدد #${c.chequeNumber} بمبلغ ${amount.toLocaleString()} د.إ.`);"
+  },
+  {
+    "file": "src/utils/leaseTerminationValidator.ts",
+    "line": 166,
+    "expr": "amount.toLocaleString",
+    "fullLine": "blockReasonsEn.push(`Unsettled bounced cheque #${c.chequeNumber} for AED ${amount.toLocaleString()}.`);"
+  },
+  {
+    "file": "src/utils/leaseTerminationValidator.ts",
+    "line": 188,
+    "expr": "amount.toLocaleString",
+    "fullLine": "blockReasonsAr.push(`يوجد شيك مستحق قبل تاريخ الفسخ غير محصل #${c.chequeNumber} بمبلغ ${amount.toLocaleString()} د.إ.`);"
+  },
+  {
+    "file": "src/utils/leaseTerminationValidator.ts",
+    "line": 189,
+    "expr": "amount.toLocaleString",
+    "fullLine": "blockReasonsEn.push(`Uncollected due cheque before termination date #${c.chequeNumber} for AED ${amount.toLocaleString()}.`);"
+  },
+  {
+    "file": "src/utils/leaseValidation.ts",
+    "line": 71,
+    "expr": "totalValidCheques.toLocaleString",
+    "fullLine": "? `إجمالي مبالغ الشيكات (${totalValidCheques.toLocaleString()} AED) أقل من إجمالي الإيجار السنوي المعتمد (${annualRent.toLocaleString()} AED) بمبلغ ${Math.abs(difference).toLocaleString()} AED.`"
+  },
+  {
+    "file": "src/utils/leaseValidation.ts",
+    "line": 71,
+    "expr": "annualRent.toLocaleString",
+    "fullLine": "? `إجمالي مبالغ الشيكات (${totalValidCheques.toLocaleString()} AED) أقل من إجمالي الإيجار السنوي المعتمد (${annualRent.toLocaleString()} AED) بمبلغ ${Math.abs(difference).toLocaleString()} AED.`"
+  },
+  {
+    "file": "src/utils/leaseValidation.ts",
+    "line": 72,
+    "expr": "totalValidCheques.toLocaleString",
+    "fullLine": ": `Total cheques amount (${totalValidCheques.toLocaleString()} AED) is less than annual rent (${annualRent.toLocaleString()} AED) by ${Math.abs(difference).toLocaleString()} AED.`"
+  },
+  {
+    "file": "src/utils/leaseValidation.ts",
+    "line": 72,
+    "expr": "annualRent.toLocaleString",
+    "fullLine": ": `Total cheques amount (${totalValidCheques.toLocaleString()} AED) is less than annual rent (${annualRent.toLocaleString()} AED) by ${Math.abs(difference).toLocaleString()} AED.`"
+  },
+  {
+    "file": "src/utils/leaseValidation.ts",
+    "line": 77,
+    "expr": "totalValidCheques.toLocaleString",
+    "fullLine": "? `إجمالي مبالغ الشيكات (${totalValidCheques.toLocaleString()} AED) يتجاوز إجمالي الإيجار السنوي المعتمد (${annualRent.toLocaleString()} AED) بمبلغ ${Math.abs(difference).toLocaleString()} AED.`"
+  },
+  {
+    "file": "src/utils/leaseValidation.ts",
+    "line": 77,
+    "expr": "annualRent.toLocaleString",
+    "fullLine": "? `إجمالي مبالغ الشيكات (${totalValidCheques.toLocaleString()} AED) يتجاوز إجمالي الإيجار السنوي المعتمد (${annualRent.toLocaleString()} AED) بمبلغ ${Math.abs(difference).toLocaleString()} AED.`"
+  },
+  {
+    "file": "src/utils/leaseValidation.ts",
+    "line": 78,
+    "expr": "totalValidCheques.toLocaleString",
+    "fullLine": ": `Total cheques amount (${totalValidCheques.toLocaleString()} AED) exceeds annual rent (${annualRent.toLocaleString()} AED) by ${Math.abs(difference).toLocaleString()} AED.`"
+  },
+  {
+    "file": "src/utils/leaseValidation.ts",
+    "line": 78,
+    "expr": "annualRent.toLocaleString",
+    "fullLine": ": `Total cheques amount (${totalValidCheques.toLocaleString()} AED) exceeds annual rent (${annualRent.toLocaleString()} AED) by ${Math.abs(difference).toLocaleString()} AED.`"
+  },
+  {
+    "file": "src/utils/phase7AReconEngine.ts",
+    "line": 240,
+    "expr": "totalCollections.toLocaleString",
+    "fullLine": "expected: `AED ${totalCollections.toLocaleString()}`,"
+  },
+  {
+    "file": "src/utils/phase7AReconEngine.ts",
+    "line": 252,
+    "expr": "expectedClosing.toLocaleString",
+    "fullLine": "expected: `AED ${expectedClosing.toLocaleString()}`,"
+  },
+  {
+    "file": "src/utils/phase7AReconEngine.ts",
+    "line": 262,
+    "expr": "totalCollections.toLocaleString",
+    "fullLine": "expected: `AED ${totalCollections.toLocaleString()}`,"
+  },
+  {
+    "file": "src/utils/phase7AReconEngine.ts",
+    "line": 263,
+    "expr": "totalCollections.toLocaleString",
+    "fullLine": "actual: `AED ${totalCollections.toLocaleString()}`,"
+  },
+  {
+    "file": "src/utils/phase7AReconEngine.ts",
+    "line": 269,
+    "expr": "administrativeFees.toLocaleString",
+    "fullLine": "expected: `AED ${administrativeFees.toLocaleString()}`,"
+  },
+  {
+    "file": "src/utils/phase7AReconEngine.ts",
+    "line": 270,
+    "expr": "administrativeFees.toLocaleString",
+    "fullLine": "actual: `AED ${administrativeFees.toLocaleString()}`,"
+  },
+  {
+    "file": "src/utils/phase7AReconEngine.ts",
+    "line": 276,
+    "expr": "expectedClosing.toLocaleString",
+    "fullLine": "expected: `AED ${expectedClosing.toLocaleString()}`,"
+  },
+  {
+    "file": "src/utils/productionIntegrity.ts",
+    "line": 410,
+    "expr": "params.amount.toLocaleString",
+    "fullLine": "warningMessageAr: `تنبيه: توجد معاملة مالية سابقة مطابقة بنسبة 100% برقم مرجعي (${params.referenceNumber}) ومبلغ (${params.amount.toLocaleString()} درهم).`,"
+  },
+  {
+    "file": "src/utils/productionIntegrity.ts",
+    "line": 411,
+    "expr": "params.amount.toLocaleString",
+    "fullLine": "warningMessageEn: `Warning: Matching financial transaction already exists (Ref: ${params.referenceNumber}, Amount: AED ${params.amount.toLocaleString()}).`,"
+  }
+]

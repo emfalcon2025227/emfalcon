@@ -49,15 +49,15 @@ export const FinancialOverview: React.FC = () => {
     collections, commissions, expenses: propertyExpenses, transfers: ownerTransfers, adjustments: financialAdjustments, reversals: financialReversals
   }));
 
-  const totalRentCollections = systemFinancials.reduce((sum, o) => sum + o.totalRentCollected, 0);
-  const totalExpenses = systemFinancials.reduce((sum, o) => sum + o.totalOwnerExpenses, 0);
-  const totalCommissions = systemFinancials.reduce((sum, o) => sum + o.totalOwnerCommissions, 0);
-  const totalTransfers = systemFinancials.reduce((sum, o) => sum + o.totalTransfersPaid, 0);
+  const totalRentCollections = systemFinancials.reduce((sum, o) => sum + (o?.totalRentCollected || 0), 0);
+  const totalExpenses = systemFinancials.reduce((sum, o) => sum + (o?.totalOwnerExpenses || 0), 0);
+  const totalCommissions = systemFinancials.reduce((sum, o) => sum + (o?.totalOwnerCommissions || 0), 0);
+  const totalTransfers = systemFinancials.reduce((sum, o) => sum + (o?.totalTransfersPaid || 0), 0);
 
   // Office Revenue (All Commissions: Owner + Tenant)
   const validCommissions = commissions.filter(c => c.status !== "CANCELLED" && c.status !== "REVERSED");
   const totalGrossCommissions = validCommissions.reduce((sum, c) => sum + (c.totalCommissionAmount || 0), 0);
-  const totalNetCommissions = validCommissions.reduce((sum, c) => sum + (c.netRevenueAmount || c.totalCommissionAmount - (c.vatAmount || 0) || 0), 0);
+  const totalNetCommissions = validCommissions.reduce((sum, c) => sum + (c.netRevenueAmount || ((c.totalCommissionAmount || 0) - (c.vatAmount || 0)) || 0), 0);
   const totalVatCommissions = validCommissions.reduce((sum, c) => sum + (c.vatAmount || 0), 0);
 
   const activeLeasesCount = leases.filter(l => l.contractStatus === "ACTIVE").length;
@@ -67,7 +67,7 @@ export const FinancialOverview: React.FC = () => {
     {
       id: "rent",
       title: isAr ? "إجمالي التحصيلات" : "Total Collections",
-      value: totalRentCollections.toLocaleString(),
+      value: Number(totalRentCollections || 0).toLocaleString(),
       change: "+12%",
       icon: DollarSign,
       color: "text-emerald-600",
@@ -76,7 +76,7 @@ export const FinancialOverview: React.FC = () => {
     {
       id: "expenses",
       title: isAr ? "إجمالي المصاريف" : "Total Expenses",
-      value: totalExpenses.toLocaleString(),
+      value: Number(totalExpenses || 0).toLocaleString(),
       change: "+5%",
       icon: ArrowDownRight,
       color: "text-rose-600",
@@ -85,7 +85,7 @@ export const FinancialOverview: React.FC = () => {
     {
       id: "commissions",
       title: isAr ? "العمولات (إجمالي)" : "Gross Commissions",
-      value: totalGrossCommissions.toLocaleString(),
+      value: Number(totalGrossCommissions || 0).toLocaleString(),
       change: "+8%",
       icon: TrendingUp,
       color: "text-indigo-600",
@@ -98,7 +98,7 @@ export const FinancialOverview: React.FC = () => {
     {
       id: "transfers",
       title: isAr ? "تحويلات الملاك" : "Owner Transfers",
-      value: totalTransfers.toLocaleString(),
+      value: Number(totalTransfers || 0).toLocaleString(),
       change: "+15%",
       icon: ArrowUpRight,
       color: "text-amber-600",
@@ -150,7 +150,7 @@ export const FinancialOverview: React.FC = () => {
                 {kpi.subMetrics.map((sm, idx) => (
                   <div key={idx} className="flex items-center gap-1">
                     <span className="text-[10px] text-slate-400">{sm.label}</span>
-                    <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">{sm.value.toLocaleString()}</span>
+                    <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">{Number(sm.value || 0).toLocaleString()}</span>
                   </div>
                 ))}
               </div>
@@ -235,7 +235,7 @@ export const FinancialOverview: React.FC = () => {
                   <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
                   <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">{item.name}</span>
                 </div>
-                <span className="text-xs font-bold text-slate-900 dark:text-white">{item.value.toLocaleString()} AED</span>
+                <span className="text-xs font-bold text-slate-900 dark:text-white">{Number(item.value || 0).toLocaleString()} AED</span>
               </div>
             ))}
             {expenseDist.length === 0 && (
@@ -269,7 +269,7 @@ export const FinancialOverview: React.FC = () => {
             <div className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-2">
               {isAr ? "القاعدة الضريبية" : "VAT Summary"}
             </div>
-            <div className="text-3xl font-black mb-2">{(totalExpenses * 0.05).toLocaleString()} <span className="text-sm font-normal text-slate-500">AED</span></div>
+            <div className="text-3xl font-black mb-2">{Number((totalExpenses || 0) * 0.05).toLocaleString()} <span className="text-sm font-normal text-slate-500">AED</span></div>
             <div className="text-sm text-slate-400 leading-relaxed">
               {isAr 
                 ? "إجمالي ضريبة القيمة المضافة القابلة للاسترداد من المصاريف المسجلة خلال الفترة الحالية."

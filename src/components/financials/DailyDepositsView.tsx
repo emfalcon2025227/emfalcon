@@ -525,8 +525,8 @@ export const DailyDepositsView: React.FC = () => {
     setSelectedItemIds([]);
     alert(
       isAr
-        ? `تم إنشاء الحافظة بنجاح برقم: ${batchId} بإجمالي AED ${totalAmount.toLocaleString()}`
-        : `Batch created successfully: ${batchId}, Total: AED ${totalAmount.toLocaleString()}`
+        ? `تم إنشاء الحافظة بنجاح برقم: ${batchId} بإجمالي AED ${Number(totalAmount || 0).toLocaleString()}`
+        : `Batch created successfully: ${batchId}, Total: AED ${Number(totalAmount || 0).toLocaleString()}`
     );
   };
 
@@ -1026,7 +1026,7 @@ export const DailyDepositsView: React.FC = () => {
             </span>
           </div>
           <span className="font-mono font-bold">
-            AED {autoGroupedOwnerBatches.reduce((sum, g) => sum + g.total, 0).toLocaleString()}
+            AED {Number(autoGroupedOwnerBatches.reduce((sum, g) => sum + (g?.total || 0), 0) || 0).toLocaleString()}
           </span>
         </div>
       )}
@@ -1039,7 +1039,7 @@ export const DailyDepositsView: React.FC = () => {
             {isAr ? "إجمالي إيداعات المكتب" : "Total Office Deposits"}
           </span>
           <div className="text-xl font-black text-emerald-950 font-mono">
-            AED {metrics.officeTotal.toLocaleString()}
+            AED {Number(metrics?.officeTotal || 0).toLocaleString()}
           </div>
           <div className="text-[10px] text-emerald-700 font-semibold">
             {isAr ? "رسوم، نظافة وحراسة" : "Fees, cleaning & security"}
@@ -1052,7 +1052,7 @@ export const DailyDepositsView: React.FC = () => {
             {isAr ? "مستحقات الملاك" : "Total Owner Payouts"}
           </span>
           <div className="text-xl font-black text-teal-950 font-mono">
-            AED {metrics.ownerTotal.toLocaleString()}
+            AED {Number(metrics?.ownerTotal || 0).toLocaleString()}
           </div>
           <div className="text-[10px] text-teal-700 font-semibold">
             {isAr ? "مفصول تماماً عن المكتب" : "Strictly separated from office"}
@@ -1065,7 +1065,7 @@ export const DailyDepositsView: React.FC = () => {
             {isAr ? "أمانات التأمين (حساب 2020)" : "Security Deposits (2020)"}
           </span>
           <div className="text-xl font-black text-amber-950 font-mono">
-            AED {metrics.depositTotal.toLocaleString()}
+            AED {Number(metrics?.depositTotal || 0).toLocaleString()}
           </div>
           <div className="text-[10px] text-amber-700 font-semibold">
             {isAr ? "التزام أمانات مستأجرين" : "Tenant-owned liabilities"}

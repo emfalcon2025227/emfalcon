@@ -1893,6 +1893,15 @@ export interface OwnerTransferRecord {
   createdById: string;
   createdByName?: string;
   ownerName?: string;
+  deductionSnapshot?: {
+    grossOwnerFunds: number;
+    totalCollections: number;
+    totalCommissions: number;
+    totalExpenses: number;
+    totalTransfersPaid: number;
+    netRemainingBalance: number;
+    deductionsList?: any[];
+  };
   updatedAt?: string;
 }
 

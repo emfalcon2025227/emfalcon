@@ -89,7 +89,7 @@ export const OwnerTransfersView: React.FC = () => {
         id: o.id,
         label: ownerName,
         title: ownerName,
-        subLabel: `${isAr ? "رصيد المستحقات:" : "Payable Balance:"} ${payable.currentPayableBalance.toLocaleString()} AED`,
+        subLabel: `${isAr ? "رصيد المستحقات:" : "Payable Balance:"} ${Number(payable?.currentPayableBalance || 0).toLocaleString()} AED`,
         badge: `${o.code || "OW"} | ${o.bankName || "No Bank"}`,
         extraSearchTerms: [o.nameAr, o.nameEn, o.code || "", o.emiratesId || "", o.phone || "", o.bankName || "", o.iban || ""],
       };
@@ -238,8 +238,8 @@ export const OwnerTransfersView: React.FC = () => {
       if (modalAmount > maxAllowed + 0.01) {
         setModalError(
           isAr
-            ? `المبلغ المطلوب (${modalAmount.toLocaleString()} د.إ) يتجاوز صافي الرصيد المتاح للتحويل (${maxAllowed.toLocaleString()} د.إ).`
-            : `Requested amount (${modalAmount.toLocaleString()} AED) exceeds available net balance (${maxAllowed.toLocaleString()} AED).`
+            ? `المبلغ المطلوب (${Number(modalAmount || 0).toLocaleString()} د.إ) يتجاوز صافي الرصيد المتاح للتحويل (${Number(maxAllowed || 0).toLocaleString()} د.إ).`
+            : `Requested amount (${Number(modalAmount || 0).toLocaleString()} AED) exceeds available net balance (${Number(maxAllowed || 0).toLocaleString()} AED).`
         );
         return;
       }
@@ -406,7 +406,7 @@ export const OwnerTransfersView: React.FC = () => {
             <span className="text-xs font-semibold uppercase tracking-wider">{isAr ? "المستحق القائم للملاك" : "Total Owner Payable"}</span>
             <Wallet className="w-5 h-5 text-indigo-600" />
           </div>
-          <div className="text-2xl font-bold text-slate-900">{kpis.totalSystemPayable.toLocaleString()} <span className="text-sm font-normal text-slate-500">AED</span></div>
+          <div className="text-2xl font-bold text-slate-900">{Number(kpis.totalSystemPayable || 0).toLocaleString()} <span className="text-sm font-normal text-slate-500">AED</span></div>
           <div className="text-xs text-slate-400 mt-1">{isAr ? "صافي رصيد الإيجارات بعد الاستقطاعات" : "Net rent collections ready for transfer"}</div>
         </div>
 
@@ -415,7 +415,7 @@ export const OwnerTransfersView: React.FC = () => {
             <span className="text-xs font-semibold uppercase tracking-wider">{isAr ? "إجمالي التحويلات المنفذة" : "Total Paid Out"}</span>
             <Coins className="w-5 h-5 text-emerald-600" />
           </div>
-          <div className="text-2xl font-bold text-emerald-600">{kpis.totalPaid.toLocaleString()} <span className="text-sm font-normal text-slate-500">AED</span></div>
+          <div className="text-2xl font-bold text-emerald-600">{Number(kpis.totalPaid || 0).toLocaleString()} <span className="text-sm font-normal text-slate-500">AED</span></div>
           <div className="text-xs text-slate-400 mt-1">{isAr ? "حوالات تم صرفها وتسويتها" : "Disbursed & reconciled transfers"}</div>
         </div>
 
@@ -424,7 +424,7 @@ export const OwnerTransfersView: React.FC = () => {
             <span className="text-xs font-semibold uppercase tracking-wider">{isAr ? "تحويلات معلقة" : "Pending Approval"}</span>
             <Clock className="w-5 h-5 text-amber-600" />
           </div>
-          <div className="text-2xl font-bold text-amber-600">{kpis.totalPending.toLocaleString()} <span className="text-sm font-normal text-slate-500">AED</span></div>
+          <div className="text-2xl font-bold text-amber-600">{Number(kpis.totalPending || 0).toLocaleString()} <span className="text-sm font-normal text-slate-500">AED</span></div>
           <div className="text-xs text-slate-400 mt-1">{isAr ? "بانتظار موافقة الصرف" : "Draft or pending transfers"}</div>
         </div>
 
@@ -609,7 +609,7 @@ export const OwnerTransfersView: React.FC = () => {
                           : "text-emerald-700"
                       }`}
                     >
-                      {t.amount.toLocaleString()} AED
+                      {Number(t.amount || 0).toLocaleString()} AED
                     </td>
                     <td className="px-5 py-3.5 text-center whitespace-nowrap">
                       {isReversed ? (
@@ -722,35 +722,35 @@ export const OwnerTransfersView: React.FC = () => {
                   </div>
                   <div className="flex justify-between text-xs text-indigo-900 font-medium">
                     <span>{isAr ? "إجمالي الإيجار المحصل:" : "Rent Collected:"}</span>
-                    <span className="font-mono">{selectedOwnerPayable.totalRentCollected.toLocaleString()} AED</span>
+                    <span className="font-mono">{Number(selectedOwnerPayable.totalRentCollected || 0).toLocaleString()} AED</span>
                   </div>
                   {selectedOwnerPayable.totalOwnerCommissions > 0 && (
                     <div className="flex justify-between text-xs text-rose-700 font-medium">
                       <span>{isAr ? "استقطاع: الرسوم الإدارية والعمولات:" : "Admin Fees Deduction:"}</span>
-                      <span className="font-mono">- {selectedOwnerPayable.totalOwnerCommissions.toLocaleString()} AED</span>
+                      <span className="font-mono">- {Number(selectedOwnerPayable.totalOwnerCommissions || 0).toLocaleString()} AED</span>
                     </div>
                   )}
                   {selectedOwnerPayable.totalOwnerExpenses > 0 && (
                     <div className="flex justify-between text-xs text-rose-700 font-medium">
                       <span>{isAr ? "استقطاع: مصاريف العقارات والصيانة:" : "Expenses Deduction:"}</span>
-                      <span className="font-mono">- {selectedOwnerPayable.totalOwnerExpenses.toLocaleString()} AED</span>
+                      <span className="font-mono">- {Number(selectedOwnerPayable.totalOwnerExpenses || 0).toLocaleString()} AED</span>
                     </div>
                   )}
                   {selectedOwnerPayable.totalTransfersPaid > 0 && (
                     <div className="flex justify-between text-xs text-slate-600 font-medium">
                       <span>{isAr ? "تحويلات تم سدادها سابقاً:" : "Transfers Paid:"}</span>
-                      <span className="font-mono">- {selectedOwnerPayable.totalTransfersPaid.toLocaleString()} AED</span>
+                      <span className="font-mono">- {Number(selectedOwnerPayable.totalTransfersPaid || 0).toLocaleString()} AED</span>
                     </div>
                   )}
                   {selectedOwnerPayable.totalTransfersPending > 0 && (
                     <div className="flex justify-between text-xs text-amber-700 font-medium">
                       <span>{isAr ? "تحويلات معتمدة قيد التنفيذ البنكي:" : "Pending Execution:"}</span>
-                      <span className="font-mono">- {selectedOwnerPayable.totalTransfersPending.toLocaleString()} AED</span>
+                      <span className="font-mono">- {Number(selectedOwnerPayable.totalTransfersPending || 0).toLocaleString()} AED</span>
                     </div>
                   )}
                   <div className="pt-2 border-t border-indigo-200/80 flex justify-between text-sm font-bold text-indigo-950">
                     <span>{isAr ? "صافي الرصيد المتاح للتحويل:" : "Net Available for Transfer:"}</span>
-                    <span className="font-mono text-emerald-700">{selectedOwnerPayable.netRemainingBalance.toLocaleString()} AED</span>
+                    <span className="font-mono text-emerald-700">{Number(selectedOwnerPayable.netRemainingBalance || 0).toLocaleString()} AED</span>
                   </div>
                 </div>
               )}
@@ -1123,7 +1123,7 @@ export const OwnerTransfersView: React.FC = () => {
               </div>
               <div className="pt-2 border-t border-slate-200 flex justify-between items-center">
                 <span className="font-bold text-slate-700">{isAr ? "المبلغ المطلوب تحويله:" : "Transfer Amount:"}</span>
-                <span className="text-base font-black font-mono text-emerald-700">{settleTransfer.amount.toLocaleString()} AED</span>
+                <span className="text-base font-black font-mono text-emerald-700">{Number(settleTransfer.amount || 0).toLocaleString()} AED</span>
               </div>
             </div>
 

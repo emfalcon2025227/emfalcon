@@ -343,11 +343,11 @@ export const StatementsView: React.FC = () => {
               <div className="flex md:justify-end items-center gap-6">
                 <div className="text-right">
                   <div className="text-xs text-slate-400 font-semibold uppercase">{isAr ? "الرصيد الافتتاحي" : "Opening Balance"}</div>
-                  <div className="text-base font-bold font-mono text-slate-800">{ownerStatement.openingBalance.toLocaleString()} AED</div>
+                  <div className="text-base font-bold font-mono text-slate-800">{Number(ownerStatement.openingBalance || 0).toLocaleString()} AED</div>
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-slate-400 font-semibold uppercase">{isAr ? "الرصيد الختامي المتبقي" : "Closing Payable"}</div>
-                  <div className="text-xl font-black font-mono text-emerald-700">{ownerStatement.closingBalance.toLocaleString()} AED</div>
+                  <div className="text-xl font-black font-mono text-emerald-700">{Number(ownerStatement.closingBalance || 0).toLocaleString()} AED</div>
                 </div>
               </div>
             </div>
@@ -356,17 +356,17 @@ export const StatementsView: React.FC = () => {
             <div className="grid grid-cols-3 gap-4 text-center">
               <div className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-xl">
                 <div className="text-xs font-semibold text-emerald-800">{isAr ? "إجمالي الإيجارات المحصلة" : "Total Rent Inflow"}</div>
-                <div className="text-lg font-bold font-mono text-emerald-700 mt-0.5">+{ownerStatement.totalCredits.toLocaleString()} AED</div>
+                <div className="text-lg font-bold font-mono text-emerald-700 mt-0.5">+{Number(ownerStatement.totalCredits || 0).toLocaleString()} AED</div>
               </div>
               <div className="p-3 bg-rose-50/60 border border-rose-200 rounded-xl">
                 <div className="text-xs font-semibold text-rose-800">{isAr ? "إجمالي المصاريف والعمولات" : "Deductions & Expenses"}</div>
                 <div className="text-lg font-bold font-mono text-rose-700 mt-0.5">
-                  -{ownerStatement.totalDebits.toLocaleString()} AED
+                  -{Number(ownerStatement.totalDebits || 0).toLocaleString()} AED
                 </div>
               </div>
               <div className="p-3 bg-indigo-50/60 border border-indigo-200 rounded-xl">
                 <div className="text-xs font-semibold text-indigo-800">{isAr ? "صافي المستحق النهائي" : "Net Payable Available"}</div>
-                <div className="text-lg font-bold font-mono text-indigo-700 mt-0.5">{ownerStatement.closingBalance.toLocaleString()} AED</div>
+                <div className="text-lg font-bold font-mono text-indigo-700 mt-0.5">{Number(ownerStatement.closingBalance || 0).toLocaleString()} AED</div>
               </div>
             </div>
 
@@ -393,7 +393,7 @@ export const StatementsView: React.FC = () => {
                     <td className="px-4 py-3 text-slate-600 font-sans">{isAr ? "الرصيد المدور من الفترات السابقة" : "Balance brought forward"}</td>
                     <td className="px-4 py-3 text-slate-400">—</td>
                     <td className="px-4 py-3 text-slate-400">—</td>
-                    <td className="px-4 py-3 font-bold text-slate-900">{ownerStatement.openingBalance.toLocaleString()} AED</td>
+                    <td className="px-4 py-3 font-bold text-slate-900">{Number(ownerStatement.openingBalance || 0).toLocaleString()} AED</td>
                   </tr>
 
                   {ownerStatement.transactions.map((tx) => (
@@ -407,13 +407,13 @@ export const StatementsView: React.FC = () => {
                       </td>
                       <td className="px-4 py-3 font-sans text-slate-700">{tx.description}</td>
                       <td className="px-4 py-3 text-rose-600 font-bold">
-                        {tx.debit > 0 ? `-${tx.debit.toLocaleString()}` : "—"}
+                        {tx.debit > 0 ? `-${Number(tx.debit || 0).toLocaleString()}` : "—"}
                       </td>
                       <td className="px-4 py-3 text-emerald-600 font-bold">
-                        {tx.credit > 0 ? `+${tx.credit.toLocaleString()}` : "—"}
+                        {tx.credit > 0 ? `+${Number(tx.credit || 0).toLocaleString()}` : "—"}
                       </td>
                       <td className="px-4 py-3 font-bold text-slate-900">
-                        {tx.runningBalance.toLocaleString()} AED
+                        {Number(tx.runningBalance || 0).toLocaleString()} AED
                       </td>
                     </tr>
                   ))}
@@ -431,9 +431,9 @@ export const StatementsView: React.FC = () => {
                     <td colSpan={4} className="px-4 py-3 font-sans text-slate-800">
                       {isAr ? "الإجمالي والرصيد المستحق النهائي للمالك:" : "Closing Balance Available for Transfer:"}
                     </td>
-                    <td className="px-4 py-3 font-mono text-rose-700">-{ownerStatement.totalDebits.toLocaleString()}</td>
-                    <td className="px-4 py-3 font-mono text-emerald-700">+{ownerStatement.totalCredits.toLocaleString()}</td>
-                    <td className="px-4 py-3 font-mono text-indigo-900 text-sm">{ownerStatement.closingBalance.toLocaleString()} AED</td>
+                    <td className="px-4 py-3 font-mono text-rose-700">-{Number(ownerStatement.totalDebits || 0).toLocaleString()}</td>
+                    <td className="px-4 py-3 font-mono text-emerald-700">+{Number(ownerStatement.totalCredits || 0).toLocaleString()}</td>
+                    <td className="px-4 py-3 font-mono text-indigo-900 text-sm">{Number(ownerStatement.closingBalance || 0).toLocaleString()} AED</td>
                   </tr>
                 </tfoot>
               </table>
@@ -546,13 +546,13 @@ export const StatementsView: React.FC = () => {
                         </td>
                         <td className="px-4 py-3 font-sans text-slate-700">{tx.description}</td>
                         <td className="px-4 py-3 text-rose-600 font-bold">
-                          {tx.debit > 0 ? tx.debit.toLocaleString() : "—"}
+                          {tx.debit > 0 ? Number(tx.debit || 0).toLocaleString() : "—"}
                         </td>
                         <td className="px-4 py-3 text-emerald-600 font-bold">
-                          {tx.credit > 0 ? tx.credit.toLocaleString() : "—"}
+                          {tx.credit > 0 ? Number(tx.credit || 0).toLocaleString() : "—"}
                         </td>
                         <td className="px-4 py-3 font-bold text-slate-900">
-                          {tx.runningBalance.toLocaleString()} AED
+                          {Number(tx.runningBalance || 0).toLocaleString()} AED
                         </td>
                       </tr>
                     );
