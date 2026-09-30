@@ -3294,6 +3294,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   };
 
+  // -------------------------------------------------------------
+  // Contract Integrity R2: Atomic Lease Renewal Approval with Retry Safety,
+  // Authoritative Firestore Sequences, and Financial Deposit Balancing
+  // -------------------------------------------------------------
   const approveLeaseRenewal = async (
     id: string,
     reviewNotes?: string
