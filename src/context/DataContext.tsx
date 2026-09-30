@@ -3326,15 +3326,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const userId = currentUser?.id || "sys-01";
     const userName = currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
 
-    let createdLeaseOut: Lease | null = null;
-    let updatedRenewalOut: LeaseRenewalRecord | null = null;
-    let updatedOriginalLeaseOut: Lease | null = null;
-    const createdChequesOut: Cheque[] = [];
-    const createdDeferredOut: DeferredPaymentRecord[] = [];
-    const createdCommissionsOut: CommissionObligation[] = [];
-
     try {
-      await runTransaction(db, async (transaction) => {
+      const transactionResult = await runTransaction(db, async (transaction) => {
         // ==========================================
         // 1. ALL AUTHORITATIVE READS FIRST (READ PHASE)
         // ==========================================
@@ -3368,19 +3361,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         // Determine IDs and sequence
-        const originalSeq = Number(originalLease.renewalSequence) || 1;
+        const originalSeq = typeof originalLease.renewalSequence === "number" && originalLease.renewalSequence >= 1
+          ? originalLease.renewalSequence
+          : 1;
         const nextRenewalSeq = originalSeq + 1;
         const newLeaseId = "lse-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
-        const newLeaseNumber = generateSequentialNumber(leases, "leaseNumber", "EFR-CON-", 4, false);
         const currentCommissionYear = new Date(renewal.newStartDate).getFullYear().toString();
 
-        // 1.4 Prepare and read Owner/Tenant Admin Fee commission documents
+        // 1.4 Sequence Counter Read via allocateNextSequenceInTransaction
+        const [newLeaseNumber] = await allocateNextSequenceInTransaction(transaction, db, "leases", "EFR-CON-", 1, 4, 1000);
+
+        // 1.5 Prepare and read Owner/Tenant Admin Fee commission documents
         let ownerFeeObligation: CommissionObligation | null = null;
-        let ownerFeeRef: any = null;
+        let ownerFeeRef: DocumentReference<DocumentData> | null = null;
         let ownerFeeExists = false;
 
         let tenantFeeObligation: CommissionObligation | null = null;
-        let tenantFeeRef: any = null;
+        let tenantFeeRef: DocumentReference<DocumentData> | null = null;
         let tenantFeeExists = false;
 
         if (renewal.includeAdminFees) {
@@ -3476,6 +3473,53 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const carriedHeld = Math.min(originalHeld, depositAmount);
         const diffOutstanding = Math.max(0, depositAmount - carriedHeld);
         const excessHeldRefundDue = Math.max(0, originalHeld - depositAmount);
+
+        let excessHeldRefundJournal: JournalEntryRecord | null = null;
+        if (excessHeldRefundDue > 0) {
+          const transDate = nowIso.split("T")[0];
+          const periodCheck = validateTransactionPeriod(transDate, financialPeriods);
+          if (!periodCheck.allowed) {
+            throw new Error(`Financial period closed: ${periodCheck.errorEn || periodCheck.errorAr}`);
+          }
+          const jData = buildSecurityDepositRefundJournal(chartOfAccounts, {
+            leaseId: originalLease.id,
+            leaseNumber: originalLease.leaseNumber,
+            tenantId: originalLease.tenantId,
+            ownerId: originalLease.ownerId,
+            propertyId: originalLease.propertyId,
+            unitId: originalLease.unitId,
+            refundAmount: excessHeldRefundDue,
+            paymentMethod: "BANK_TRANSFER",
+            reference: `REF-SD-${originalLease.leaseNumber}`,
+            transactionDate: transDate,
+            createdBy: userName,
+            notes: `تسوية فارق تأمين التجديد: رد فائض تأمين مستحق للمستأجر بقيمة ${excessHeldRefundDue} AED لعقد #${originalLease.leaseNumber} عند التجديد إلى #${newLeaseNumber}`,
+          });
+          const jVal = validateJournalEntry(jData);
+          if (!jVal.isValid) {
+            throw new Error(`Security deposit refund journal invalid: ${jVal.error}`);
+          }
+          const jeId = "je-sd-ref-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
+          const fullJeRecord: JournalEntryRecord = {
+            ...jData,
+            id: jeId,
+            entryNumber: "",
+            status: "POSTED",
+            totalDebit: jVal.totalDebit,
+            totalCredit: jVal.totalCredit,
+            createdAt: nowIso,
+          };
+          const postRes = await postAuthoritativeJournalEntry({
+            db,
+            entry: fullJeRecord,
+            financialPeriods,
+            transaction,
+          });
+          if (!postRes.isValid || !postRes.journalRecord) {
+            throw new Error(postRes.error || "Failed to post security deposit refund journal");
+          }
+          excessHeldRefundJournal = postRes.journalRecord;
+        }
 
         const newDepositStatus: SecurityDepositStatus | undefined = carriedHeld > 0
           ? "HELD"
@@ -3601,12 +3645,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // ==========================================
         // 3. ALL WRITES HAPPEN AFTER ALL READS (WRITE PHASE)
         // ==========================================
+        flushTransactionWrites(transaction);
+
         transaction.set(doc(db, "leases", createdLease.id), sanitizeForFirestore(createdLease));
-        createdLeaseOut = createdLease;
-
         transaction.set(originalLeaseRef, sanitizeForFirestore(updatedOriginalLease), { merge: true });
-        updatedOriginalLeaseOut = updatedOriginalLease;
-
         transaction.set(
           unitRef,
           {
@@ -3616,6 +3658,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           },
           { merge: true }
         );
+
+        const attemptCheques: Cheque[] = [];
+        const attemptDeferred: DeferredPaymentRecord[] = [];
+        const attemptCommissions: CommissionObligation[] = [];
 
         (renewal.paymentSchedule || []).forEach((item, idx) => {
           if (item.paymentMethod === "CHEQUE" && item.chequeDetails) {
@@ -3647,12 +3693,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               notes: `شيك تجديد عقد #${newLeaseNumber}`,
               createdAt: nowIso,
             };
-            createdChequesOut.push(chq);
+            attemptCheques.push(chq);
             transaction.set(doc(db, "cheques", chq.id), sanitizeForFirestore(chq));
           } else if (item.paymentMethod === "DEFERRED" && item.deferredDetails) {
             const def: DeferredPaymentRecord = {
               id: "def-" + Date.now() + "-" + idx,
-              deferredNumber: generateSequentialNumber([...deferredPayments, ...createdDeferredOut], "deferredNumber", "DEF-", 4, false),
+              deferredNumber: `DEF-${newLeaseNumber.replace(/[^0-9]/g, "")}-${idx + 1}`,
               leaseId: createdLease.id,
               leaseNumber: newLeaseNumber,
               renewalId: renewal.id,
@@ -3679,34 +3725,38 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               createdAt: nowIso,
               notes: item.notes,
             };
-            createdDeferredOut.push(def);
+            attemptDeferred.push(def);
             transaction.set(doc(db, "deferred_payments", def.id), sanitizeForFirestore(def));
           }
         });
 
         if (ownerFeeObligation && ownerFeeRef && !ownerFeeExists) {
-          createdCommissionsOut.push(ownerFeeObligation);
+          attemptCommissions.push(ownerFeeObligation);
           transaction.set(ownerFeeRef, sanitizeForFirestore(ownerFeeObligation));
         }
 
         if (tenantFeeObligation && tenantFeeRef && !tenantFeeExists) {
-          createdCommissionsOut.push(tenantFeeObligation);
+          attemptCommissions.push(tenantFeeObligation);
           transaction.set(tenantFeeRef, sanitizeForFirestore(tenantFeeObligation));
         }
 
         transaction.set(renewalRef, sanitizeForFirestore(updatedRenewal), { merge: true });
-        updatedRenewalOut = updatedRenewal;
-      });
-    } catch (err: any) {
-      console.error("Atomic approveLeaseRenewal failed:", err);
-      return { success: false, error: err?.message || String(err) };
-    }
 
-    // React state updates post-commit
-    if (createdLeaseOut && updatedOriginalLeaseOut && updatedRenewalOut) {
+        return {
+          createdLease,
+          updatedOriginalLease,
+          updatedRenewal,
+          createdCheques: attemptCheques,
+          createdDeferred: attemptDeferred,
+          createdCommissions: attemptCommissions,
+          excessHeldRefundJournal,
+        };
+      });
+
+      // Update React state once from the committed transaction result
       setLeases((prev) => [
-        createdLeaseOut!,
-        ...prev.map((l) => (l.id === updatedOriginalLeaseOut!.id ? updatedOriginalLeaseOut! : l)),
+        transactionResult.createdLease,
+        ...prev.map((l) => (l.id === transactionResult.updatedOriginalLease.id ? transactionResult.updatedOriginalLease : l)),
       ]);
       setUnits((prev) =>
         prev.map((u) => {
@@ -3715,26 +3765,29 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               ...u,
               status: "OCCUPIED" as const,
               currentTenantId: renewalInMemory.tenantId,
-              currentLeaseId: createdLeaseOut!.id,
+              currentLeaseId: transactionResult.createdLease.id,
             };
           }
           return u;
         })
       );
-      if (createdChequesOut.length > 0) {
-        setCheques((prev) => [...createdChequesOut, ...prev]);
+      if (transactionResult.createdCheques.length > 0) {
+        setCheques((prev) => [...transactionResult.createdCheques, ...prev]);
       }
-      if (createdDeferredOut.length > 0) {
-        setDeferredPayments((prev) => [...createdDeferredOut, ...prev]);
+      if (transactionResult.createdDeferred.length > 0) {
+        setDeferredPayments((prev) => [...transactionResult.createdDeferred, ...prev]);
       }
-      if (createdCommissionsOut.length > 0) {
-        setCommissions((prev) => [...createdCommissionsOut, ...prev]);
+      if (transactionResult.createdCommissions.length > 0) {
+        setCommissions((prev) => [...transactionResult.createdCommissions, ...prev]);
       }
-      setLeaseRenewals((prev) => prev.map((r) => (r.id === id ? updatedRenewalOut! : r)));
+      if (transactionResult.excessHeldRefundJournal) {
+        setJournalEntries((prev) => [...prev, transactionResult.excessHeldRefundJournal!]);
+      }
+      setLeaseRenewals((prev) => prev.map((r) => (r.id === id ? transactionResult.updatedRenewal : r)));
 
       // Tenant Notification
       const tenantObj = tenants.find((t) => t.id === renewalInMemory.tenantId);
-      const notifContent = `عزيزي المستأجر ${tenantObj?.nameAr || renewalInMemory.tenantNameAr || ""}\nتم اعتماد تجديد عقد الإيجار الخاص بكم بنجاح.\nرقم العقد الجديد: ${createdLeaseOut.leaseNumber}\nالفترة: من ${renewalInMemory.newStartDate} إلى ${renewalInMemory.newEndDate}\nقيمة الإيجار السنوي: ${Number(renewalInMemory.newAnnualRent || 0).toLocaleString()} درهم\nعدد الدفعات: ${renewalInMemory.installmentsCount}\nشكراً لتعاملكم مع شركة صقر الإمارات للعقارات.`;
+      const notifContent = `عزيزي المستأجر ${tenantObj?.nameAr || renewalInMemory.tenantNameAr || ""}\nتم اعتماد تجديد عقد الإيجار الخاص بكم بنجاح.\nرقم العقد الجديد: ${transactionResult.createdLease.leaseNumber}\nالفترة: من ${renewalInMemory.newStartDate} إلى ${renewalInMemory.newEndDate}\nقيمة الإيجار السنوي: ${Number(renewalInMemory.newAnnualRent || 0).toLocaleString()} درهم\nعدد الدفعات: ${renewalInMemory.installmentsCount}\nشكراً لتعاملكم مع شركة صقر الإمارات للعقارات.`;
       const notif: NotificationRecord = {
         id: "notif-" + Date.now(),
         channel: "WHATSAPP",
@@ -3751,14 +3804,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       logAudit(
         "UPDATE",
         "LEASE",
-        createdLeaseOut.id,
-        `اعتماد تجديد عقد #${createdLeaseOut.leaseNumber}`,
-        `تم اعتماد طلب التجديد #${renewalInMemory.renewalNumber} وتفعيل العقد الجديد #${createdLeaseOut.leaseNumber} بإيجار ${Number(renewalInMemory.newAnnualRent || 0).toLocaleString()} AED من قبل ${userName}.`
+        transactionResult.createdLease.id,
+        `اعتماد تجديد عقد #${transactionResult.createdLease.leaseNumber}`,
+        `تم اعتماد طلب التجديد #${renewalInMemory.renewalNumber} وتفعيل العقد الجديد #${transactionResult.createdLease.leaseNumber} بإيجار ${Number(renewalInMemory.newAnnualRent || 0).toLocaleString()} AED من قبل ${userName}.`
       );
-      return { success: true, renewal: updatedRenewalOut, newLease: createdLeaseOut };
+      return { success: true, renewal: transactionResult.updatedRenewal, newLease: transactionResult.createdLease };
+    } catch (err: any) {
+      console.error("Atomic approveLeaseRenewal failed:", err);
+      return { success: false, error: err?.message || String(err) };
     }
-
-    return { success: false, error: "Failed to finalize renewal approval." };
   };
   const rejectLeaseRenewal = (
     id: string,
@@ -3870,13 +3924,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const userId = currentUser?.id || "sys-01";
     const userName = currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
 
-    let activatedLeaseOut: Lease | null = null;
-    const createdChequesOut: Cheque[] = [];
-    const createdExpensesOut: PropertyExpenseRecord[] = [];
-    const createdCommissionsOut: CommissionObligation[] = [];
-
     try {
-      await runTransaction(db, async (transaction) => {
+      const transactionResult = await runTransaction(db, async (transaction) => {
         // ==========================================
         // 1. ALL AUTHORITATIVE READS FIRST (READ PHASE)
         // ==========================================
@@ -3890,7 +3939,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           throw new Error(`Cannot approve lease: current status is ${lease.contractStatus}`);
         }
 
-        let unitRef: any = null;
+        let unitRef: DocumentReference<DocumentData> | null = null;
         if (lease.unitId) {
           unitRef = doc(db, "units", lease.unitId);
           const unitSnap = await transaction.get(unitRef);
@@ -3902,11 +3951,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Staged Admin Fees preparation & read phase
         const stagedFees = lease.stagedAdminFeesConfig;
         let ownerFeeObligation: CommissionObligation | null = null;
-        let ownerFeeRef: any = null;
+        let ownerFeeRef: DocumentReference<DocumentData> | null = null;
         let ownerFeeExists = false;
 
         let tenantFeeObligation: CommissionObligation | null = null;
-        let tenantFeeRef: any = null;
+        let tenantFeeRef: DocumentReference<DocumentData> | null = null;
         let tenantFeeExists = false;
 
         if (stagedFees && stagedFees.includeAdminFees) {
@@ -3995,6 +4044,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // ==========================================
         // 2. ENTITY PREPARATION & WRITES (WRITE PHASE)
         // ==========================================
+        flushTransactionWrites(transaction);
+
         const activatedLease: Lease = {
           ...lease,
           contractStatus: "ACTIVE",
@@ -4004,7 +4055,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           securityDepositStatus: lease.securityDeposit > 0 ? (lease.securityDepositStatus || "PENDING") : undefined,
         };
         transaction.set(leaseRef, sanitizeForFirestore(activatedLease), { merge: true });
-        activatedLeaseOut = activatedLease;
 
         if (unitRef && lease.unitId) {
           transaction.set(
@@ -4017,6 +4067,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             { merge: true }
           );
         }
+
+        const attemptCheques: Cheque[] = [];
+        const attemptExpenses: PropertyExpenseRecord[] = [];
+        const attemptCommissions: CommissionObligation[] = [];
 
         const existingChequesForLease = cheques.filter((c) => c.leaseId === lease.id);
         if (existingChequesForLease.length === 0 && lease.installments && lease.installments.length > 0) {
@@ -4054,7 +4108,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 notes: `شيك عقد إيجار #${lease.leaseNumber}`,
                 createdAt: nowIso,
               };
-              createdChequesOut.push(chq);
+              attemptCheques.push(chq);
               transaction.set(doc(db, "cheques", chq.id), sanitizeForFirestore(chq));
             }
           });
@@ -4084,28 +4138,31 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
               notes: exp.notes,
               expenseLevel: "LEASE_LEVEL",
             };
-            createdExpensesOut.push(expRecord);
+            attemptExpenses.push(expRecord);
             transaction.set(doc(db, "property_expenses", expRecord.id), sanitizeForFirestore(expRecord));
           });
         }
 
         if (ownerFeeObligation && ownerFeeRef && !ownerFeeExists) {
-          createdCommissionsOut.push(ownerFeeObligation);
+          attemptCommissions.push(ownerFeeObligation);
           transaction.set(ownerFeeRef, sanitizeForFirestore(ownerFeeObligation));
         }
 
         if (tenantFeeObligation && tenantFeeRef && !tenantFeeExists) {
-          createdCommissionsOut.push(tenantFeeObligation);
+          attemptCommissions.push(tenantFeeObligation);
           transaction.set(tenantFeeRef, sanitizeForFirestore(tenantFeeObligation));
         }
-      });
-    } catch (err: any) {
-      console.error("Atomic approveLease failed:", err);
-      return { success: false, error: err?.message || String(err) };
-    }
 
-    if (activatedLeaseOut) {
-      setLeases((prev) => prev.map((l) => (l.id === leaseId ? activatedLeaseOut! : l)));
+        return {
+          activatedLease,
+          createdCheques: attemptCheques,
+          createdExpenses: attemptExpenses,
+          createdCommissions: attemptCommissions,
+        };
+      });
+
+      // Update React state once from the committed transaction result
+      setLeases((prev) => prev.map((l) => (l.id === leaseId ? transactionResult.activatedLease : l)));
       if (leaseInMemory.unitId) {
         setUnits((prevUnits) =>
           prevUnits.map((u) => {
@@ -4114,27 +4171,28 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 ...u,
                 status: "OCCUPIED" as const,
                 currentTenantId: leaseInMemory.tenantId,
-                currentLeaseId: activatedLeaseOut!.id,
+                currentLeaseId: transactionResult.activatedLease.id,
               };
             }
             return u;
           })
         );
       }
-      if (createdChequesOut.length > 0) {
-        setCheques((prev) => [...createdChequesOut, ...prev]);
+      if (transactionResult.createdCheques.length > 0) {
+        setCheques((prev) => [...transactionResult.createdCheques, ...prev]);
       }
-      if (createdExpensesOut.length > 0) {
-        setPropertyExpenses((prev) => [...createdExpensesOut, ...prev]);
+      if (transactionResult.createdExpenses.length > 0) {
+        setPropertyExpenses((prev) => [...transactionResult.createdExpenses, ...prev]);
       }
-      if (createdCommissionsOut.length > 0) {
-        setCommissions((prev) => [...createdCommissionsOut, ...prev]);
+      if (transactionResult.createdCommissions.length > 0) {
+        setCommissions((prev) => [...transactionResult.createdCommissions, ...prev]);
       }
-      logAudit("APPROVE", "LEASE", activatedLeaseOut.id, activatedLeaseOut.leaseNumber, `Approved and activated lease contract ${activatedLeaseOut.leaseNumber}. Review notes: ${reviewNotes || "None"}`);
-      return { success: true, lease: activatedLeaseOut };
+      logAudit("APPROVE", "LEASE", transactionResult.activatedLease.id, transactionResult.activatedLease.leaseNumber, `Approved and activated lease contract ${transactionResult.activatedLease.leaseNumber}. Review notes: ${reviewNotes || "None"}`);
+      return { success: true, lease: transactionResult.activatedLease };
+    } catch (err: any) {
+      console.error("Atomic approveLease failed:", err);
+      return { success: false, error: err?.message || String(err) };
     }
-
-    return { success: false, error: "Failed to finalize lease approval" };
   };
 
   const rejectLease = (

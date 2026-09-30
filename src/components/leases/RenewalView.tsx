@@ -1588,7 +1588,7 @@ export const RenewalView: React.FC<RenewalViewProps> = ({
                       {/* Calculation Summary Box */}
                       {(() => {
                         const total = tenantFeeBasis === "PERCENTAGE_OF_RENT"
-                          ? Math.round((Number(newAnnualRent || 0) * Number(tenantFeeRate || 0)) / 100)
+                          ? Math.round(((Number(newAnnualRent || 0) * Number(tenantFeeRate || 0)) / 100) * 100) / 100
                           : Number(tenantFeeFixed || 0);
                         
                         // Use centralized engine for summary
@@ -1764,7 +1764,7 @@ export const RenewalView: React.FC<RenewalViewProps> = ({
                       {/* Calculation Summary Box */}
                       {(() => {
                         const total = ownerFeeBasis === "PERCENTAGE_OF_RENT"
-                          ? Math.round((Number(newAnnualRent || 0) * Number(ownerFeeRate || 0)) / 100)
+                          ? Math.round(((Number(newAnnualRent || 0) * Number(ownerFeeRate || 0)) / 100) * 100) / 100
                           : Number(ownerFeeFixed || 0);
                         
                         // Use centralized engine for summary

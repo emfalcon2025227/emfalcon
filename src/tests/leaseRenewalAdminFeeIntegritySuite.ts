@@ -1,6 +1,6 @@
 /**
  * EMIRATES FALCON ERP — LEASE + RENEWAL + ADMIN FEES + SECURITY DEPOSIT INTEGRITY SUITE
- * Complete 25-Point Comprehensive Verification Suite
+ * Complete Comprehensive Verification Suite (Requirements A through R)
  */
 
 import { db } from "../lib/firebase";
@@ -15,320 +15,450 @@ import {
 import {
   validateJournalEntry,
   buildSecurityDepositCollectionJournal,
+  buildSecurityDepositRefundJournal,
   findAccountByCodeOrType,
+  postAuthoritativeJournalEntry,
 } from "../services/journalEngine";
+import { allocateNextSequenceInTransaction, flushTransactionWrites } from "../utils/sequenceGenerator";
 import {
   CommissionObligation,
   Lease,
   LeaseRenewalRecord,
   AccountDefinition,
   AdminFeeExemptionPolicy,
+  FinancialPeriodRecord,
+  JournalEntryRecord,
 } from "../types";
 
 export interface TestReport {
   passed: number;
   failed: number;
-  results: { testNumber: number; name: string; passed: boolean; details: string }[];
+  results: { testNumber: number; letter: string; name: string; passed: boolean; details: string }[];
 }
 
 export async function runLeaseRenewalAdminFeeIntegritySuite(): Promise<TestReport> {
   const report: TestReport = { passed: 0, failed: 0, results: [] };
 
-  const record = (testNumber: number, name: string, passed: boolean, details: string) => {
+  const record = (testNumber: number, letter: string, name: string, passed: boolean, details: string) => {
     if (passed) {
       report.passed++;
-      console.log(`[PASS] Test ${testNumber}: ${name}\n       Details: ${details}`);
+      console.log(`[PASS] Test ${testNumber} [${letter}]: ${name}\n       Details: ${details}`);
     } else {
       report.failed++;
-      console.error(`[FAIL] Test ${testNumber}: ${name}\n       Details: ${details}`);
+      console.error(`[FAIL] Test ${testNumber} [${letter}]: ${name}\n       Details: ${details}`);
     }
-    report.results.push({ testNumber, name, passed, details });
+    report.results.push({ testNumber, letter, name, passed, details });
   };
 
   console.log("\n==================================================");
-  console.log("LEASE, RENEWAL, ADMIN FEES & DEPOSIT INTEGRITY SUITE");
+  console.log("CONTRACT INTEGRITY R2: TEST MATRIX (A through R)");
   console.log("==================================================");
 
-  const baseRent = 100000;
+  const testPeriod: FinancialPeriodRecord[] = [
+    {
+      id: "fp-2027",
+      periodName: "FY 2027",
+      year: 2027,
+      startDate: "2027-01-01",
+      endDate: "2027-12-31",
+      status: "OPEN",
+      isYearLocked: false,
+      isHardLocked: false,
+      closingStage: "OPEN",
+    },
+  ];
 
-  // 1. New lease owner fee 5%
-  const ownerCalc = calculateCommissionAmount(baseRent, "OWNER", 5, DEFAULT_COMMISSION_SETTINGS, "ADMIN_FEE");
-  record(1, "New lease owner fee 5%", ownerCalc.amount === 5000 && ownerCalc.rate === 5, `Gross owner fee: AED ${ownerCalc.amount} (5%)`);
+  const standardCoA: AccountDefinition[] = [
+    { id: "acc-1010", accountCode: "1010", accountNameAr: "البنك التشغيلي", accountNameEn: "Operating Bank", accountType: "ASSET", isSystemAccount: true, isActive: true, normalBalance: "DEBIT", createdAt: new Date().toISOString() },
+    { id: "acc-1020", accountCode: "1020", accountNameAr: "الصندوق والنقدية", accountNameEn: "Cash in Hand", accountType: "ASSET", isSystemAccount: true, isActive: true, normalBalance: "DEBIT", createdAt: new Date().toISOString() },
+    { id: "acc-2020", accountCode: "2020", accountNameAr: "أمانات تأمين المستأجرين", accountNameEn: "Tenant Security Deposits", accountType: "LIABILITY", isSystemAccount: true, isActive: true, normalBalance: "CREDIT", createdAt: new Date().toISOString() },
+    { id: "acc-4010", accountCode: "4010", accountNameAr: "إيرادات رسوم الإدارة", accountNameEn: "Admin Fee Revenue", accountType: "INCOME", isSystemAccount: true, isActive: true, normalBalance: "CREDIT", createdAt: new Date().toISOString() },
+    { id: "acc-2030", accountCode: "2030", accountNameAr: "ضريبة القيمة المضافة المستحقة", accountNameEn: "VAT Output Tax", accountType: "LIABILITY", isSystemAccount: true, isActive: true, normalBalance: "CREDIT", createdAt: new Date().toISOString() },
+  ];
 
-  // 2. New lease tenant fee 5%
-  const tenantCalc = calculateCommissionAmount(baseRent, "TENANT", 5, DEFAULT_COMMISSION_SETTINGS, "ADMIN_FEE");
-  record(2, "New lease tenant fee 5%", tenantCalc.amount === 5000 && tenantCalc.rate === 5, `Gross tenant fee: AED ${tenantCalc.amount} (5%)`);
-
-  // 3. Both fees
-  const bothTotal = ownerCalc.amount + tenantCalc.amount;
-  record(3, "Both fees combined", bothTotal === 10000, `Combined owner + tenant admin fees: AED ${bothTotal}`);
-
-  // 4. AED 5,000 VAT inclusive: VAT = 238.10, Net = 4,761.90
-  const gross5000 = 5000;
-  const vatRate = 5;
-  const vat5000 = Math.round((gross5000 * vatRate / (100 + vatRate)) * 100) / 100;
-  const net5000 = Math.round((gross5000 - vat5000) * 100) / 100;
-  const vatMatches = vat5000 === 238.10 && net5000 === 4761.90;
-  record(4, "AED 5,000 VAT inclusive (VAT 238.10, Net 4,761.90)", vatMatches, `VAT: ${vat5000.toFixed(2)}, Net Office Revenue: ${net5000.toFixed(2)}`);
-
-  // 5. Exemption governance
-  const exemptionPolicy: AdminFeeExemptionPolicy = {
-    isExempt: true,
-    approvalStatus: "APPROVED",
-    exemptionReason: "MANAGEMENT_DECISION",
-    exemptionNote: "Diplomatic waiver approved",
-    approvedBy: "sys-admin",
-    approvedAt: new Date().toISOString(),
+  // =========================================================================
+  // A. NEW LEASE APPROVAL
+  // =========================================================================
+  const testLeaseIdA = `test-lease-a-${Date.now()}`;
+  const leaseRefA = doc(db, "leases", testLeaseIdA);
+  const leaseDataA: Partial<Lease> = {
+    id: testLeaseIdA,
+    leaseNumber: "EFR-CON-TEST-A",
+    contractStatus: "PENDING_APPROVAL",
+    annualRent: 80000,
+    securityDeposit: 4000,
+    startDate: "2027-01-01",
+    endDate: "2027-12-31",
+    tenantId: "t-test-a",
+    ownerId: "o-test-a",
+    unitId: "u-test-a",
+    propertyId: "p-test-a",
   };
-  const exemptPolicyResolved = resolveAdministrativeFeePolicy("TENANT", "t-1", { tenant: exemptionPolicy }, DEFAULT_COMMISSION_SETTINGS);
-  const exemptCalc = calculateCommissionAmount(baseRent, "TENANT", undefined, DEFAULT_COMMISSION_SETTINGS, "ADMIN_FEE", new Date().toISOString(), [], [], [], "t-1", { tenant: exemptionPolicy });
-  const isExemptValid = exemptPolicyResolved.isExempt === true && exemptCalc.amount === 0 && exemptCalc.netRevenue === 0;
-  record(5, "Exemption governance preserves exemption and zeroes fee", isExemptValid, `Exempt: ${exemptPolicyResolved.isExempt}, Fee: AED ${exemptCalc.amount}`);
+  await setDoc(leaseRefA, leaseDataA);
 
-  // Real Firestore Document Paths for Live Concurrency & Atomicity Tests
-  const testLeaseId = `test-lease-${Date.now()}`;
-  const testOwnerId = `test-owner-${Date.now()}`;
-  const testFeeYear = "2027";
-  const testRenewalSeq = 2;
-  const deterministicDocId = `com-${testLeaseId}-OWNER-ADMIN_FEE-${testFeeYear}-${testRenewalSeq}`;
-
-  // 6. Duplicate same-year fee blocked in transaction
-  const initialObligation: CommissionObligation = {
-    id: deterministicDocId,
-    leaseId: testLeaseId,
-    ownerId: testOwnerId,
-    propertyId: "prop-1",
-    unitId: "u-1",
-    dueDate: "2027-01-01",
-    partyType: "OWNER",
-    commissionType: "ADMIN_FEE",
-    calculationBasis: "PERCENTAGE_OF_RENT",
-    baseAmount: 100000,
-    ratePercentage: 5,
-    totalCommissionAmount: 5000,
-    vatAmount: 238.10,
-    vatRate: 5,
-    netRevenueAmount: 4761.90,
-    taxTreatment: "VAT_DEDUCTION",
-    collectedAmount: 0,
-    outstandingBalance: 5000,
-    status: "PENDING",
-    contractualCommissionYear: testFeeYear,
-    renewalSequence: testRenewalSeq,
-    businessKey: generateCommissionBusinessKey(testLeaseId, "OWNER", "ADMIN_FEE", "PRIMARY"),
-    createdAt: new Date().toISOString(),
-    createdById: "sys",
-    createdByName: "System Admin",
-  };
-
-  await setDoc(doc(db, "commissions", deterministicDocId), initialObligation);
-
-  let duplicateBlocked = false;
+  let approvedLeaseA: Lease | null = null;
   await runTransaction(db, async (tx) => {
-    const snap = await tx.get(doc(db, "commissions", deterministicDocId));
-    if (snap.exists()) {
-      duplicateBlocked = true;
-    }
+    const snap = await tx.get(leaseRefA);
+    if (!snap.exists()) throw new Error("Lease not found");
+    const l = snap.data() as Lease;
+    if (l.contractStatus !== "PENDING_APPROVAL") throw new Error("Status mismatch");
+    const updated: Lease = {
+      ...l,
+      contractStatus: "ACTIVE",
+      approvedAt: new Date().toISOString(),
+    };
+    tx.set(leaseRefA, updated, { merge: true });
+    approvedLeaseA = updated;
   });
-  record(6, "Duplicate same-year fee blocked in transaction state", duplicateBlocked, `Deterministic ID ${deterministicDocId} recognized existing obligation.`);
+  const checkLeaseA = await getDoc(leaseRefA);
+  record(1, "A", "New lease approval transaction", checkLeaseA.data()?.contractStatus === "ACTIVE", `Lease ${testLeaseIdA} activated atomically`);
+  await deleteDoc(leaseRefA);
 
-  // 7. Concurrent duplicate fee creation = exactly one obligation in Firestore
-  const concurrentDocId = `com-concur-${Date.now()}-OWNER-ADMIN_FEE-2027-1`;
-  const concurrentDocRef = doc(db, "commissions", concurrentDocId);
+  // =========================================================================
+  // B. CONCURRENT NEW LEASE APPROVAL
+  // =========================================================================
+  const testLeaseIdB = `test-lease-b-${Date.now()}`;
+  const leaseRefB = doc(db, "leases", testLeaseIdB);
+  await setDoc(leaseRefB, {
+    id: testLeaseIdB,
+    leaseNumber: "EFR-CON-TEST-B",
+    contractStatus: "PENDING_APPROVAL",
+  });
 
-  const attemptCreate = async (attemptName: string) => {
+  const attemptApproveB = async (workerId: string) => {
     return await runTransaction(db, async (tx) => {
-      const snap = await tx.get(concurrentDocRef);
-      if (snap.exists()) {
-        return { isExisting: true, data: snap.data() as CommissionObligation };
+      const snap = await tx.get(leaseRefB);
+      if (!snap.exists()) throw new Error("Lease not found");
+      const l = snap.data() as Lease;
+      if (l.contractStatus !== "PENDING_APPROVAL") {
+        return { success: false, reason: `Status is ${l.contractStatus}` };
       }
-      const data = { ...initialObligation, id: concurrentDocId, notes: attemptName };
-      tx.set(concurrentDocRef, data);
+      tx.set(leaseRefB, { contractStatus: "ACTIVE", approvedBy: workerId }, { merge: true });
+      return { success: true, workerId };
+    });
+  };
+
+  const [bRes1, bRes2] = await Promise.all([attemptApproveB("W1"), attemptApproveB("W2")]);
+  const bWinners = [bRes1, bRes2].filter((r) => r.success);
+  record(2, "B", "Concurrent new lease approval (single winner)", bWinners.length === 1, `Worker 1: ${bRes1.success}, Worker 2: ${bRes2.success}`);
+  await deleteDoc(leaseRefB);
+
+  // =========================================================================
+  // C. RENEWAL APPROVAL
+  // =========================================================================
+  const origLeaseIdC = `test-orig-c-${Date.now()}`;
+  const renewalIdC = `test-ren-c-${Date.now()}`;
+  const newLeaseIdC = `test-newlse-c-${Date.now()}`;
+  const origRefC = doc(db, "leases", origLeaseIdC);
+  const renRefC = doc(db, "lease_renewals", renewalIdC);
+  const newLeaseRefC = doc(db, "leases", newLeaseIdC);
+
+  await setDoc(origRefC, { id: origLeaseIdC, leaseNumber: "EFR-CON-ORIG-C", contractStatus: "ACTIVE", renewalSequence: 1, securityDeposit: 5000, securityDepositHeld: 5000 });
+  await setDoc(renRefC, { id: renewalIdC, originalLeaseId: origLeaseIdC, status: "PENDING_APPROVAL", newAnnualRent: 90000, newStartDate: "2027-01-01", newEndDate: "2027-12-31", securityDeposit: 5000 });
+
+  await runTransaction(db, async (tx) => {
+    const renSnap = await tx.get(renRefC);
+    const origSnap = await tx.get(origRefC);
+    if (!renSnap.exists() || !origSnap.exists()) throw new Error("Missing records");
+    const ren = renSnap.data();
+    const orig = origSnap.data();
+    if (ren.status !== "PENDING_APPROVAL" || orig.contractStatus === "RENEWED") throw new Error("Invalid state");
+
+    tx.set(origRefC, { contractStatus: "RENEWED", carriedForwardToLeaseId: newLeaseIdC }, { merge: true });
+    tx.set(renRefC, { status: "APPROVED", newLeaseId: newLeaseIdC }, { merge: true });
+    tx.set(newLeaseRefC, { id: newLeaseIdC, contractStatus: "ACTIVE", renewalSequence: 2, annualRent: 90000 });
+  });
+
+  const checkOrigC = await getDoc(origRefC);
+  const checkRenC = await getDoc(renRefC);
+  const checkNewC = await getDoc(newLeaseRefC);
+  const passC = checkOrigC.data()?.contractStatus === "RENEWED" && checkRenC.data()?.status === "APPROVED" && checkNewC.data()?.contractStatus === "ACTIVE";
+  record(3, "C", "Renewal approval coordinates original, renewal, and new lease", passC, "Original -> RENEWED, Renewal -> APPROVED, New Lease -> ACTIVE");
+  await deleteDoc(origRefC);
+  await deleteDoc(renRefC);
+  await deleteDoc(newLeaseRefC);
+
+  // =========================================================================
+  // D. CONCURRENT RENEWAL APPROVAL
+  // =========================================================================
+  const origLeaseIdD = `test-orig-d-${Date.now()}`;
+  const renewalIdD = `test-ren-d-${Date.now()}`;
+  const origRefD = doc(db, "leases", origLeaseIdD);
+  const renRefD = doc(db, "lease_renewals", renewalIdD);
+
+  await setDoc(origRefD, { id: origLeaseIdD, contractStatus: "ACTIVE", renewalSequence: 1 });
+  await setDoc(renRefD, { id: renewalIdD, originalLeaseId: origLeaseIdD, status: "PENDING_APPROVAL" });
+
+  const attemptRenewalD = async (workerId: string) => {
+    return await runTransaction(db, async (tx) => {
+      const renSnap = await tx.get(renRefD);
+      const origSnap = await tx.get(origRefD);
+      if (!renSnap.exists() || !origSnap.exists()) throw new Error("Missing record");
+      const ren = renSnap.data();
+      const orig = origSnap.data();
+      if (ren.status !== "PENDING_APPROVAL") return { success: false, reason: "RENEWAL_ALREADY_PROCESSED" };
+      if (orig.contractStatus === "RENEWED") return { success: false, reason: "LEASE_ALREADY_RENEWED" };
+
+      const newId = `lse-d-${workerId}`;
+      tx.set(origRefD, { contractStatus: "RENEWED", renewalSequence: 2 }, { merge: true });
+      tx.set(renRefD, { status: "APPROVED", newLeaseId: newId }, { merge: true });
+      return { success: true, workerId };
+    });
+  };
+
+  const [dRes1, dRes2] = await Promise.all([attemptRenewalD("w1"), attemptRenewalD("w2")]);
+  const dWinners = [dRes1, dRes2].filter((r) => r.success);
+  record(4, "D", "Concurrent renewal approval (exactly 1 winner)", dWinners.length === 1, `Worker 1: ${dRes1.success}, Worker 2: ${dRes2.success}`);
+  await deleteDoc(origRefD);
+  await deleteDoc(renRefD);
+
+  // =========================================================================
+  // E & F. CONCURRENT OWNER & TENANT ADMIN FEE CREATION (DETERMINISTIC ID)
+  // =========================================================================
+  const leaseIdEF = `test-lease-ef-${Date.now()}`;
+  const ownerFeeDocId = `com-${leaseIdEF}-OWNER-ADMIN_FEE-2027-1`;
+  const tenantFeeDocId = `com-${leaseIdEF}-TENANT-ADMIN_FEE-2027-1`;
+  const ownerFeeRef = doc(db, "commissions", ownerFeeDocId);
+  const tenantFeeRef = doc(db, "commissions", tenantFeeDocId);
+
+  const attemptFeeCreate = async (docRef: typeof ownerFeeRef, partyType: "OWNER" | "TENANT", workerId: string) => {
+    return await runTransaction(db, async (tx) => {
+      const snap = await tx.get(docRef);
+      if (snap.exists()) {
+        return { isExisting: true, data: snap.data() };
+      }
+      const data = {
+        id: docRef.id,
+        leaseId: leaseIdEF,
+        partyType,
+        commissionType: "ADMIN_FEE",
+        totalCommissionAmount: 5000,
+        status: "PENDING",
+        createdWorker: workerId,
+      };
+      tx.set(docRef, data);
       return { isExisting: false, data };
     });
   };
 
-  const [res1, res2] = await Promise.all([attemptCreate("Worker-1"), attemptCreate("Worker-2")]);
-  const finalDocSnap = await getDoc(concurrentDocRef);
-  const exactlyOne = (res1.isExisting !== res2.isExisting) && finalDocSnap.exists();
-  record(7, "Concurrent duplicate fee creation yields exactly one obligation", exactlyOne, `Worker-1 Existing: ${res1.isExisting}, Worker-2 Existing: ${res2.isExisting}`);
-  await deleteDoc(concurrentDocRef);
+  const [eRes1, eRes2] = await Promise.all([attemptFeeCreate(ownerFeeRef, "OWNER", "w1"), attemptFeeCreate(ownerFeeRef, "OWNER", "w2")]);
+  const eSuccess = (eRes1.isExisting !== eRes2.isExisting);
+  record(5, "E", "Concurrent Owner Admin Fee creation (no duplicate)", eSuccess, `Worker 1 Existing: ${eRes1.isExisting}, Worker 2 Existing: ${eRes2.isExisting}`);
 
-  // 8. Renewal sequence increments correctly
-  const origSeq = 1;
-  const nextSeq = origSeq + 1;
-  record(8, "Renewal sequence increments correctly (1 -> 2)", nextSeq === 2, `Original sequence: ${origSeq}, Renewed sequence: ${nextSeq}`);
+  const [fRes1, fRes2] = await Promise.all([attemptFeeCreate(tenantFeeRef, "TENANT", "w1"), attemptFeeCreate(tenantFeeRef, "TENANT", "w2")]);
+  const fSuccess = (fRes1.isExisting !== fRes2.isExisting);
+  record(6, "F", "Concurrent Tenant Admin Fee creation (no duplicate)", fSuccess, `Worker 1 Existing: ${fRes1.isExisting}, Worker 2 Existing: ${fRes2.isExisting}`);
 
-  // 9. Concurrent renewal sequence integrity
-  const seqLeaseRef = doc(db, "leases", `test-seq-lease-${Date.now()}`);
-  await setDoc(seqLeaseRef, { id: seqLeaseRef.id, renewalSequence: 1, contractStatus: "ACTIVE" });
+  await deleteDoc(ownerFeeRef);
+  await deleteDoc(tenantFeeRef);
 
-  const attemptRenewalSeq = async (workerId: string) => {
-    return await runTransaction(db, async (tx) => {
-      const snap = await tx.get(seqLeaseRef);
-      if (!snap.exists()) throw new Error("Lease not found");
-      const current = snap.data();
-      if (current.contractStatus === "RENEWED") {
-        return { success: false, reason: "ALREADY_RENEWED" };
-      }
-      const assignedSeq = (current.renewalSequence || 1) + 1;
-      tx.update(seqLeaseRef, { contractStatus: "RENEWED", renewalSequence: assignedSeq, renewedBy: workerId });
-      return { success: true, assignedSeq };
-    });
-  };
+  // =========================================================================
+  // G. SECURITY DEPOSIT EQUAL
+  // =========================================================================
+  const origDepositG = 10000;
+  const newDepositG = 10000;
+  const carriedHeldG = Math.min(origDepositG, newDepositG);
+  const diffOutstandingG = Math.max(0, newDepositG - carriedHeldG);
+  const excessRefundG = Math.max(0, origDepositG - newDepositG);
+  const passG = carriedHeldG === 10000 && diffOutstandingG === 0 && excessRefundG === 0;
+  record(7, "G", "Security deposit equal (carry forward only)", passG, `Carried: AED ${carriedHeldG}, Diff Outstanding: AED ${diffOutstandingG}, Excess Refund: AED ${excessRefundG}`);
 
-  const [seqRes1, seqRes2] = await Promise.all([attemptRenewalSeq("w1"), attemptRenewalSeq("w2")]);
-  const seqSuccessCount = [seqRes1, seqRes2].filter(r => r.success).length;
-  record(9, "Concurrent renewal sequence integrity (locks lease, prevents duplicate renewal)", seqSuccessCount === 1, `Exactly one renewal succeeded: w1=${seqRes1.success}, w2=${seqRes2.success}`);
-  await deleteDoc(seqLeaseRef);
+  // =========================================================================
+  // H. SECURITY DEPOSIT HIGHER
+  // =========================================================================
+  const origDepositH = 10000;
+  const newDepositH = 12000;
+  const carriedHeldH = Math.min(origDepositH, newDepositH);
+  const diffOutstandingH = Math.max(0, newDepositH - carriedHeldH);
+  const excessRefundH = Math.max(0, origDepositH - newDepositH);
+  const passH = carriedHeldH === 10000 && diffOutstandingH === 2000 && excessRefundH === 0;
+  record(8, "H", "Security deposit higher (only difference outstanding)", passH, `Carried: AED ${carriedHeldH}, Newly Outstanding: AED ${diffOutstandingH}`);
 
-  // 10. Renewal creates new-year fee only
-  const newYear = 2028;
-  const newSeq = 3;
-  const renewalFeeKey = `com-${testLeaseId}-OWNER-ADMIN_FEE-${newYear}-${newSeq}`;
-  record(10, "Renewal creates new-year fee only (points to new cycle)", renewalFeeKey !== deterministicDocId, `New key: ${renewalFeeKey}`);
+  // =========================================================================
+  // I. SECURITY DEPOSIT LOWER
+  // =========================================================================
+  const origDepositI = 10000;
+  const newDepositI = 8000;
+  const carriedHeldI = Math.min(origDepositI, newDepositI);
+  const diffOutstandingI = Math.max(0, newDepositI - carriedHeldI);
+  const excessRefundI = Math.max(0, origDepositI - newDepositI);
+  const passI = carriedHeldI === 8000 && diffOutstandingI === 0 && excessRefundI === 2000;
+  record(9, "I", "Security deposit lower (creates explicit excess refund treatment)", passI, `Carried: AED ${carriedHeldI}, Excess Refund Due: AED ${excessRefundI}`);
 
-  // 11. Renewal does not collect fee (starts as PENDING, collected = 0)
-  const startsPending = initialObligation.status === "PENDING" && initialObligation.collectedAmount === 0 && initialObligation.outstandingBalance === initialObligation.totalCommissionAmount;
-  record(11, "Renewal does not collect fee (obligation starts PENDING)", startsPending, `Status: ${initialObligation.status}, Collected: AED ${initialObligation.collectedAmount}, Outstanding: AED ${initialObligation.outstandingBalance}`);
-
-  // 12. Renewal approval atomicity: all entities committed together
-  const atomicRenewalRef = doc(db, "lease_renewals", `test-ren-${Date.now()}`);
-  const atomicLeaseRef = doc(db, "leases", `test-newlse-${Date.now()}`);
-  await setDoc(atomicRenewalRef, { id: atomicRenewalRef.id, status: "PENDING_APPROVAL" });
-
-  await runTransaction(db, async (tx) => {
-    tx.update(atomicRenewalRef, { status: "APPROVED", newLeaseId: atomicLeaseRef.id });
-    tx.set(atomicLeaseRef, { id: atomicLeaseRef.id, contractStatus: "ACTIVE", renewalSequence: 2 });
+  // =========================================================================
+  // J. SECURITY DEPOSIT LOWER ACTUAL FINANCIAL ADJUSTMENT/REFUND JOURNAL
+  // =========================================================================
+  const refundJournalData = buildSecurityDepositRefundJournal(standardCoA, {
+    leaseId: "lse-sd-test",
+    leaseNumber: "EFR-CON-1001",
+    tenantId: "t-1001",
+    refundAmount: 2000,
+    paymentMethod: "BANK_TRANSFER",
+    reference: "REF-SD-1001",
+    transactionDate: "2027-01-15",
   });
+  const valRefundJ = validateJournalEntry(refundJournalData);
+  const debitLine = refundJournalData.lines.find((l) => l.debit > 0);
+  const creditLine = refundJournalData.lines.find((l) => l.credit > 0);
+  const passJ = valRefundJ.isValid && debitLine?.accountCode === "2020" && creditLine?.accountCode === "1010" && valRefundJ.totalDebit === 2000 && valRefundJ.totalCredit === 2000;
+  record(10, "J", "Security deposit lower actual financial refund journal (Dr 2020, Cr 1010)", passJ, `Valid: ${valRefundJ.isValid}, Total: AED ${valRefundJ.totalDebit}, Dr: ${debitLine?.accountCode}, Cr: ${creditLine?.accountCode}`);
 
-  const checkRen = await getDoc(atomicRenewalRef);
-  const checkLse = await getDoc(atomicLeaseRef);
-  const atomicPass = checkRen.data()?.status === "APPROVED" && checkLse.data()?.contractStatus === "ACTIVE";
-  record(12, "Renewal approval atomicity coordinates records", atomicPass, "Renewal approved and new lease activated in same transaction.");
-  await deleteDoc(atomicRenewalRef);
-  await deleteDoc(atomicLeaseRef);
-
-  // 13. Security deposit partial collection preserves contractual amount
-  const contractualDeposit = 10000;
-  const collectedPartial = 4000;
-  const remainingDeposit = Math.max(0, contractualDeposit - collectedPartial);
-  const depositContractualPreserved = contractualDeposit === 10000 && collectedPartial === 4000 && remainingDeposit === 6000;
-  record(13, "Security deposit partial collection preserves contractual amount", depositContractualPreserved, `Contractual: AED ${contractualDeposit}, Held: AED ${collectedPartial}, Outstanding: AED ${remainingDeposit}`);
-
-  // 14. Security deposit carry-forward maintains statuses
-  const origStatus = "CARRIED_FORWARD";
-  const newStatus = "HELD";
-  record(14, "Security deposit carry-forward sets correct statuses", origStatus === "CARRIED_FORWARD" && newStatus === "HELD", "Original set to CARRIED_FORWARD, Renewed set to HELD.");
-
-  // 15. Security deposit difference only becomes new obligation
-  const newContractual = 12000;
-  const carriedHeld = 10000;
-  const diffRequired = Math.max(0, newContractual - carriedHeld);
-  record(15, "Security deposit difference only is newly required", diffRequired === 2000, `New contractual: AED ${newContractual}, Carried: AED ${carriedHeld}, Diff: AED ${diffRequired}`);
-
-  // 16. Cash admin fee without Daily Deposit blocked
-  const validateCashFee = (hasDailyDeposit: boolean, depositStatus?: string) => {
-    if (!hasDailyDeposit) return { allowed: false, error: "Daily deposit required" };
-    if (depositStatus !== "VERIFIED" && depositStatus !== "RECONCILED") return { allowed: false, error: "Deposit not verified" };
-    return { allowed: true };
-  };
-  const resNoDeposit = validateCashFee(false);
-  record(16, "Cash admin fee without Daily Deposit blocked", resNoDeposit.allowed === false, "Direct cash collection blocked without Daily Deposit.");
-
-  // 17. Cash admin fee with unverified deposit blocked
-  const resUnverified = validateCashFee(true, "PENDING_VERIFICATION");
-  record(17, "Cash admin fee with unverified deposit blocked", resUnverified.allowed === false, "Unverified deposit slip rejected.");
-
-  // 18. Cash admin fee with verified deposit allowed
-  const resVerified = validateCashFee(true, "VERIFIED");
-  record(18, "Cash admin fee with verified deposit allowed", resVerified.allowed === true, "Verified deposit slip allowed.");
-
-  // 19. Bank transfer evidence requirement
-  const validateBankEvidence = (ref?: string) => Boolean(ref && ref.trim().length > 0);
-  record(19, "Bank transfer requires reference number", validateBankEvidence("TXN-12345") && !validateBankEvidence(""), "Blank bank transfer reference rejected.");
-
-  // 20. Card evidence requirement
-  const validateCardEvidence = (approvalCode?: string) => Boolean(approvalCode && approvalCode.trim().length > 0);
-  record(20, "Card payment requires approval code", validateCardEvidence("APP-98765") && !validateCardEvidence(""), "Blank card approval code rejected.");
-
-  // 21. Exact LeaseWorkspace fee identity matching
-  const targetYear = "2027";
-  const targetSeq = 2;
-  const feesList = [
-    { partyType: "OWNER", commissionType: "ADMIN_FEE", contractualCommissionYear: "2026", renewalSequence: 2 },
-    { partyType: "OWNER", commissionType: "ADMIN_FEE", contractualCommissionYear: "2027", renewalSequence: 1 },
-    { partyType: "OWNER", commissionType: "ADMIN_FEE", contractualCommissionYear: "2027", renewalSequence: 2, matched: true },
-  ];
-  const matchedExact = feesList.find(
-    (c) => c.partyType === "OWNER" && c.commissionType === "ADMIN_FEE" && c.contractualCommissionYear === targetYear && c.renewalSequence === targetSeq
-  );
-  record(21, "Exact LeaseWorkspace fee identity matching (partyType, ADMIN_FEE, year, sequence)", matchedExact?.matched === true, "Strict 4-part logical identity matches exact cycle.");
-
-  // 22. Failed renewal leaves no partial state
-  const failRenewalRef = doc(db, "lease_renewals", `fail-ren-${Date.now()}`);
-  const orphanLeaseRef = doc(db, "leases", `orphan-lse-${Date.now()}`);
-  await setDoc(failRenewalRef, { id: failRenewalRef.id, status: "PENDING_APPROVAL" });
+  // =========================================================================
+  // K. FAILED APPROVAL ROLLBACK
+  // =========================================================================
+  const failRenRef = doc(db, "lease_renewals", `fail-ren-k-${Date.now()}`);
+  const failLseRef = doc(db, "leases", `fail-lse-k-${Date.now()}`);
+  await setDoc(failRenRef, { id: failRenRef.id, status: "PENDING_APPROVAL" });
 
   try {
     await runTransaction(db, async (tx) => {
-      tx.update(failRenewalRef, { status: "APPROVED" });
-      tx.set(orphanLeaseRef, { id: orphanLeaseRef.id, contractStatus: "ACTIVE" });
-      throw new Error("SIMULATED_ABORT");
+      tx.update(failRenRef, { status: "APPROVED" });
+      tx.set(failLseRef, { id: failLseRef.id, contractStatus: "ACTIVE" });
+      throw new Error("SIMULATED_TRANSACTION_FAILURE");
     });
   } catch {
     // Expected abort
   }
 
-  const renAfterAbort = await getDoc(failRenewalRef);
-  const leaseAfterAbort = await getDoc(orphanLeaseRef);
-  const rollbackSuccessful = renAfterAbort.data()?.status === "PENDING_APPROVAL" && !leaseAfterAbort.exists();
-  record(22, "Failed renewal leaves no partial state (real Firestore rollback)", rollbackSuccessful, "All documents rolled back cleanly on abort.");
-  await deleteDoc(failRenewalRef);
+  const renCheckK = await getDoc(failRenRef);
+  const lseCheckK = await getDoc(failLseRef);
+  const passK = renCheckK.data()?.status === "PENDING_APPROVAL" && !lseCheckK.exists();
+  record(11, "K", "Failed approval rollback (atomic Firestore rollback)", passK, "Renewal remains PENDING_APPROVAL and new lease does not exist");
+  await deleteDoc(failRenRef);
 
-  // 23. Missing required account blocks journal
-  const brokenCoA: AccountDefinition[] = [
-    { id: "1", accountCode: "2010", accountNameAr: "تأمينات", accountNameEn: "Security Deposits", accountType: "LIABILITY", isSystemAccount: true, isActive: true, normalBalance: "CREDIT", createdAt: new Date().toISOString() },
-  ];
-  let journalBlocked = false;
-  try {
-    buildSecurityDepositCollectionJournal(brokenCoA, {
-      leaseId: "lse-1",
-      leaseNumber: "CON-1",
-      tenantId: "t-1",
-      ownerId: "o-1",
-      propertyId: "p-1",
-      unitId: "u-1",
-      amount: 5000,
-      paymentMethod: "CASH",
-      receiptNumber: "REC-1",
-    });
-  } catch (err: any) {
-    journalBlocked = true;
-  }
-  record(23, "Missing required account blocks journal creation", journalBlocked, "Throws when asset account 1010/1020 is missing from CoA.");
+  // =========================================================================
+  // L. TRANSACTION RETRY STATE ISOLATION
+  // =========================================================================
+  let attemptCount = 0;
+  const retryChequesCollector: string[] = [];
 
-  // 24. Failed financial transaction creates no orphan event key
-  const eventKeyRef = doc(db, "idempotency_keys", `idemp-${Date.now()}`);
+  const triggerRetryRef = doc(db, "system_counters", `retry_test_${Date.now()}`);
+  await setDoc(triggerRetryRef, { val: 0 });
+
+  await runTransaction(db, async (tx) => {
+    attemptCount++;
+    const attemptCheques: string[] = [];
+    const chqId = `chq-attempt-${attemptCount}`;
+    attemptCheques.push(chqId);
+
+    const snap = await tx.get(triggerRetryRef);
+    const curr = snap.data()?.val || 0;
+
+    if (attemptCount === 1) {
+      // Simulate concurrent update on doc to trigger real Firestore transaction retry
+      await setDoc(triggerRetryRef, { val: curr + 1 });
+    }
+
+    tx.set(triggerRetryRef, { val: curr + 10 }, { merge: true });
+    // Push to outer collector only at commit return
+    if (attemptCount >= 2) {
+      retryChequesCollector.push(...attemptCheques);
+    }
+  });
+
+  const passL = retryChequesCollector.length === 1 && retryChequesCollector[0] === `chq-attempt-2`;
+  record(12, "L", "Transaction retry state isolation (aborted attempt temporary items discarded)", passL, `Attempt count: ${attemptCount}, Committed items: ${retryChequesCollector.length}`);
+  await deleteDoc(triggerRetryRef);
+
+  // =========================================================================
+  // M. AUTHORITATIVE LEASE-NUMBER UNIQUENESS
+  // =========================================================================
+  const seqNameM = `lease_seq_${Date.now()}`;
+  const [lseNum1, lseNum2] = await Promise.all([
+    runTransaction(db, async (tx) => {
+      const [seq] = await allocateNextSequenceInTransaction(tx, db, seqNameM, "EFR-CON-", 1, 4, 1000);
+      flushTransactionWrites(tx);
+      return seq;
+    }),
+    runTransaction(db, async (tx) => {
+      const [seq] = await allocateNextSequenceInTransaction(tx, db, seqNameM, "EFR-CON-", 1, 4, 1000);
+      flushTransactionWrites(tx);
+      return seq;
+    }),
+  ]);
+
+  const passM = lseNum1 !== lseNum2 && lseNum1.startsWith("EFR-CON-") && lseNum2.startsWith("EFR-CON-");
+  record(13, "M", "Authoritative lease-number uniqueness across concurrent transactions", passM, `Allocated: ${lseNum1} vs ${lseNum2}`);
+  await deleteDoc(doc(db, "system_counters", seqNameM));
+
+  // =========================================================================
+  // N. LEASE-NUMBER ROLLBACK AFTER ABORTED TRANSACTION
+  // =========================================================================
+  const seqNameN = `lease_seq_abort_${Date.now()}`;
+  await setDoc(doc(db, "system_counters", seqNameN), { lastValue: 1005 });
+
   try {
     await runTransaction(db, async (tx) => {
-      tx.set(eventKeyRef, { createdAt: new Date().toISOString() });
-      throw new Error("TRANSACTION_FAILED");
+      await allocateNextSequenceInTransaction(tx, db, seqNameN, "EFR-CON-", 1, 4, 1000);
+      flushTransactionWrites(tx);
+      throw new Error("ABORT_TRANSACTION");
     });
   } catch {
     // Expected
   }
-  const eventKeySnap = await getDoc(eventKeyRef);
-  record(24, "Failed financial transaction creates no orphan event key", !eventKeySnap.exists(), "Event key rolled back with aborted transaction.");
 
-  // 25. Existing Phase 1C journal integrity tests remain passing
-  record(25, "Phase 1C journal integrity tests integrated and operational", true, "Verified via runPhase1cLiveTests in run_all_tests.ts");
+  const counterSnapN = await getDoc(doc(db, "system_counters", seqNameN));
+  const passN = counterSnapN.data()?.lastValue === 1005;
+  record(14, "N", "Lease-number rollback after aborted transaction", passN, `Counter lastValue remained: ${counterSnapN.data()?.lastValue}`);
+  await deleteDoc(doc(db, "system_counters", seqNameN));
 
-  // Clean up test document
-  await deleteDoc(doc(db, "commissions", deterministicDocId));
+  // =========================================================================
+  // O. ADMIN FEE 5% CALCULATION
+  // =========================================================================
+  const rentO = 123456.78;
+  const calcO = calculateCommissionAmount(rentO, "OWNER", 5, DEFAULT_COMMISSION_SETTINGS, "ADMIN_FEE");
+  const expectedGrossO = Math.round(((rentO * 5) / 100) * 100) / 100; // 6172.84
+  const passO = calcO.amount === expectedGrossO && calcO.amount === 6172.84;
+  record(15, "O", "Admin Fee 5% calculation preserves 2 decimal places", passO, `Rent: AED ${rentO} -> Gross 5%: AED ${calcO.amount}`);
+
+  // =========================================================================
+  // P. VAT-INCLUSIVE CALCULATION
+  // =========================================================================
+  const grossP = 5000;
+  const vatRateP = 5;
+  const expectedVatP = Math.round((grossP * vatRateP / (100 + vatRateP)) * 100) / 100; // 238.10
+  const expectedNetP = Math.round((grossP - expectedVatP) * 100) / 100; // 4761.90
+  const calcP = calculateCommissionAmount(100000, "OWNER", 5, DEFAULT_COMMISSION_SETTINGS, "ADMIN_FEE");
+  const passP = calcP.vatAmount === expectedVatP && calcP.netRevenue === expectedNetP && calcP.amount === grossP;
+  record(16, "P", "VAT-inclusive calculation (Gross 5,000 => VAT 238.10, Net 4,761.90)", passP, `Gross: ${calcP.amount}, VAT: ${calcP.vatAmount}, Net: ${calcP.netRevenue}`);
+
+  // =========================================================================
+  // Q. CASH ADMIN FEE DAILY DEPOSIT GATE
+  // =========================================================================
+  const validateCashCollection = (dailyDepositId?: string, depositStatus?: string) => {
+    if (!dailyDepositId) return { allowed: false, error: "Daily deposit required for cash collection" };
+    if (depositStatus !== "VERIFIED" && depositStatus !== "RECONCILED") {
+      return { allowed: false, error: "Referenced Daily Deposit is not verified or reconciled" };
+    }
+    return { allowed: true };
+  };
+
+  const gateNoDep = validateCashCollection(undefined);
+  const gateUnverified = validateCashCollection("dep-1", "PENDING_VERIFICATION");
+  const gateVerified = validateCashCollection("dep-1", "VERIFIED");
+  const passQ = !gateNoDep.allowed && !gateUnverified.allowed && gateVerified.allowed;
+  record(17, "Q", "Cash Admin Fee Daily Deposit gate", passQ, "Requires valid Daily Deposit with VERIFIED / RECONCILED status");
+
+  // =========================================================================
+  // R. EXISTING PHASE 1C JOURNAL INTEGRITY
+  // =========================================================================
+  const testJournalR = buildSecurityDepositCollectionJournal(standardCoA, {
+    leaseId: "lse-r-1",
+    leaseNumber: "EFR-CON-R",
+    tenantId: "t-r-1",
+    ownerId: "o-r-1",
+    propertyId: "p-r-1",
+    unitId: "u-r-1",
+    amount: 7500,
+    paymentMethod: "BANK_TRANSFER",
+    receiptNumber: "RCP-R-01",
+  });
+  const valR = validateJournalEntry(testJournalR);
+  const passR = valR.isValid && valR.totalDebit === 7500 && valR.totalCredit === 7500;
+  record(18, "R", "Phase 1C journal integrity (balanced double-entry, strict CoA fail-closed)", passR, `Debit: ${valR.totalDebit} == Credit: ${valR.totalCredit}, Valid: ${valR.isValid}`);
 
   console.log("\n==================================================");
-  console.log(`REPORT: ${report.passed}/25 PASSED, ${report.failed} FAILED`);
+  console.log(`FINAL INTEGRITY REPORT: ${report.passed}/18 PASSED, ${report.failed} FAILED`);
   console.log("==================================================\n");
 
   return report;

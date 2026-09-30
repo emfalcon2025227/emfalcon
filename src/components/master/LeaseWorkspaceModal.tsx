@@ -916,7 +916,7 @@ export const LeaseWorkspacePage: React.FC<LeaseWorkspaceModalProps> = ({ lease: 
 
     // Allowed to create commission
     const defaultRate = 5.0;
-    const amount = Math.round(((lease.annualRent || 0) * defaultRate) / 100);
+    const amount = Math.round((((lease.annualRent || 0) * defaultRate) / 100) * 100) / 100;
 
     const res = await addCommissionObligation({
       leaseId: lease.id,
