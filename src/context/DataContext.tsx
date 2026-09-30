@@ -3223,8 +3223,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const prepareCommissionObligationData = (
     data: Omit<
       CommissionObligation,
-      "id" | "businessKey" | "collectedAmount" | "outstandingBalance" | "status" | "createdAt" | "createdById" | "createdByName"
-    > & { createdById?: string; createdByName?: string; businessKeySequence?: string }
+      "id" | "businessKey" | "totalCommissionAmount" | "collectedAmount" | "outstandingBalance" | "status" | "createdAt" | "createdById" | "createdByName" | "vatAmount" | "vatRate" | "netRevenueAmount" | "taxTreatment"
+    > & { totalCommissionAmount?: number; createdById?: string; createdByName?: string; businessKeySequence?: string }
   ): CommissionObligation => {
     const seq = data.businessKeySequence || "PRIMARY";
     const commissionType = data.commissionType || "ADMIN_FEE";
@@ -3570,14 +3570,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           securityDepositHistory: originalLeaseDepositHistory,
           ...(excessHeldRefundDue > 0 ? {
             securityDepositSettlement: {
+              settledAt: nowIso,
               settlementDate: nowIso.split("T")[0],
-              depositAmount: originalDeposit,
+              settledByUserId: userId,
+              settledByUserName: userName,
+              totalHeldAmount: originalDeposit,
               totalDeductions: carriedHeld,
               netRefundAmount: excessHeldRefundDue,
               remainingDueAmount: 0,
-              unpaidRentDeductions: 0,
+              rentDeductions: 0,
               maintenanceDeductions: 0,
-              bouncedChequeDeductions: 0,
               earlyTerminationDeductions: 0,
               otherDeductions: 0,
               notes: `تسوية فارق تأمين التجديد: ترحيل ${carriedHeld} درهم إلى العقد الجديد #${newLeaseNumber}، وفائض تأمين مستحق للمستأجر ${excessHeldRefundDue} درهم`,
