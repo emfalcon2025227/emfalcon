@@ -97,7 +97,7 @@ export const OwnerPaymentVoucherModal: React.FC<OwnerPaymentVoucherModalProps> =
   properties = [],
 }) => {
   const { language } = useLanguage();
-  const { companyProfile } = useData();
+  const { companyProfile, getOwnerPayable } = useData();
   const isAr = language === "ar";
   const voucherRef = useRef<HTMLDivElement>(null);
 
@@ -110,8 +110,8 @@ export const OwnerPaymentVoucherModal: React.FC<OwnerPaymentVoucherModalProps> =
 
   if (!isOpen || !transfer) return null;
 
-  // STRICT RULE: Payment Voucher is ONLY for PAID transfers
-  if (transfer.status !== "PAID") {
+  // Block only cancelled or reversed transfers
+  if (transfer.status === "CANCELLED" || transfer.status === "REVERSED" || transfer.isReversed) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
         <div className="bg-white rounded-2xl p-6 max-w-md w-full text-center space-y-4 shadow-2xl">
@@ -119,12 +119,12 @@ export const OwnerPaymentVoucherModal: React.FC<OwnerPaymentVoucherModalProps> =
             <X className="w-6 h-6" />
           </div>
           <h3 className="text-base font-bold text-slate-900">
-            {isAr ? "سند الدفع غير متاح" : "Payment Voucher Unavailable"}
+            {isAr ? "سند الدفع ملغي / معكوس" : "Payment Voucher Cancelled"}
           </h3>
           <p className="text-xs text-slate-600">
             {isAr
-              ? "لا يمكن إصدار سند دفع إلا بعد صرف وتحويل الدفعة فعلياً وتغيير حالتها إلى (مسددة - PAID)."
-              : "Payment vouchers can only be generated for transfers with 'PAID' status."}
+              ? "هذا السند ملغي أو تم عكسه محاسبياً ولا يمكن اعتماده أو طباعته."
+              : "This transfer was cancelled or reversed and is not eligible for voucher disbursement."}
           </p>
           <button
             onClick={onClose}
@@ -152,6 +152,8 @@ export const OwnerPaymentVoucherModal: React.FC<OwnerPaymentVoucherModalProps> =
 
   const netAmount = transfer.amount;
   const arabicWords = numberToArabicWordsAED(netAmount);
+  const payableDetails = transfer.ownerId ? getOwnerPayable(transfer.ownerId) : null;
+  const isSettled = transfer.status === "PAID" || transfer.status === "RECONCILED" || transfer.status === "COMPLETED";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-2 sm:p-4 overflow-y-auto">
@@ -243,17 +245,28 @@ export const OwnerPaymentVoucherModal: React.FC<OwnerPaymentVoucherModalProps> =
             {/* 2. Amount Highlights Banner */}
             <div className="bg-slate-900 text-white p-4 rounded-xl flex items-center justify-between">
               <div>
-                <div className="text-[11px] text-slate-400 font-bold uppercase">الصافي المدفوع للمالك / Net Amount Paid</div>
+                <div className="text-[11px] text-slate-400 font-bold uppercase">
+                  {isSettled
+                    ? (isAr ? "الصافي المدفوع للمالك / Net Amount Paid" : "Net Amount Paid")
+                    : (isAr ? "الصافي المعتمد للصرف / Net Amount Approved" : "Net Amount Approved")}
+                </div>
                 <div className="text-2xl font-black font-mono text-amber-400 mt-0.5">
                   AED {netAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               </div>
 
               <div className="text-end">
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  مسدد نهائياً (PAID)
-                </span>
+                {isSettled ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    {isAr ? "مسدد نهائياً (PAID)" : "Settled (PAID)"}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-500/20 text-blue-400 text-xs font-bold border border-blue-500/30">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    {isAr ? "معتمد للصرف (جاهز للتنفيذ)" : "Approved for Payment"}
+                  </span>
+                )}
                 <div className="text-[11px] text-slate-400 mt-1">
                   طريقة الدفع: {transfer.paymentMethod || "تحويل بنكي"}
                 </div>
@@ -299,17 +312,53 @@ export const OwnerPaymentVoucherModal: React.FC<OwnerPaymentVoucherModalProps> =
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
+                  {payableDetails && (
+                    <>
+                      <tr>
+                        <td className="py-2 px-4 text-slate-600">
+                          {isAr ? "إجمالي الإيجارات المحصلة للمالك (Gross Rent Collected)" : "Gross Rent Collected"}
+                        </td>
+                        <td className="py-2 px-4 text-end font-mono text-slate-700">
+                          {payableDetails.totalRentCollected.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                      {payableDetails.totalOwnerCommissions > 0 && (
+                        <tr>
+                          <td className="py-2 px-4 text-rose-600">
+                            {isAr ? "استقطاع: الرسوم الإدارية والعمولات (Admin Fee / Commission)" : "Deduction: Administrative Fees"}
+                          </td>
+                          <td className="py-2 px-4 text-end font-mono text-rose-600">
+                            - {payableDetails.totalOwnerCommissions.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      )}
+                      {payableDetails.totalOwnerExpenses > 0 && (
+                        <tr>
+                          <td className="py-2 px-4 text-rose-600">
+                            {isAr ? "استقطاع: مصاريف العقارات والصيانة (Property Maintenance & Expenses)" : "Deduction: Property Expenses"}
+                          </td>
+                          <td className="py-2 px-4 text-end font-mono text-rose-600">
+                            - {payableDetails.totalOwnerExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  )}
                   <tr>
                     <td className="py-2.5 px-4 font-bold text-slate-800">
-                      إجمالي مبلغ التحويل المسدد (Transfer Amount)
+                      {isAr ? "مبلغ الحوالة المعتمد في هذا السند (Voucher Transfer Amount)" : "Voucher Transfer Amount"}
                     </td>
-                    <td className="py-2.5 px-4 text-end font-mono font-bold text-emerald-700">
+                    <td className="py-2.5 px-4 text-end font-mono font-bold text-indigo-700">
                       {netAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
 
                   <tr className="bg-amber-50 font-black text-sm border-t-2 border-slate-900">
-                    <td className="py-3 px-4 text-slate-950">الصافي المحول لحساب المالك الفعلي</td>
+                    <td className="py-3 px-4 text-slate-950">
+                      {isSettled
+                        ? (isAr ? "الصافي المحول لحساب المالك الفعلي" : "Net Disbursed Amount")
+                        : (isAr ? "الصافي المعتمد للصرف والتحويل للمالك" : "Net Approved for Disbursement")}
+                    </td>
                     <td className="py-3 px-4 text-end font-mono text-slate-950">
                       AED {netAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </td>

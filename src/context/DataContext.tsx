@@ -378,6 +378,21 @@ export interface DataContextType {
     dailyDepositId?: string;
     linkedDailyDeposit?: DailyDepositRecord;
   }) => Promise<{ success: boolean; error?: string }>;
+  settleCashCollection: (params: {
+    collectionId: string;
+    proofBase64?: string;
+    proofFileName?: string;
+    proofFileType?: string;
+    proofFileSize?: number;
+    depositReference?: string;
+    depositDate?: string;
+    notes?: string;
+    verificationStatus?: FinancialVerificationStatus;
+    verificationMethod?: VerificationMethod;
+    overrideReason?: string;
+    overrideType?: VerificationOverrideType;
+    aiVerificationDetails?: any;
+  }) => Promise<{ success: boolean; error?: string }>;
   reverseCommissionObligation: (id: string, reason: string) => { success: boolean; error?: string };
   deleteCommissionObligation: (id: string, options?: DeleteRecordOptions) => void;
   collectSecurityDeposit: (params: {
@@ -470,6 +485,8 @@ export interface DataContextType {
     };
     approvalCode?: string;
     fromCase?: boolean;
+    bankName?: string;
+    destinationAccount?: string;
     userId?: string;
     userName?: string;
   }) => Promise<{ success: boolean; receipt?: CollectionRecord; error?: string }>;
@@ -4271,6 +4288,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     approvalCode?: string; // Add approvalCode
     fromCase?: boolean;
+    bankName?: string;
+    destinationAccount?: string;
   }): Promise<{ success: boolean; receipt?: CollectionRecord; error?: string }> => {
     assertCloudWriteAvailable(language as "ar" | "en");
     // 1. Idempotency Guard (Prevent duplicate collections on same lease obligation / reference / cheque)
@@ -4487,6 +4506,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       collectedBy: currentUser?.nameEn || currentUser?.nameAr || "Finance Officer",
       collectedByUserId: currentUser?.id || "system",
       notes: params.notes,
+      depositStatus: params.paymentMethod === "CASH" ? "PENDING_DEPOSIT" : "DEPOSITED",
+      bankName: params.bankName || (params.paymentMethod === "CHEQUE" ? params.chequeDetails?.bankName : undefined),
+      destinationAccount: params.destinationAccount,
       createdAt: new Date().toISOString(),
     };
     if (params.attachment) {
@@ -9902,6 +9924,175 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
     return { success: true };
   };
+  const settleCashCollection = async (params: {
+    collectionId: string;
+    proofBase64?: string;
+    proofFileName?: string;
+    proofFileType?: string;
+    proofFileSize?: number;
+    depositReference?: string;
+    depositDate?: string;
+    notes?: string;
+    verificationStatus?: FinancialVerificationStatus;
+    verificationMethod?: VerificationMethod;
+    overrideReason?: string;
+    overrideType?: VerificationOverrideType;
+    aiVerificationDetails?: any;
+  }): Promise<{ success: boolean; error?: string }> => {
+    assertCloudWriteAvailable(language as "ar" | "en");
+    const {
+      collectionId,
+      proofBase64,
+      proofFileName,
+      proofFileType,
+      proofFileSize,
+      depositReference,
+      depositDate,
+      notes,
+      verificationStatus,
+      verificationMethod,
+      overrideReason,
+      overrideType,
+      aiVerificationDetails,
+    } = params;
+    const check = checkFinancialEditPermission("COLLECTION", "Settlement");
+    if (!check.allowed) return { success: false, error: check.error };
+    const periodCheck = validateTransactionPeriod(depositDate || new Date().toISOString(), financialPeriods);
+    if (!periodCheck.allowed) {
+      return { success: false, error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn };
+    }
+    const existing = collections.find((c) => c.id === collectionId);
+    if (!existing) return { success: false, error: language === "ar" ? "سند التحصيل غير موجود." : "Collection record not found." };
+    if (existing.isReversed) {
+      return { success: false, error: language === "ar" ? "لا يمكن تسوية سند تحصيل معكوس." : "Cannot settle a reversed collection." };
+    }
+    if (existing.depositStatus === "VERIFIED" || existing.depositStatus === "DEPOSITED" || existing.depositStatus === "RECONCILED") {
+      return { success: true };
+    }
+
+    const resolvedProofDoc = existing.proofDocumentId
+      ? archive.find((a) => a.id === existing.proofDocumentId && (a.entityId === collectionId || a.recordId === collectionId))
+      : archive.find((a) => a.entityId === collectionId || a.recordId === collectionId);
+    const hasValidProofDocument = Boolean(proofBase64 || resolvedProofDoc);
+
+    if (verificationStatus) {
+      const isMismatchCase = aiVerificationDetails?.aiStatus === "MISMATCH" || verificationStatus === "OVERRIDDEN";
+      const gateResult = evaluateSettlementGate({
+        verificationStatus,
+        hasProof: hasValidProofDocument,
+        hasValidProofDocument,
+        isProofResolved: existing.proofDocumentId ? Boolean(resolvedProofDoc) : undefined,
+        proofRequired: true,
+        overrideReason,
+        overrideType,
+        originalAiStatus: aiVerificationDetails?.aiStatus,
+        userRole: currentUser?.role,
+        isMismatch: isMismatchCase,
+      });
+      if (!gateResult.allowed) {
+        return { success: false, error: language === "ar" ? gateResult.reasonAr : gateResult.reasonEn };
+      }
+    } else if (!hasValidProofDocument) {
+      return {
+        success: false,
+        error: language === "ar" ? "تم رفض التسوية: إرفاق إشعار الإيداع البنكي إلزامي." : "Settlement denied: Bank deposit proof document is mandatory.",
+      };
+    }
+
+    const userId = currentUser?.id || "sys";
+    const userName = currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
+
+    let archiveDocId = existing.proofDocumentId;
+    let newArchiveRecord: ElectronicArchiveItem | null = null;
+    if (proofBase64 && !archiveDocId) {
+      archiveDocId = `arch-${Date.now()}-${crypto.randomUUID().split("-")[0]}`;
+      newArchiveRecord = {
+        id: archiveDocId,
+        documentCategory: "PAYMENTS",
+        fileName: proofFileName || `إيداع_نقدي_${existing.receiptNumber}.pdf`,
+        originalFileName: proofFileName || `إيداع_نقدي_${existing.receiptNumber}.pdf`,
+        fileType: proofFileType || "application/pdf",
+        fileSize: proofFileSize || 1024,
+        uploadDate: new Date().toISOString(),
+        uploadedBy: userName,
+        uploadedByUserId: userId,
+        description: `إثبات إيداع بنكي للمتحصل النقدي سند #${existing.receiptNumber}`,
+        tags: ["DEPOSIT_PROOF", "BANK_SLIP", "CASH_SETTLEMENT"],
+        base64Data: proofBase64,
+        entityType: "COLLECTION",
+        entityId: collectionId,
+        recordId: collectionId,
+        isArchived: false,
+        retentionPolicy: "PERMANENT",
+        version: 1,
+      } as ElectronicArchiveItem;
+    }
+
+    const updated: CollectionRecord = {
+      ...existing,
+      depositStatus: "VERIFIED",
+      depositDate: depositDate || new Date().toISOString().split("T")[0],
+      transactionReference: depositReference || existing.transactionReference,
+      proofDocumentId: archiveDocId,
+      verificationStatus: verificationStatus || "MANUALLY_VERIFIED",
+      verifiedAt: new Date().toISOString(),
+      verifiedByName: userName,
+    };
+
+    let newJournalRecord: JournalEntryRecord | null = null;
+    try {
+      await runTransaction(db, async (transaction) => {
+        const journalData = buildBankDepositJournal(
+          {
+            sourceType: "COLLECTION",
+            sourceId: existing.id,
+            totalAmount: existing.amountEntered,
+            transactionDate: depositDate || new Date().toISOString().split("T")[0],
+            depositReference: depositReference || existing.receiptNumber,
+            createdBy: userName,
+            notes: notes || `إيداع بنكي للمتحصل النقدي بموجب سند #${existing.receiptNumber}`,
+          },
+          chartOfAccounts
+        );
+        const jVal = validateJournalEntry(journalData);
+        if (!jVal.isValid) {
+          throw new Error(language === "ar" ? `فشل التحقق من قيد الإيداع البنكي: ${jVal.error}` : `Deposit journal validation failed: ${jVal.error}`);
+        }
+        const jeId = "je-cash-dep-" + Date.now() + "-" + crypto.randomUUID().split("-")[0];
+        const jRec: JournalEntryRecord = {
+          ...journalData,
+          id: jeId,
+          entryNumber: "",
+          status: "POSTED",
+          totalDebit: jVal.totalDebit,
+          totalCredit: jVal.totalCredit,
+          createdAt: new Date().toISOString(),
+        };
+        const postRes = await postAuthoritativeJournalEntry({
+          db,
+          entry: jRec,
+          financialPeriods,
+          transaction,
+        });
+        if (!postRes.isValid || !postRes.journalRecord) throw new Error(postRes.error);
+        newJournalRecord = postRes.journalRecord;
+
+        transaction.set(doc(db, "collections", collectionId), sanitizeForFirestore(updated), { merge: true });
+        if (newArchiveRecord) {
+          transaction.set(doc(db, "electronic_archive", newArchiveRecord.id), sanitizeForFirestore(newArchiveRecord));
+        }
+      });
+    } catch (err: any) {
+      console.error("Cash collection settlement failed: ", err);
+      return { success: false, error: err?.message || "Failed to settle cash collection deposit." };
+    }
+
+    setCollections((prev) => prev.map((c) => (c.id === collectionId ? updated : c)));
+    if (newJournalRecord) setJournalEntries((prev) => [...prev, newJournalRecord!]);
+    if (newArchiveRecord) setArchive((prev) => [newArchiveRecord!, ...prev]);
+    logAudit("FINANCIAL_RECORD_EDIT", "COLLECTION", collectionId, `سند #${existing.receiptNumber}`, `تم إيداع النقدية وتوثيق الإشعار البنكي.`);
+    return { success: true };
+  };
   const updatePropertyExpense = (
     id: string,
     patch: Partial<PropertyExpenseRecord>,
@@ -14560,6 +14751,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateOwnerTransfer,
         updateOwnerTransferStatus,
         settleOwnerTransfer,
+        settleCashCollection,
         cancelOwnerTransfer,
         reverseOwnerTransfer,
         addPropertyExpense,

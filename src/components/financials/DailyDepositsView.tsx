@@ -50,7 +50,7 @@ import {
   PRODUCTION_REALITY_RULE_EN,
 } from "../../services/verificationPolicyService";
 
-export type DepositType = "ADMINISTRATIVE_FEE" | "BOUNCED_PENALTY" | "CLEANING_FEE" | "SECURITY_FEE" | "OWNER_TRANSFER" | "SECURITY_DEPOSIT";
+export type DepositType = "ADMINISTRATIVE_FEE" | "BOUNCED_PENALTY" | "CLEANING_FEE" | "SECURITY_FEE" | "OWNER_TRANSFER" | "SECURITY_DEPOSIT" | "RENT_COLLECTION";
 export type FundCategory = "OFFICE" | "OWNER" | "SECURITY_DEPOSIT";
 
 export interface UnifiedDepositItem {
@@ -97,6 +97,7 @@ export const DailyDepositsView: React.FC = () => {
     units,
     leases,
     tenants,
+    collections = [],
     commissions,
     propertyExpenses,
     ownerTransfers,
@@ -107,6 +108,7 @@ export const DailyDepositsView: React.FC = () => {
     settleAdministrativeFee,
     settlePropertyExpense,
     settleSecurityDeposit,
+    settleCashCollection,
     cancelOwnerTransfer,
     reverseOwnerTransfer,
     getOwnerPayable,
@@ -358,8 +360,41 @@ export const DailyDepositsView: React.FC = () => {
       });
     });
 
+    // 5. Cash Collections (Rent Installments & Bounced Cheque Cash Recoveries)
+    collections.forEach((col) => {
+      if (col.paymentMethod !== "CASH" || col.isReversed) return;
+      const isBanked = col.depositStatus === "VERIFIED" || col.depositStatus === "DEPOSITED" || col.depositStatus === "RECONCILED";
+      const tenant = tenants.find((t) => t.id === col.tenantId);
+      const owner = owners.find((o) => o.id === col.ownerId);
+      const archiveProof = archive.find((a) => a.entityId === col.id || a.recordId === col.id || (col.proofDocumentId && a.id === col.proofDocumentId));
+      const isOverdue = !isBanked && col.paymentDate < todayStr;
+      const isBouncedPenalty = Boolean(col.bouncedFeeAmount && col.bouncedFeeAmount > 0 && col.amountEntered <= (col.bouncedFeeAmount || 0));
+
+      items.push({
+        id: `col-${col.id}`,
+        sourceId: col.id,
+        transactionNumber: col.receiptNumber || `RCP-${col.id.slice(-6)}`,
+        type: isBouncedPenalty ? "BOUNCED_PENALTY" : "RENT_COLLECTION",
+        fundCategory: isBouncedPenalty ? "OFFICE" : "OWNER",
+        amount: col.amountEntered,
+        date: col.paymentDate || todayStr,
+        status: isBanked ? "PAID" : "APPROVED",
+        relatedParty: tenant ? (isAr ? `${tenant.nameAr} (تحصيل نقدي)` : `${tenant.nameEn} (Cash Collection)`) : (isAr ? "تحصيل نقدي" : "Cash Collection"),
+        ownerId: col.ownerId,
+        ownerName: owner ? (isAr ? owner.nameAr : owner.nameEn) : (isAr ? "أموال المالك (Owner Funds)" : "Owner Funds"),
+        proofDocumentId: col.proofDocumentId,
+        archiveProof,
+        originalRecord: col,
+        isOverdue,
+        daysPending: 0,
+        verificationStatus: col.verificationStatus as any,
+        verifiedAt: col.verifiedAt,
+        verifiedByName: col.verifiedByName,
+      });
+    });
+
     return items;
-  }, [ownerTransfers, commissions, propertyExpenses, leases, tenants, owners, properties, archive, todayStr, isAr]);
+  }, [ownerTransfers, commissions, propertyExpenses, leases, collections, tenants, owners, properties, archive, todayStr, isAr]);
 
   // Grouping automatic owner payables if multiple on same day for same owner
   const autoGroupedOwnerBatches = useMemo(() => {
@@ -870,6 +905,46 @@ export const DailyDepositsView: React.FC = () => {
       } else {
         setProofError(res.error || (isAr ? "فشلت عملية تسوية وإيداع التأمين." : "Failed to settle security deposit"));
       }
+    } else if (targetItem.type === "RENT_COLLECTION" || (targetItem.type === "BOUNCED_PENALTY" && targetItem.id.startsWith("col-"))) {
+      const res = await settleCashCollection({
+        collectionId: targetItem.sourceId,
+        proofBase64,
+        proofFileName,
+        proofFileType: proofFile?.type,
+        proofFileSize: proofFile?.size,
+        depositReference: targetItem.originalRecord?.transactionReference,
+        depositDate: targetItem.date,
+        notes: proofNotes ? (isAr ? `إيداع بنكي للمتحصل النقدي: ${proofNotes}` : `Cash bank deposit: ${proofNotes}`) : undefined,
+        verificationStatus,
+        verificationMethod,
+        overrideReason: finalOverrideReason,
+        overrideType: finalOverrideType,
+        aiVerificationDetails: {
+          aiStatus,
+          failureReason: ocrResult?.failureReason,
+          extractedValues: {
+            amount: ocrResult?.amount?.extracted,
+            bankName: ocrResult?.bank?.extracted,
+            referenceNumber: ocrResult?.reference?.extracted,
+            date: ocrResult?.date?.extracted,
+          },
+          expectedValues: {
+            amount: targetItem.amount,
+            date: targetItem.date,
+          },
+          comparisonResults: {
+            amountMatch: ocrResult?.amount?.status === "MATCH",
+          },
+          analyzedAt: new Date().toISOString(),
+        },
+      });
+
+      if (res.success) {
+        setIsProofModalOpen(false);
+        setTargetItem(null);
+      } else {
+        setProofError(res.error || (isAr ? "فشلت عملية إيداع وتسوية التحصيل النقدي." : "Failed to settle cash collection deposit"));
+      }
     } else {
       setProofError(isAr ? "نوع المعاملة غير مدعوم للتسوية." : "Transaction type not supported for settlement.");
     }
@@ -1063,6 +1138,7 @@ export const DailyDepositsView: React.FC = () => {
               <option value="SECURITY_FEE">{isAr ? "رسوم حراسة وأمن (Security Fees)" : "Security Fees"}</option>
               <option value="OWNER_TRANSFER">{isAr ? "مستحقات وتحويلات الملاك (Owner Payables)" : "Owner Payables"}</option>
               <option value="SECURITY_DEPOSIT">{isAr ? "أمانات تأمين صيانة مستأجر (حساب 2020)" : "Security Deposits (Acc 2020)"}</option>
+              <option value="RENT_COLLECTION">{isAr ? "تحصيلات إيجار نقدية (Rent Cash Collections)" : "Rent Cash Collections"}</option>
             </select>
 
             {/* Status Filter */}
@@ -1204,6 +1280,8 @@ export const DailyDepositsView: React.FC = () => {
                             : item.type === "CLEANING_FEE" ? (isAr ? "رسوم نظافة" : "Cleaning Fee")
                             : item.type === "SECURITY_FEE" ? (isAr ? "رسوم حراسة وأمن" : "Security Fee")
                             : item.type === "SECURITY_DEPOSIT" ? (isAr ? "أمانات تأمين صيانة (2020)" : "Security Deposit (2020)")
+                            : item.type === "RENT_COLLECTION" ? (isAr ? "تحصيل إيجار نقدي" : "Rent Cash Collection")
+                            : item.type === "BOUNCED_PENALTY" ? (isAr ? "غرامة شيك مرتجع" : "Bounced Penalty")
                             : (isAr ? "تحويل مستحقات مالك" : "Owner Transfer")}
                         </span>
                       </div>

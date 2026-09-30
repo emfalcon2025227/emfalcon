@@ -35,6 +35,7 @@ export const OwnerTransfersView: React.FC = () => {
     addOwnerTransfer,
     updateOwnerTransfer,
     updateOwnerTransferStatus,
+    settleOwnerTransfer,
     reverseOwnerTransfer,
     getOwnerPayable,
   } = useData();
@@ -45,6 +46,16 @@ export const OwnerTransfersView: React.FC = () => {
 
   // Owner Payment Voucher Modal State
   const [selectedVoucherTransfer, setSelectedVoucherTransfer] = useState<OwnerTransferRecord | null>(null);
+
+  // Settle & Bank Proof Modal State
+  const [isSettleModalOpen, setIsSettleModalOpen] = useState(false);
+  const [settleTransfer, setSettleTransfer] = useState<OwnerTransferRecord | null>(null);
+  const [settleRefNumber, setSettleRefNumber] = useState("");
+  const [settleProofBase64, setSettleProofBase64] = useState("");
+  const [settleProofFileName, setSettleProofFileName] = useState("");
+  const [settleNotes, setSettleNotes] = useState("");
+  const [settleError, setSettleError] = useState("");
+  const [isSubmittingSettle, setIsSubmittingSettle] = useState(false);
 
   // Add Transfer Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -99,7 +110,65 @@ export const OwnerTransfersView: React.FC = () => {
       setModalBankName(targetOwner.bankName || "");
       setModalIban(targetOwner.iban || "");
       const payable = getOwnerPayable(ownerId);
-      setModalAmount(payable.currentPayableBalance > 0 ? payable.currentPayableBalance : 0);
+      const suggestedAmount = payable.netRemainingBalance > 0 ? payable.netRemainingBalance : (payable.currentPayableBalance > 0 ? payable.currentPayableBalance : 0);
+      setModalAmount(suggestedAmount);
+    }
+  };
+
+  const handleOpenSettleModal = (t: OwnerTransferRecord) => {
+    setSettleTransfer(t);
+    setSettleRefNumber(t.transactionReferenceNumber || "");
+    setSettleProofBase64("");
+    setSettleProofFileName("");
+    setSettleNotes(t.notes || "");
+    setSettleError("");
+    setIsSettleModalOpen(true);
+  };
+
+  const handleProofFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSettleProofFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setSettleProofBase64((ev.target?.result as string) || "");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleConfirmSettle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!settleTransfer) return;
+    setSettleError("");
+
+    if (!settleRefNumber.trim()) {
+      setSettleError(isAr ? "رقم المرجع المصرفي للحوالة إلزامي للتأكيد." : "Bank transaction reference number is required.");
+      return;
+    }
+
+    if (!settleProofBase64) {
+      setSettleError(isAr ? "يرجى إرفاق إشعار أو إيصال التحويل البنكي الفعلي." : "Please attach the bank transfer confirmation document.");
+      return;
+    }
+
+    setIsSubmittingSettle(true);
+    const res = await settleOwnerTransfer({
+      transferId: settleTransfer.id,
+      transactionReferenceNumber: settleRefNumber.trim(),
+      proofBase64: settleProofBase64,
+      proofFileName: settleProofFileName || `إشعار_تحويل_${settleTransfer.transferNumber}.pdf`,
+      notes: settleNotes.trim() || undefined,
+      verificationStatus: "MANUALLY_VERIFIED",
+      verificationMethod: "MANUAL_OVERRIDE",
+      overrideReason: "اعتماد وتنفيذ التحويل البنكي وتأكيد إشعار الإيداع",
+    });
+    setIsSubmittingSettle(false);
+
+    if (res.success) {
+      setIsSettleModalOpen(false);
+      setSettleTransfer(null);
+    } else {
+      setSettleError(res.error || (isAr ? "فشل تأكيد التحويل البنكي" : "Failed to settle transfer"));
     }
   };
 
@@ -162,6 +231,18 @@ export const OwnerTransfersView: React.FC = () => {
     if (modalAmount <= 0) {
       setModalError(isAr ? "مبلغ التحويل يجب أن يكون أكبر من الصفر." : "Amount must be greater than zero.");
       return;
+    }
+
+    if (selectedOwnerPayable) {
+      const maxAllowed = selectedOwnerPayable.netRemainingBalance > 0 ? selectedOwnerPayable.netRemainingBalance : selectedOwnerPayable.currentPayableBalance;
+      if (modalAmount > maxAllowed + 0.01) {
+        setModalError(
+          isAr
+            ? `المبلغ المطلوب (${modalAmount.toLocaleString()} د.إ) يتجاوز صافي الرصيد المتاح للتحويل (${maxAllowed.toLocaleString()} د.إ).`
+            : `Requested amount (${modalAmount.toLocaleString()} AED) exceeds available net balance (${maxAllowed.toLocaleString()} AED).`
+        );
+        return;
+      }
     }
 
     const payload: any = {
@@ -548,6 +629,15 @@ export const OwnerTransfersView: React.FC = () => {
                         </span>
                       ) : (
                         <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => setSelectedVoucherTransfer(t)}
+                            className="p-1.5 text-amber-600 hover:bg-amber-50 hover:text-amber-700 rounded-lg transition-colors cursor-pointer flex items-center gap-1 text-xs font-bold"
+                            title={isAr ? "معاينة / طباعة سند الدفع" : "Print / View Payment Voucher"}
+                          >
+                            <Printer className="w-4 h-4" />
+                            <span className="hidden xl:inline">{isAr ? "سند دفع" : "Voucher"}</span>
+                          </button>
+
                           {t.status === "APPROVED" && (
                             <>
                               <button
@@ -558,24 +648,16 @@ export const OwnerTransfersView: React.FC = () => {
                                 <FileText className="w-4 h-4" />
                               </button>
                               <button
-                                onClick={() => updateOwnerTransferStatus(t.id, "PAID")}
-                                className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
-                                title={isAr ? "تأكيد إتمام التحويل البنكي" : "Mark as Paid"}
+                                onClick={() => handleOpenSettleModal(t)}
+                                className="px-2 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                                title={isAr ? "تنفيذ وصرف الحوالة وإرفاق الإشعار البنكي" : "Execute & Upload Bank Proof"}
                               >
-                                <Check className="w-4 h-4" />
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>{isAr ? "تنفيذ وصرف" : "Execute"}</span>
                               </button>
                             </>
                           )}
-                          {(t.status === "PAID" || t.status === "RECONCILED" || t.status === "COMPLETED") && (
-                            <button
-                              onClick={() => setSelectedVoucherTransfer(t)}
-                              className="p-1.5 text-amber-600 hover:bg-amber-50 hover:text-amber-700 rounded-lg transition-colors cursor-pointer flex items-center gap-1 text-xs font-bold"
-                              title={isAr ? "طباعة سند الدفع الرسمي" : "Print Payment Voucher"}
-                            >
-                              <Printer className="w-4 h-4" />
-                              <span className="hidden xl:inline">{isAr ? "سند دفع" : "Voucher"}</span>
-                            </button>
-                          )}
+
                           <button
                             onClick={() => handleOpenReversal(t.id)}
                             className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
@@ -642,17 +724,33 @@ export const OwnerTransfersView: React.FC = () => {
                     <span>{isAr ? "إجمالي الإيجار المحصل:" : "Rent Collected:"}</span>
                     <span className="font-mono">{selectedOwnerPayable.totalRentCollected.toLocaleString()} AED</span>
                   </div>
-                  <div className="flex justify-between text-xs text-indigo-900 font-medium">
-                    <span>{isAr ? "الاستقطاعات (رسوم إدارية ومصاريف):" : "Deductions (Admin Fees + Exp):"}</span>
-                    <span className="font-mono text-rose-600">- {(selectedOwnerPayable.totalOwnerCommissions + selectedOwnerPayable.totalOwnerExpenses).toLocaleString()} AED</span>
-                  </div>
-                  <div className="flex justify-between text-xs text-indigo-900 font-medium">
-                    <span>{isAr ? "التحويلات المنفذة سابقاً:" : "Transfers Paid:"}</span>
-                    <span className="font-mono text-slate-600">- {selectedOwnerPayable.totalTransfersPaid.toLocaleString()} AED</span>
-                  </div>
+                  {selectedOwnerPayable.totalOwnerCommissions > 0 && (
+                    <div className="flex justify-between text-xs text-rose-700 font-medium">
+                      <span>{isAr ? "استقطاع: الرسوم الإدارية والعمولات:" : "Admin Fees Deduction:"}</span>
+                      <span className="font-mono">- {selectedOwnerPayable.totalOwnerCommissions.toLocaleString()} AED</span>
+                    </div>
+                  )}
+                  {selectedOwnerPayable.totalOwnerExpenses > 0 && (
+                    <div className="flex justify-between text-xs text-rose-700 font-medium">
+                      <span>{isAr ? "استقطاع: مصاريف العقارات والصيانة:" : "Expenses Deduction:"}</span>
+                      <span className="font-mono">- {selectedOwnerPayable.totalOwnerExpenses.toLocaleString()} AED</span>
+                    </div>
+                  )}
+                  {selectedOwnerPayable.totalTransfersPaid > 0 && (
+                    <div className="flex justify-between text-xs text-slate-600 font-medium">
+                      <span>{isAr ? "تحويلات تم سدادها سابقاً:" : "Transfers Paid:"}</span>
+                      <span className="font-mono">- {selectedOwnerPayable.totalTransfersPaid.toLocaleString()} AED</span>
+                    </div>
+                  )}
+                  {selectedOwnerPayable.totalTransfersPending > 0 && (
+                    <div className="flex justify-between text-xs text-amber-700 font-medium">
+                      <span>{isAr ? "تحويلات معتمدة قيد التنفيذ البنكي:" : "Pending Execution:"}</span>
+                      <span className="font-mono">- {selectedOwnerPayable.totalTransfersPending.toLocaleString()} AED</span>
+                    </div>
+                  )}
                   <div className="pt-2 border-t border-indigo-200/80 flex justify-between text-sm font-bold text-indigo-950">
-                    <span>{isAr ? "الرصيد المتاح للتحويل حالياً:" : "Current Payable Available:"}</span>
-                    <span className="font-mono text-emerald-700">{selectedOwnerPayable.currentPayableBalance.toLocaleString()} AED</span>
+                    <span>{isAr ? "صافي الرصيد المتاح للتحويل:" : "Net Available for Transfer:"}</span>
+                    <span className="font-mono text-emerald-700">{selectedOwnerPayable.netRemainingBalance.toLocaleString()} AED</span>
                   </div>
                 </div>
               )}
@@ -976,6 +1074,129 @@ export const OwnerTransfersView: React.FC = () => {
                   className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-xs"
                 >
                   {isAr ? "تحديث سند الحوالة" : "Update Transfer"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Bank Submission / Execution & Proof Modal */}
+      {isSettleModalOpen && settleTransfer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-lg w-full p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                {isAr ? "تنفيذ التحويل البنكي وتوثيق إشعار السداد" : "Execute Bank Transfer & Attach Proof"}
+              </h3>
+              <button
+                onClick={() => setIsSettleModalOpen(false)}
+                className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {settleError && (
+              <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-medium flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{settleError}</span>
+              </div>
+            )}
+
+            {/* Transfer Summary Card */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 mb-4 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">{isAr ? "رقم السند:" : "Voucher #:"}</span>
+                <span className="font-mono font-bold text-slate-900">{settleTransfer.transferNumber}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">{isAr ? "المالك المستفيد:" : "Beneficiary Owner:"}</span>
+                <span className="font-bold text-slate-900">
+                  {owners.find(o => o.id === settleTransfer.ownerId)?.nameAr || owners.find(o => o.id === settleTransfer.ownerId)?.nameEn || "Owner"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">{isAr ? "البنك والآيبان:" : "Bank & IBAN:"}</span>
+                <span className="font-mono text-slate-700">{settleTransfer.beneficiaryBankName || "Local Bank"} - {settleTransfer.beneficiaryIban || "N/A"}</span>
+              </div>
+              <div className="pt-2 border-t border-slate-200 flex justify-between items-center">
+                <span className="font-bold text-slate-700">{isAr ? "المبلغ المطلوب تحويله:" : "Transfer Amount:"}</span>
+                <span className="text-base font-black font-mono text-emerald-700">{settleTransfer.amount.toLocaleString()} AED</span>
+              </div>
+            </div>
+
+            <form onSubmit={handleConfirmSettle} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {isAr ? "رقم المرجع المصرفي للحوالة (Transaction Reference) *" : "Bank Transaction Reference # *"}
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder={isAr ? "مثال: TR-ADCB-8921004" : "e.g. TR-ADCB-8921004"}
+                  value={settleRefNumber}
+                  onChange={(e) => setSettleRefNumber(e.target.value)}
+                  className="w-full px-3 py-2 border-2 border-emerald-300 rounded-xl text-xs font-mono font-bold focus:border-emerald-600 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {isAr ? "إشعار التحويل البنكي أو إيصال السداد (Bank Proof) *" : "Bank Transfer Confirmation Proof *"}
+                </label>
+                <div className="border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-xl p-3 text-center transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    required={!settleProofBase64}
+                    onChange={handleProofFileUpload}
+                    className="block w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer"
+                  />
+                  {settleProofFileName && (
+                    <div className="mt-2 text-[11px] font-bold text-emerald-700 flex items-center justify-center gap-1.5">
+                      <FileCheck className="w-3.5 h-3.5" />
+                      <span>{settleProofFileName}</span>
+                    </div>
+                  )}
+                  {settleProofBase64 && settleProofBase64.startsWith("data:image/") && (
+                    <div className="mt-2 max-h-36 overflow-hidden rounded-lg border border-slate-200">
+                      <img src={settleProofBase64} alt="Proof preview" className="w-full h-full object-contain" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  {isAr ? "ملاحظات إضافية" : "Notes"}
+                </label>
+                <input
+                  type="text"
+                  value={settleNotes}
+                  onChange={(e) => setSettleNotes(e.target.value)}
+                  placeholder={isAr ? "تم التحويل بنجاح لحساب المالك..." : "Bank transfer successfully executed..."}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsSettleModalOpen(false)}
+                  disabled={isSubmittingSettle}
+                  className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 text-xs font-semibold transition-colors"
+                >
+                  {isAr ? "إلغاء" : "Cancel"}
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingSettle}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{isSubmittingSettle ? (isAr ? "جاري التأكيد..." : "Settling...") : (isAr ? "تأكيد التحويل وإقفال السند (Mark as PAID)" : "Confirm & Mark as PAID")}</span>
                 </button>
               </div>
             </form>

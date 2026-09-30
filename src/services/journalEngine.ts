@@ -1102,7 +1102,7 @@ export function buildSecurityDepositSettlementJournal(
 export function buildBankDepositJournal(
   params: {
     batchId?: string;
-    sourceType: "SECURITY_DEPOSIT" | "OWNER_TRANSFER" | "ADMINISTRATIVE_FEE" | "PROPERTY_EXPENSE" | "BATCH" | "DAILY_DEPOSIT";
+    sourceType: "SECURITY_DEPOSIT" | "OWNER_TRANSFER" | "ADMINISTRATIVE_FEE" | "PROPERTY_EXPENSE" | "BATCH" | "DAILY_DEPOSIT" | "COLLECTION" | "RENT_COLLECTION";
     sourceId: string;
     totalAmount: number;
     transactionDate: string;

@@ -746,6 +746,15 @@ export interface CollectionRecord {
   driveWebViewLink?: string;
   fileName?: string;
   createdAt: string;
+  depositStatus?: "PENDING_DEPOSIT" | "BATCHED" | "DEPOSITED" | "VERIFIED" | "RECONCILED";
+  depositDate?: string;
+  depositBatchId?: string;
+  proofDocumentId?: string;
+  verificationStatus?: "AI_VERIFIED" | "MANUALLY_VERIFIED" | "OVERRIDDEN" | "MISMATCH" | "NEEDS_REVIEW" | "FAILED" | "UNVERIFIED";
+  verifiedAt?: string;
+  verifiedByName?: string;
+  bankName?: string;
+  destinationAccount?: string;
 }
 
 export type CaseStatus =
