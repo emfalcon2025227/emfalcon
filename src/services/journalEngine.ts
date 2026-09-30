@@ -263,13 +263,10 @@ export function findAccountByCodeOrType(
   code: string,
   fallbackType: "ASSET" | "LIABILITY" | "INCOME" | "EXPENSE"
 ): AccountDefinition {
-  const found = chartOfAccounts.find((a) => a.accountCode === code);
+  const found = chartOfAccounts.find((a) => a.accountCode === code && a.isActive);
   if (found) return found;
 
-  const fallback = chartOfAccounts.find((a) => a.accountType === fallbackType && a.isActive);
-  if (fallback) return fallback;
-
-  throw new Error(`Required active account or fallback of type ${fallbackType} not found in chart of accounts for code ${code} / حساب غير موجود أو غير نشط في دليل الحسابات المعتمد: ${code}.`);
+  throw new Error(`Required active account code '${code}' of type ${fallbackType} not found in chart of accounts / الحساب المطلوب '${code}' غير موجود أو غير نشط في دليل الحسابات.`);
 }
 
 /**
