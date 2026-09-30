@@ -84,10 +84,10 @@ export const LeaseRenewalsTab: React.FC<LeaseRenewalsTabProps> = ({
     .filter((r) => r.status === "APPROVED")
     .reduce((sum, r) => sum + (r.newAnnualRent || 0), 0);
 
-  const handleApprove = (renewal: LeaseRenewalRecord) => {
+  const handleApprove = async (renewal: LeaseRenewalRecord) => {
     setActionError("");
     setActionSuccess("");
-    const res = approveLeaseRenewal(renewal.id);
+    const res = await approveLeaseRenewal(renewal.id);
     if (!res.success) {
       setActionError(res.error || "Failed to approve renewal");
     } else {

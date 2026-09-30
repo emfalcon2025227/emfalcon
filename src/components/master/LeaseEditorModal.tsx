@@ -1320,15 +1320,42 @@ export const LeaseEditorModal: React.FC<LeaseEditorModalProps> = ({
         firstPaymentMethod: firstPaymentMethod || (installments[0]?.paymentMethod as any) || "CHEQUE",
         chequesCount: installments.length || 4,
         securityDeposit: parsedDeposit,
-        securityDepositHeld: 0,
-        securityDepositOutstanding: parsedDeposit,
-        securityDepositStatus: parsedDeposit > 0 ? "PENDING" : undefined,
+        securityDepositHeld: isRenewal && renewalSourceLease
+          ? Math.min(
+              renewalSourceLease.securityDepositHeld !== undefined
+                ? renewalSourceLease.securityDepositHeld
+                : (renewalSourceLease.securityDepositStatus === "HELD" ? (renewalSourceLease.securityDeposit || 0) : 0),
+              parsedDeposit
+            )
+          : 0,
+        securityDepositOutstanding: isRenewal && renewalSourceLease
+          ? Math.max(
+              0,
+              parsedDeposit -
+                Math.min(
+                  renewalSourceLease.securityDepositHeld !== undefined
+                    ? renewalSourceLease.securityDepositHeld
+                    : (renewalSourceLease.securityDepositStatus === "HELD" ? (renewalSourceLease.securityDeposit || 0) : 0),
+                  parsedDeposit
+                )
+            )
+          : parsedDeposit,
+        securityDepositStatus: isRenewal && renewalSourceLease
+          ? (() => {
+              const origHeld = renewalSourceLease.securityDepositHeld !== undefined
+                ? renewalSourceLease.securityDepositHeld
+                : (renewalSourceLease.securityDepositStatus === "HELD" ? (renewalSourceLease.securityDeposit || 0) : 0);
+              const carried = Math.min(origHeld, parsedDeposit);
+              if (carried >= parsedDeposit && parsedDeposit > 0) return "HELD" as const;
+              return parsedDeposit > 0 ? ("PENDING" as const) : undefined;
+            })()
+          : (parsedDeposit > 0 ? ("PENDING" as const) : undefined),
         securityDepositPaymentMethod: securityDepositPaymentMethod as any || undefined,
         securityDepositBankName: securityDepositBankName || undefined,
         securityDepositChequeNumber: securityDepositChequeNumber || undefined,
         securityDepositIsUndatedCheque,
         carriedForwardFromLeaseId: isRenewal ? renewalSourceLease?.id : undefined,
-        renewalSequence: isRenewal && renewalSourceLease ? (renewalSourceLease.renewalSequence || 1) + 1 : 1,
+        renewalSequence: isRenewal && renewalSourceLease ? (Number(renewalSourceLease.renewalSequence) || 1) + 1 : 1,
         ejariNumber: ejariNumber.trim(),
         installmentsCount: installments.length || 4,
         installments: installments.map((inst, idx) => ({

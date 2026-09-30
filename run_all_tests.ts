@@ -7,8 +7,8 @@ import { runPhase54EndToEndFinancialReconciliationTests } from "./src/utils/phas
 import { runPhase55FinancialReportingReconciliationTests } from "./src/utils/phase55FinancialReportingReconciliationTests";
 import { runPhase56DepositDelayAlertTests } from "./src/utils/phase56DepositDelayAlertTests";
 import { runPhase57ForensicTests } from "./src/utils/phase57DocumentIntelligenceForensicTests";
-// @ts-ignore
 import { main as runPhase1cLiveTests } from "./src/tests/runPhase1cLiveTests";
+import { runLeaseRenewalAdminFeeIntegritySuite } from "./src/tests/leaseRenewalAdminFeeIntegritySuite";
 
 const mockContext: any = {
   owners: [],
@@ -50,6 +50,11 @@ console.log(`======================================================\n`);
 
 async function runIntegrity() {
   try {
+    const renewalReport = await runLeaseRenewalAdminFeeIntegritySuite();
+    if (renewalReport.failed > 0) {
+      console.error("\n[FAIL] LEASE RENEWAL / ADMIN FEE INTEGRITY TESTS FAILED!");
+      process.exit(1);
+    }
     await runPhase1cLiveTests();
   } catch (err) {
     console.error("Failed to run Phase 1C Integrity Tests:", err);

@@ -439,6 +439,7 @@ export interface AdminFeeExemptionPolicy {
 export type SecurityDepositStatus =
   | "PENDING_COLLECTION"
   | "PENDING"
+  | "PARTIAL"
   | "HELD"
   | "PARTIALLY_REFUNDED"
   | "REFUNDED"

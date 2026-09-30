@@ -2033,9 +2033,15 @@ export const LeaseWorkspacePage: React.FC<LeaseWorkspaceModalProps> = ({ lease: 
               {/* OWNER COMMISSION */}
               {(() => {
                 const ownerComm = allLeaseAdminFees.find(
-                  (c) => c.partyType === "OWNER" && (String(c.contractualCommissionYear || "") === String(currentCommissionYear) || (c.renewalSequence || 1) === renewalSeq)
+                  (c) =>
+                    c.partyType === "OWNER" &&
+                    c.commissionType === "ADMIN_FEE" &&
+                    String(c.contractualCommissionYear || "") === String(currentCommissionYear) &&
+                    (c.renewalSequence || 1) === renewalSeq
                 );
-                const isPaidOrSettled = ownerComm?.status === "FULLY_COLLECTED" || ownerComm?.status === "COLLECTED";
+                const isPaidOrSettled =
+                  (ownerComm?.status === "FULLY_COLLECTED" || ownerComm?.status === "COLLECTED") &&
+                  (ownerComm?.outstandingBalance || 0) <= 0.001;
                 return (
                   <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-4 shadow-2xs">
                     <div className="flex items-center justify-between">
@@ -2044,19 +2050,39 @@ export const LeaseWorkspacePage: React.FC<LeaseWorkspaceModalProps> = ({ lease: 
                         <h5 className="text-xs font-black text-slate-900">{isAr ? "الرسوم الإدارية للمالك (Owner Admin Fees)" : "Owner Administrative Fees"}</h5>
                       </div>
                       <Badge variant={isPaidOrSettled ? "success" : ownerComm ? "warning" : "neutral"} size="sm">
-                        {isPaidOrSettled ? (isAr ? "مسددة (PAID)" : "Paid / Settled") : ownerComm ? (isAr ? ownerComm.status : ownerComm.status) : (isAr ? "غير مسجلة" : "Not Charged")}
+                        {isPaidOrSettled ? (isAr ? "مسددة (PAID)" : "Paid / Settled") : ownerComm ? ownerComm.status : (isAr ? "غير مسجلة" : "Not Charged")}
                       </Badge>
                     </div>
 
                     {ownerComm ? (
                       <div className="space-y-2 text-xs text-slate-700">
                         <div className="flex justify-between py-1 border-b border-slate-100">
-                          <span className="text-slate-500">{isAr ? "المبلغ:" : "Amount:"}</span>
-                          <span className="font-bold font-mono text-emerald-600">AED {ownerComm.totalCommissionAmount.toLocaleString()}</span>
+                          <span className="text-slate-500">{isAr ? "إجمالي الرسوم (Gross Fee):" : "Gross Fee:"}</span>
+                          <span className="font-bold font-mono text-slate-900">AED {ownerComm.totalCommissionAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
                         <div className="flex justify-between py-1 border-b border-slate-100">
-                          <span className="text-slate-500">{isAr ? "سنة الرسوم الإدارية:" : "Fee Year:"}</span>
+                          <span className="text-slate-500">{isAr ? "ضريبة القيمة المضافة (VAT 5%):" : "VAT (5% Inclusive):"}</span>
+                          <span className="font-bold font-mono text-amber-700">AED {(ownerComm.vatAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-100">
+                          <span className="text-slate-500">{isAr ? "صافي إيراد المكتب (Net Revenue):" : "Net Office Revenue:"}</span>
+                          <span className="font-bold font-mono text-emerald-600">AED {(ownerComm.netRevenueAmount || (ownerComm.totalCommissionAmount - (ownerComm.vatAmount || 0))).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-100">
+                          <span className="text-slate-500">{isAr ? "المحصل (Collected):" : "Collected:"}</span>
+                          <span className="font-bold font-mono text-blue-600">AED {(ownerComm.collectedAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-100">
+                          <span className="text-slate-500">{isAr ? "المتبقي (Outstanding):" : "Outstanding:"}</span>
+                          <span className="font-bold font-mono text-rose-600">AED {(ownerComm.outstandingBalance ?? (ownerComm.totalCommissionAmount - (ownerComm.collectedAmount || 0))).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-100">
+                          <span className="text-slate-500">{isAr ? "سنة الرسوم الإدارية (Contract Year):" : "Contract Year:"}</span>
                           <span className="font-bold font-mono">{ownerComm.contractualCommissionYear || currentCommissionYear}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-100">
+                          <span className="text-slate-500">{isAr ? "دورة التجديد (Renewal Cycle):" : "Renewal Cycle:"}</span>
+                          <span className="font-bold font-mono">#{ownerComm.renewalSequence || renewalSeq}</span>
                         </div>
                         <div className="flex justify-between py-1 border-b border-slate-100">
                           <span className="text-slate-500">{isAr ? "الحالة مالياً:" : "Status:"}</span>
@@ -2075,9 +2101,15 @@ export const LeaseWorkspacePage: React.FC<LeaseWorkspaceModalProps> = ({ lease: 
               {/* TENANT COMMISSION */}
               {(() => {
                 const tenantComm = allLeaseAdminFees.find(
-                  (c) => c.partyType === "TENANT" && (String(c.contractualCommissionYear || "") === String(currentCommissionYear) || (c.renewalSequence || 1) === renewalSeq)
+                  (c) =>
+                    c.partyType === "TENANT" &&
+                    c.commissionType === "ADMIN_FEE" &&
+                    String(c.contractualCommissionYear || "") === String(currentCommissionYear) &&
+                    (c.renewalSequence || 1) === renewalSeq
                 );
-                const isPaidOrSettled = tenantComm?.status === "FULLY_COLLECTED" || tenantComm?.status === "COLLECTED";
+                const isPaidOrSettled =
+                  (tenantComm?.status === "FULLY_COLLECTED" || tenantComm?.status === "COLLECTED") &&
+                  (tenantComm?.outstandingBalance || 0) <= 0.001;
                 return (
                   <div className="p-5 rounded-2xl border border-slate-200 bg-slate-50 space-y-4 shadow-2xs">
                     <div className="flex items-center justify-between">
@@ -2086,19 +2118,39 @@ export const LeaseWorkspacePage: React.FC<LeaseWorkspaceModalProps> = ({ lease: 
                         <h5 className="text-xs font-black text-slate-900">{isAr ? "الرسوم الإدارية للمستأجر (Tenant Admin Fees)" : "Tenant Administrative Fees"}</h5>
                       </div>
                       <Badge variant={isPaidOrSettled ? "success" : tenantComm ? "warning" : "neutral"} size="sm">
-                        {isPaidOrSettled ? (isAr ? "مسددة (PAID)" : "Paid / Settled") : tenantComm ? (isAr ? tenantComm.status : tenantComm.status) : (isAr ? "غير مسجلة" : "Not Charged")}
+                        {isPaidOrSettled ? (isAr ? "مسددة (PAID)" : "Paid / Settled") : tenantComm ? tenantComm.status : (isAr ? "غير مسجلة" : "Not Charged")}
                       </Badge>
                     </div>
 
                     {tenantComm ? (
                       <div className="space-y-2 text-xs text-slate-700">
                         <div className="flex justify-between py-1 border-b border-slate-100">
-                          <span className="text-slate-500">{isAr ? "المبلغ:" : "Amount:"}</span>
-                          <span className="font-bold font-mono text-emerald-600">AED {tenantComm.totalCommissionAmount.toLocaleString()}</span>
+                          <span className="text-slate-500">{isAr ? "إجمالي الرسوم (Gross Fee):" : "Gross Fee:"}</span>
+                          <span className="font-bold font-mono text-slate-900">AED {tenantComm.totalCommissionAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
                         <div className="flex justify-between py-1 border-b border-slate-100">
-                          <span className="text-slate-500">{isAr ? "سنة الرسوم الإدارية:" : "Fee Year:"}</span>
+                          <span className="text-slate-500">{isAr ? "ضريبة القيمة المضافة (VAT 5%):" : "VAT (5% Inclusive):"}</span>
+                          <span className="font-bold font-mono text-amber-700">AED {(tenantComm.vatAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-100">
+                          <span className="text-slate-500">{isAr ? "صافي إيراد المكتب (Net Revenue):" : "Net Office Revenue:"}</span>
+                          <span className="font-bold font-mono text-emerald-600">AED {(tenantComm.netRevenueAmount || (tenantComm.totalCommissionAmount - (tenantComm.vatAmount || 0))).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-100">
+                          <span className="text-slate-500">{isAr ? "المحصل (Collected):" : "Collected:"}</span>
+                          <span className="font-bold font-mono text-blue-600">AED {(tenantComm.collectedAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-100">
+                          <span className="text-slate-500">{isAr ? "المتبقي (Outstanding):" : "Outstanding:"}</span>
+                          <span className="font-bold font-mono text-rose-600">AED {(tenantComm.outstandingBalance ?? (tenantComm.totalCommissionAmount - (tenantComm.collectedAmount || 0))).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-100">
+                          <span className="text-slate-500">{isAr ? "سنة الرسوم الإدارية (Contract Year):" : "Contract Year:"}</span>
                           <span className="font-bold font-mono">{tenantComm.contractualCommissionYear || currentCommissionYear}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-100">
+                          <span className="text-slate-500">{isAr ? "دورة التجديد (Renewal Cycle):" : "Renewal Cycle:"}</span>
+                          <span className="font-bold font-mono">#{tenantComm.renewalSequence || renewalSeq}</span>
                         </div>
                         <div className="flex justify-between py-1 border-b border-slate-100">
                           <span className="text-slate-500">{isAr ? "الحالة مالياً:" : "Status:"}</span>
