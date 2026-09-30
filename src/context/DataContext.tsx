@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { allocateNextSequence, allocateNextSequenceInTransaction } from "../utils/sequenceGenerator";
+import { allocateNextSequence, allocateNextSequenceInTransaction, flushTransactionWrites } from "../utils/sequenceGenerator";
 import { authenticatedFetch } from "../utils/apiClient";
 import { db, handleFirestoreError, OperationType, sanitizeForFirestore } from "../lib/firebase";
-import { collection, onSnapshot, doc, setDoc, deleteDoc, writeBatch, deleteField, runTransaction, getDocs, Transaction } from "firebase/firestore";
+import { collection, onSnapshot, doc, setDoc, deleteDoc, writeBatch, deleteField, runTransaction, getDocs, Transaction, DocumentReference, DocumentData } from "firebase/firestore";
 import { assertCloudWriteAvailable } from "./CloudConnectivityContext";
 
 import { useLanguage } from "./LanguageContext";

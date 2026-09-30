@@ -26,7 +26,7 @@ import {
   LeaseRenewalRecord,
   AccountDefinition,
   AdminFeeExemptionPolicy,
-  FinancialPeriodRecord,
+  FinancialPeriod,
   JournalEntryRecord,
 } from "../types";
 
@@ -54,7 +54,7 @@ export async function runLeaseRenewalAdminFeeIntegritySuite(): Promise<TestRepor
   console.log("CONTRACT INTEGRITY R2: TEST MATRIX (A through R)");
   console.log("==================================================");
 
-  const testPeriod: FinancialPeriodRecord[] = [
+  const testPeriod: FinancialPeriod[] = [
     {
       id: "fp-2027",
       periodName: "FY 2027",

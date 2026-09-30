@@ -1,7 +1,9 @@
 import fs from "fs";
 import path from "path";
 import tls from "tls";
-import firebaseAppletConfig from "../../firebase-applet-config.json";
+const firebaseAppletConfig = JSON.parse(
+  fs.readFileSync(path.join(process.cwd(), "firebase-applet-config.json"), "utf8")
+);
 import { initializeApp as initAdminApp, getApps as getAdminApps, cert as adminCert, applicationDefault } from "firebase-admin/app";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
@@ -15,7 +17,7 @@ import {
   encryptSecret,
   DEFAULT_GOOGLE_CLIENT_ID,
   STANDARD_DRIVE_SCOPE,
-} from "./googleDriveIntegrationService";
+} from "./googleDriveIntegrationService.ts";
 
 const SECRETS_FILE_PATH = path.join(process.cwd(), ".secrets.json");
 const CONFIG_FILE_PATH = path.join(process.cwd(), "connections-config.json");
