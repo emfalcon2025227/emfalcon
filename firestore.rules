@@ -1,13 +1,167 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Global Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Default deny catch-all
-    match /{document=**} {
-      allow read, write: if isSignedIn();
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function getUserRole() {
+      return getUserData().role;
+    }
+
+    function isStaff() {
+      return isSignedIn() && (
+        getUserRole() == "SYSTEM_OWNER" ||
+        getUserRole() == "ADMIN" ||
+        getUserRole() == "SUPER_ADMIN" ||
+        getUserRole() == "MANAGER" ||
+        getUserRole() == "FINANCE" ||
+        getUserRole() == "LEGAL" ||
+        getUserRole() == "PROPERTY_MANAGER" ||
+        getUserRole() == "DATA_ENTRY" ||
+        getUserRole() == "SALES_MANAGER"
+      );
+    }
+
+    function isOwner() {
+      return isSignedIn() && (getUserRole() == "OWNER" || getUserRole() == "PROPERTY_OWNER");
+    }
+
+    function isTenant() {
+      return isSignedIn() && getUserRole() == "TENANT";
+    }
+
+    // --- Users Collection ---
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isStaff());
+      allow write: if isStaff();
+    }
+
+    // --- Properties ---
+    match /properties/{propertyId} {
+      allow read: if isStaff() || (isOwner() && resource.data.ownerId == getUserData().ownerId);
+      allow write: if isStaff();
+    }
+
+    // --- Units ---
+    match /units/{unitId} {
+      allow read: if isStaff() || (isOwner() && resource.data.ownerId == getUserData().ownerId);
+      allow write: if isStaff();
+    }
+
+    // --- Leases & Renewals ---
+    match /leases/{leaseId} {
+      allow read: if isStaff() || (isTenant() && resource.data.tenantId == getUserData().tenantId) || (isOwner() && resource.data.ownerId == getUserData().ownerId);
+      allow write: if isStaff();
+    }
+    match /lease_renewals/{renewalId} {
+      allow read: if isStaff() || (isTenant() && resource.data.tenantId == getUserData().tenantId) || (isOwner() && resource.data.ownerId == getUserData().ownerId);
+      allow write: if isStaff();
+    }
+
+    // --- Tenants ---
+    match /tenants/{tenantId} {
+      allow read: if isStaff() || (isTenant() && getUserData().tenantId == tenantId) || isOwner();
+      allow write: if isStaff();
+    }
+
+    // --- Owners ---
+    match /owners/{ownerId} {
+      allow read: if isStaff() || (isOwner() && getUserData().ownerId == ownerId);
+      allow write: if isStaff();
+    }
+
+    // --- Financial Collections (Protected from direct non-staff edits) ---
+    match /cheques/{chequeId} {
+      allow read: if isStaff() || (isTenant() && resource.data.tenantId == getUserData().tenantId) || (isOwner() && resource.data.ownerId == getUserData().ownerId);
+      allow write: if isStaff();
+    }
+    match /returned_cheques/{chequeId} {
+      allow read: if isStaff() || (isTenant() && resource.data.tenantId == getUserData().tenantId) || (isOwner() && resource.data.ownerId == getUserData().ownerId);
+      allow write: if isStaff();
+    }
+    match /collections/{collectionId} {
+      allow read: if isStaff() || (isTenant() && resource.data.tenantId == getUserData().tenantId) || (isOwner() && resource.data.ownerId == getUserData().ownerId);
+      allow write: if isStaff();
+    }
+    match /property_expenses/{expenseId} {
+      allow read: if isStaff() || (isOwner() && resource.data.ownerId == getUserData().ownerId) || (isTenant() && resource.data.tenantId == getUserData().tenantId && resource.data.costBearer == "TENANT");
+      allow write: if isStaff();
+    }
+    match /owner_transfers/{transferId} {
+      allow read: if isStaff() || (isOwner() && resource.data.ownerId == getUserData().ownerId);
+      allow write: if isStaff();
+    }
+    match /journal_entries/{entryId} {
+      allow read, write: if isStaff();
+    }
+    match /journal_event_keys/{keyId} {
+      allow read, write: if isStaff();
+    }
+    match /daily_deposits/{depositId} {
+      allow read, write: if isStaff();
+    }
+    match /financial_periods/{periodId} {
+      allow read: if isSignedIn();
+      allow write: if isStaff();
+    }
+    match /commissions/{commissionId} {
+      allow read: if isStaff() || (isOwner() && resource.data.ownerId == getUserData().ownerId) || (isTenant() && resource.data.tenantId == getUserData().tenantId);
+      allow write: if isStaff();
+    }
+    match /payment_allocations/{allocationId} {
+      allow read: if isStaff() || (isOwner() && resource.data.ownerId == getUserData().ownerId) || (isTenant() && resource.data.tenantId == getUserData().tenantId);
+      allow write: if isStaff();
+    }
+
+    // --- Maintenance & Tasks ---
+    match /maintenance_requests/{requestId} {
+      allow read: if isStaff() || (isTenant() && resource.data.tenantId == getUserData().tenantId) || (isOwner() && resource.data.ownerId == getUserData().ownerId);
+      allow write: if isStaff() || isTenant(); // Tenants can request maintenance
+    }
+
+    // --- Generic Other Collections helper for app-level configurations, etc. ---
+    match /system_counters/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /risk_config/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isStaff();
+    }
+    match /vat_rates/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isStaff();
+    }
+    match /company_profile/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isStaff();
+    }
+    match /notifications/{docId} {
+      allow read: if isStaff() || (isTenant() && resource.data.tenantId == getUserData().tenantId) || (isOwner() && resource.data.ownerId == getUserData().ownerId);
+      allow write: if isStaff();
+    }
+    match /audit_logs/{docId} {
+      allow read: if isStaff();
+      allow write: if isStaff();
+    }
+    match /_system_health/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isStaff();
+    }
+    match /cases/{docId} {
+      allow read: if isStaff() || (isTenant() && resource.data.tenantId == getUserData().tenantId);
+      allow write: if isStaff();
     }
   }
 }

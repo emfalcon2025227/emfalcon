@@ -164,14 +164,74 @@ export function buildUnifiedFinancialDocuments(data: DataContextSnapshot): Unifi
     const isPaid = trf.status === "PAID" || trf.status === "RECONCILED" || trf.status === "COMPLETED";
     const isReversed = trf.isReversed || trf.status === "REVERSED" || trf.status === "CANCELLED";
 
-    const breakdown: FinancialBreakdownItem[] = [
-      {
-        labelAr: "صافي الدفعة المحولة لحساب المالك",
-        labelEn: "Net Transferred Amount to Owner",
-        amount: trf.amount,
-        type: "NET",
-      },
-    ];
+    const breakdown: FinancialBreakdownItem[] = [];
+
+    if (trf.deductionSnapshot) {
+      const gross = trf.deductionSnapshot.grossOwnerFunds || trf.deductionSnapshot.totalCollections || 0;
+      if (gross > 0) {
+        breakdown.push({
+          labelAr: "إجمالي التحصيلات والإيرادات المستلمة",
+          labelEn: "Total Rent Collections (Gross)",
+          amount: gross,
+          type: "ADDITION",
+        });
+      }
+
+      if (trf.deductionSnapshot.deductionsList && Array.isArray(trf.deductionSnapshot.deductionsList)) {
+        trf.deductionSnapshot.deductionsList.forEach((ded: any) => {
+          if (!ded) return;
+          const labelEn = ded.description || (ded.type === "COMMISSION" ? "Owner Commission" : "Property Expense");
+          const labelAr = ded.description || (ded.type === "COMMISSION" ? "عمولة المالك" : "مصروفات العقار");
+          breakdown.push({
+            labelAr,
+            labelEn,
+            amount: ded.amount || 0,
+            type: "DEDUCTION",
+          });
+        });
+      } else {
+        if (trf.deductionSnapshot.totalCommissions > 0) {
+          breakdown.push({
+            labelAr: "إجمالي عمولات الصيانة والإدارة المخصومة",
+            labelEn: "Total Owner Commissions (Deducted)",
+            amount: trf.deductionSnapshot.totalCommissions,
+            type: "DEDUCTION",
+          });
+        }
+        if (trf.deductionSnapshot.totalExpenses > 0) {
+          breakdown.push({
+            labelAr: "إجمالي مصروفات الصيانة والتشغيل المخصومة",
+            labelEn: "Total Property Expenses (Deducted)",
+            amount: trf.deductionSnapshot.totalExpenses,
+            type: "DEDUCTION",
+          });
+        }
+      }
+
+      if (trf.deductionSnapshot.totalTransfersPaid > 0) {
+        breakdown.push({
+          labelAr: "إجمالي تحويلات سابقة مسددة",
+          labelEn: "Total Previous Payouts (Paid)",
+          amount: trf.deductionSnapshot.totalTransfersPaid,
+          type: "DEDUCTION",
+        });
+      }
+
+      const netBefore = trf.deductionSnapshot.netRemainingBalance || 0;
+      breakdown.push({
+        labelAr: "الرصيد المالي الصافي المتاح قبل هذا السند",
+        labelEn: "Net Available Balance Pre-transfer",
+        amount: netBefore,
+        type: "TOTAL",
+      });
+    }
+
+    breakdown.push({
+      labelAr: "صافي القيمة المصروفة والمحولة بموجب هذا السند",
+      labelEn: "Net Transferred Amount to Owner (Disbursed)",
+      amount: trf.amount,
+      type: "NET",
+    });
 
     docs.push({
       id: `doc-trf-${safeId}`,

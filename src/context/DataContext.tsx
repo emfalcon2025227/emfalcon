@@ -5543,10 +5543,34 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
   const addCheque = (
-    chequeData: Omit<Cheque, "id" | "createdAt" | "totalApplied" | "outstanding" | "whatsAppStatus" | "reminderCount">
+    chequeData: Omit<Cheque, "id" | "createdAt" | "totalApplied" | "outstanding" | "whatsAppStatus" | "reminderCount">,
+    isApprovedWorkflow?: boolean
   ): Cheque => {
     const isBounced = chequeData.status === "BOUNCED" || chequeData.originalStatus === "BOUNCED";
     const initialStatus = chequeData.status;
+
+    // Hard Cheque Governance Guard
+    const isNormalPDC = chequeData.status === "POST_DATED" || chequeData.status === "PENDING" || chequeData.status === "NORMAL" || !chequeData.status;
+    const isLegacy = (chequeData as any).isLegacy === true;
+
+    if (isNormalPDC && !isApprovedWorkflow && !isLegacy) {
+      throw new Error(
+        language === "ar"
+          ? "غير مسموح بإنشاء شيكات آجلة جديدة (PDC) بشكل يدوي/مستقل. يجب أن تنشأ الشيكات الآجلة حصراً من خلال تدفقات اعتماد العقود أو تجديدها."
+          : "Unauthorized: Normal PDCs may only originate from Contract Creation/Approval or Contract Renewal/Approval workflows."
+      );
+    }
+
+    if (isNormalPDC && (!chequeData.leaseId || chequeData.leaseId === "LEGACY_NO_LEASE" || chequeData.leaseId === "")) {
+      if (!isLegacy) {
+        throw new Error(
+          language === "ar"
+            ? "فشل إنشاء الشيك: يجب ربط الشيك بـعقد إيجار معتمد (Lease ID) لضمان حوكمة الـ PDCs."
+            : "Failed to create cheque: A normal PDC must contain a valid relationship to an approved Contract/Lease ID."
+        );
+      }
+    }
+
     const newCheque: Cheque = {
       ...chequeData,
       id: "chq-" + Date.now(),
@@ -9333,6 +9357,33 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const ownerObj = owners.find(o => o.id === data.ownerId);
     const beneficiaryBankName = data.beneficiaryBankName || ownerObj?.bankName || undefined;
     const beneficiaryIban = data.beneficiaryIban || ownerObj?.iban || undefined;
+    const ownerCommissions = commissions.filter(
+      (c) => c.ownerId === data.ownerId && c.partyType === "OWNER" && c.status !== "CANCELLED"
+    );
+    const ownerExpenses = propertyExpenses.filter(
+      (e) =>
+        e.ownerId === data.ownerId &&
+        e.costBearer === "OWNER" &&
+        e.status !== "CANCELLED" &&
+        e.status !== "REVERSED"
+    );
+    const deductionsList = [
+      ...ownerCommissions.map((c) => ({
+        id: c.id,
+        type: "COMMISSION",
+        description: c.notes || `عمولة المالك - ${c.commissionType}`,
+        amount: c.totalCommissionAmount || 0,
+        createdAt: c.createdAt,
+      })),
+      ...ownerExpenses.map((e) => ({
+        id: e.id,
+        type: "EXPENSE",
+        description: e.notes || `مصروفات المالك - ${e.category}`,
+        amount: e.totalAmount || 0,
+        createdAt: e.createdAt,
+      })),
+    ];
+
     const deductionSnapshot = {
       grossOwnerFunds: payableDetails.totalRentCollected || 0,
       totalCollections: payableDetails.totalRentCollected || 0,
@@ -9340,7 +9391,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       totalExpenses: payableDetails.totalOwnerExpenses || 0,
       totalTransfersPaid: payableDetails.totalTransfersPaid || 0,
       netRemainingBalance: payableDetails.netRemainingBalance || 0,
-      deductionsList: [...(payableDetails.commissions || []), ...(payableDetails.expenses || [])],
+      deductionsList,
     };
     const newTransfer: OwnerTransferRecord = {
       ...data,
