@@ -2,22 +2,21 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Global Deny Catch-All
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
     // Helper functions
     function isSignedIn() {
       return request.auth != null;
     }
 
+    function hasUserDoc() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
     function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return hasUserDoc() ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data : {};
     }
 
     function getUserRole() {
-      return getUserData().role;
+      return hasUserDoc() && 'role' in getUserData() ? getUserData().role : "GUEST";
     }
 
     function isStaff() {
@@ -42,21 +41,33 @@ service cloud.firestore {
       return isSignedIn() && getUserRole() == "TENANT";
     }
 
-    // --- Users Collection ---
+    // --- Users & Profiles Collection ---
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isStaff());
-      allow write: if isStaff();
+      allow write: if isStaff() || (isSignedIn() && request.auth.uid == userId);
+    }
+    match /users_by_email/{docId} {
+      allow read, write: if isSignedIn();
+    }
+    match /userPermissionOverrides/{docId} {
+      allow read, write: if isStaff();
     }
 
-    // --- Properties ---
+    // --- Core Master Data ---
     match /properties/{propertyId} {
       allow read: if isStaff() || (isOwner() && resource.data.ownerId == getUserData().ownerId);
       allow write: if isStaff();
     }
-
-    // --- Units ---
     match /units/{unitId} {
       allow read: if isStaff() || (isOwner() && resource.data.ownerId == getUserData().ownerId);
+      allow write: if isStaff();
+    }
+    match /owners/{ownerId} {
+      allow read: if isStaff() || (isOwner() && getUserData().ownerId == ownerId);
+      allow write: if isStaff();
+    }
+    match /tenants/{tenantId} {
+      allow read: if isStaff() || (isTenant() && getUserData().tenantId == tenantId) || isOwner();
       allow write: if isStaff();
     }
 
@@ -70,19 +81,7 @@ service cloud.firestore {
       allow write: if isStaff();
     }
 
-    // --- Tenants ---
-    match /tenants/{tenantId} {
-      allow read: if isStaff() || (isTenant() && getUserData().tenantId == tenantId) || isOwner();
-      allow write: if isStaff();
-    }
-
-    // --- Owners ---
-    match /owners/{ownerId} {
-      allow read: if isStaff() || (isOwner() && getUserData().ownerId == ownerId);
-      allow write: if isStaff();
-    }
-
-    // --- Financial Collections (Protected from direct non-staff edits) ---
+    // --- Cheques & Collections ---
     match /cheques/{chequeId} {
       allow read: if isStaff() || (isTenant() && resource.data.tenantId == getUserData().tenantId) || (isOwner() && resource.data.ownerId == getUserData().ownerId);
       allow write: if isStaff();
@@ -95,6 +94,8 @@ service cloud.firestore {
       allow read: if isStaff() || (isTenant() && resource.data.tenantId == getUserData().tenantId) || (isOwner() && resource.data.ownerId == getUserData().ownerId);
       allow write: if isStaff();
     }
+
+    // --- Expenses & Transfers ---
     match /property_expenses/{expenseId} {
       allow read: if isStaff() || (isOwner() && resource.data.ownerId == getUserData().ownerId) || (isTenant() && resource.data.tenantId == getUserData().tenantId && resource.data.costBearer == "TENANT");
       allow write: if isStaff();
@@ -103,18 +104,22 @@ service cloud.firestore {
       allow read: if isStaff() || (isOwner() && resource.data.ownerId == getUserData().ownerId);
       allow write: if isStaff();
     }
+
+    // --- Financial Ledger & Reversals & Adjustments ---
     match /journal_entries/{entryId} {
       allow read, write: if isStaff();
     }
     match /journal_event_keys/{keyId} {
       allow read, write: if isStaff();
     }
-    match /daily_deposits/{depositId} {
+    match /financial_reversals/{docId} {
       allow read, write: if isStaff();
     }
-    match /financial_periods/{periodId} {
-      allow read: if isSignedIn();
-      allow write: if isStaff();
+    match /financial_adjustments/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /chart_of_accounts/{docId} {
+      allow read, write: if isStaff();
     }
     match /commissions/{commissionId} {
       allow read: if isStaff() || (isOwner() && resource.data.ownerId == getUserData().ownerId) || (isTenant() && resource.data.tenantId == getUserData().tenantId);
@@ -124,22 +129,83 @@ service cloud.firestore {
       allow read: if isStaff() || (isOwner() && resource.data.ownerId == getUserData().ownerId) || (isTenant() && resource.data.tenantId == getUserData().tenantId);
       allow write: if isStaff();
     }
-
-    // --- Maintenance & Tasks ---
-    match /maintenance_requests/{requestId} {
-      allow read: if isStaff() || (isTenant() && resource.data.tenantId == getUserData().tenantId) || (isOwner() && resource.data.ownerId == getUserData().ownerId);
-      allow write: if isStaff() || isTenant(); // Tenants can request maintenance
-    }
-
-    // --- Generic Other Collections helper for app-level configurations, etc. ---
-    match /system_counters/{docId} {
+    match /payment_promises/{docId} {
       allow read, write: if isStaff();
     }
-    match /risk_config/{docId} {
+    match /deferred_payments/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /collection_actions/{docId} {
+      allow read, write: if isStaff();
+    }
+
+    // --- Petty Cash ---
+    match /office_petty_cash_months/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /office_petty_cash_expenses/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /office_petty_cash_categories/{docId} {
+      allow read, write: if isStaff();
+    }
+
+    // --- Deposits & Financial Periods ---
+    match /daily_deposits/{depositId} {
+      allow read, write: if isStaff();
+    }
+    match /deposit_batches/{depositId} {
+      allow read, write: if isStaff();
+    }
+    match /financial_periods/{periodId} {
       allow read: if isSignedIn();
       allow write: if isStaff();
     }
-    match /vat_rates/{docId} {
+    match /period_certifications/{periodId} {
+      allow read, write: if isStaff();
+    }
+
+    // --- Maintenance, Technicians, Cases, Notifications, Archive, Audit Logs, History ---
+    match /maintenance_requests/{requestId} {
+      allow read: if isStaff() || (isTenant() && resource.data.tenantId == getUserData().tenantId) || (isOwner() && resource.data.ownerId == getUserData().ownerId);
+      allow write: if isStaff() || isTenant();
+    }
+    match /technicians/{techId} {
+      allow read, write: if isStaff();
+    }
+    match /cases/{docId} {
+      allow read: if isStaff() || (isTenant() && resource.data.tenantId == getUserData().tenantId);
+      allow write: if isStaff();
+    }
+    match /notifications/{docId} {
+      allow read: if isStaff() || (isTenant() && resource.data.tenantId == getUserData().tenantId) || (isOwner() && resource.data.ownerId == getUserData().ownerId);
+      allow write: if isStaff();
+    }
+    match /archive/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /electronic_archive/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /auditLogs/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /audit_logs/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /historicalRecords/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /historical_records/{docId} {
+      allow read, write: if isStaff();
+    }
+
+    // --- System Settings, Configurations & Settings ---
+    match /settings/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isStaff();
+    }
+    match /form_layouts/{docId} {
       allow read: if isSignedIn();
       allow write: if isStaff();
     }
@@ -147,11 +213,25 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isStaff();
     }
-    match /notifications/{docId} {
-      allow read: if isStaff() || (isTenant() && resource.data.tenantId == getUserData().tenantId) || (isOwner() && resource.data.ownerId == getUserData().ownerId);
+    match /system_counters/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /system_backups/{docId} {
+      allow read, write: if isStaff();
+    }
+    match /risk_config/{docId} {
+      allow read: if isSignedIn();
       allow write: if isStaff();
     }
-    match /audit_logs/{docId} {
+    match /vatRates/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isStaff();
+    }
+    match /vat_rates/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isStaff();
+    }
+    match /operational_communications/{docId} {
       allow read: if isStaff();
       allow write: if isStaff();
     }
@@ -159,9 +239,13 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isStaff();
     }
-    match /cases/{docId} {
-      allow read: if isStaff() || (isTenant() && resource.data.tenantId == getUserData().tenantId);
-      allow write: if isStaff();
+    match /test/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Default Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
