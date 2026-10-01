@@ -5550,7 +5550,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const initialStatus = chequeData.status;
 
     // Hard Cheque Governance Guard
-    const isNormalPDC = chequeData.status === "POST_DATED" || chequeData.status === "PENDING" || chequeData.status === "NORMAL" || !chequeData.status;
+    const isNormalPDC = chequeData.status === "POST_DATED" || chequeData.status === "PENDING" || !chequeData.status;
     const isLegacy = (chequeData as any).isLegacy === true;
 
     if (isNormalPDC && !isApprovedWorkflow && !isLegacy) {

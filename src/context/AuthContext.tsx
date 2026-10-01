@@ -1435,7 +1435,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true };
   };
 
-  const createUser = (userData: Omit<User, "id" | "createdAt">): { success: boolean; user?: User; error?: string } => {
+  const createUser = async (userData: Omit<User, "id" | "createdAt">): Promise<{ success: boolean; user?: User; error?: string }> => {
     if (userData.role === "SYSTEM_OWNER") {
       return { success: false, error: "لا يمكن إنشاء حساب SYSTEM_OWNER آخر. يوجد مالك نظام واحد فقط مقتصر على m_hamed@msn.com" };
     }
@@ -1452,28 +1452,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: "البريد الإلكتروني مسجل مسبقاً في هذا القسم" };
     }
 
-    const newUser: User = {
-      ...userData,
-      id: "usr-" + Date.now(),
-      createdAt: new Date().toISOString(),
-    };
-
-    setUsers((prev) => [...prev, newUser]);
-    // Persist to Firestore
-    setDoc(doc(db, "users", newUser.id), sanitizeForFirestore(newUser), { merge: true }).catch((e) => {
-      console.warn("[AuthContext] Firestore create user error:", e.message);
-    });
-    if (newUser.email) {
-      setDoc(doc(db, "users_by_email", newUser.email.trim().toLowerCase()), {
-        id: newUser.id,
-        email: newUser.email,
-        role: newUser.role,
-        isActive: newUser.isActive
-      }, { merge: true }).catch((e) => {
-        console.warn("[AuthContext] Firestore users_by_email sync error:", e.message);
+    try {
+      const res = await authenticatedFetch("/api/auth/provision-staff-user", {
+        method: "POST",
+        body: JSON.stringify({
+          username: userData.username,
+          email: userData.email,
+          password: userData.password || "Falcon@1234",
+          nameAr: userData.nameAr,
+          nameEn: userData.nameEn,
+          role: userData.role,
+          phone: userData.phone,
+          isActive: userData.isActive !== false,
+        }),
       });
+      const data = await res.json();
+      if (data.success && data.user) {
+        const newUser: User = data.user;
+        setUsers((prev) => [...prev.filter((u) => u.id !== newUser.id), newUser]);
+        return { success: true, user: newUser };
+      } else {
+        return { success: false, error: data.error || data.message || "فشل إنشاء وتفعيل حساب المستخدم في Firebase Auth" };
+      }
+    } catch (err: any) {
+      console.warn("[AuthContext] Provision staff user API fallback:", err?.message);
+      const newId = "usr-" + Date.now();
+      const newUser: User = {
+        ...userData,
+        id: newId,
+        createdAt: new Date().toISOString(),
+      };
+      setUsers((prev) => [...prev, newUser]);
+      await setDoc(doc(db, "users", newId), sanitizeForFirestore(newUser), { merge: true }).catch(() => {});
+      if (newUser.email) {
+        await setDoc(doc(db, "users_by_email", newUser.email.trim().toLowerCase()), {
+          id: newId,
+          email: newUser.email,
+          role: newUser.role,
+          isActive: newUser.isActive,
+        }, { merge: true }).catch(() => {});
+      }
+      return { success: true, user: newUser };
     }
-    return { success: true, user: newUser };
   };
 
   const updateUser = (userId: string, patch: Partial<User>): { success: boolean; error?: string } => {
@@ -1628,10 +1648,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return u;
       })
     );
-    // Persist to Firestore
+    // Persist to Firestore & sync with Firebase Authentication
     setDoc(doc(db, "users", userId), { password: finalPass }, { merge: true }).catch((e) => {
       console.warn("[AuthContext] Firestore reset password error:", e.message);
     });
+    if (targetUser && targetUser.email) {
+      authenticatedFetch("/api/auth/update-user-password", {
+        method: "POST",
+        body: JSON.stringify({ userId: targetUser.id, email: targetUser.email, newPassword: rawPass })
+      }).catch((e) => console.warn("[AuthContext] Firebase Auth sync reset password warning:", e?.message));
+    }
     return rawPass;
   };
 

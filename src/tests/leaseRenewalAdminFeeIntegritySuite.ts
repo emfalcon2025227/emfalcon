@@ -57,14 +57,12 @@ export async function runLeaseRenewalAdminFeeIntegritySuite(): Promise<TestRepor
   const testPeriod: FinancialPeriod[] = [
     {
       id: "fp-2027",
-      periodName: "FY 2027",
-      year: 2027,
+      name: "FY 2027",
       startDate: "2027-01-01",
       endDate: "2027-12-31",
       status: "OPEN",
-      isYearLocked: false,
-      isHardLocked: false,
-      closingStage: "OPEN",
+      openedAt: new Date().toISOString(),
+      openedBy: "SYSTEM",
     },
   ];
 
@@ -481,27 +479,23 @@ export async function runLeaseRenewalAdminFeeIntegritySuite(): Promise<TestRepor
   const periodRefR = doc(db, "financial_periods", periodIdR);
   await setDoc(periodRefR, {
     id: periodIdR,
-    periodName: "Test FY 2027",
-    year: 2027,
+    name: "Test FY 2027",
     startDate: "2027-01-01",
     endDate: "2027-12-31",
     status: "OPEN",
-    isYearLocked: false,
-    isHardLocked: false,
-    closingStage: "OPEN",
+    openedAt: new Date().toISOString(),
+    openedBy: "SYSTEM",
   });
 
-  const activePeriodsR = [
+  const activePeriodsR: FinancialPeriod[] = [
     {
       id: periodIdR,
-      periodName: "Test FY 2027",
-      year: 2027,
+      name: "Test FY 2027",
       startDate: "2027-01-01",
       endDate: "2027-12-31",
       status: "OPEN",
-      isYearLocked: false,
-      isHardLocked: false,
-      closingStage: "OPEN",
+      openedAt: new Date().toISOString(),
+      openedBy: "SYSTEM",
     }
   ];
 
@@ -518,9 +512,9 @@ export async function runLeaseRenewalAdminFeeIntegritySuite(): Promise<TestRepor
     transactionDate: "2027-01-15",
     totalDebit: 7500,
     totalCredit: 7500,
-    sourceType: "LEASE_SECURITY_DEPOSIT_COLLECTION",
+    sourceType: "SECURITY_DEPOSIT",
     sourceId: eventIdR,
-    status: "POST_DATED",
+    status: "POSTED",
     createdAt: new Date().toISOString(),
     createdById: "sys-test",
     createdByName: "Test Engine",
@@ -596,7 +590,7 @@ export async function runLeaseRenewalAdminFeeIntegritySuite(): Promise<TestRepor
   }
 
   const checkJournalSaved = await getDoc(doc(db, "journal_entries", testJournalIdR));
-  const checkEventKeySaved = await getDoc(doc(db, "journal_event_keys", `LEASE_SECURITY_DEPOSIT_COLLECTION_${eventIdR}`));
+  const checkEventKeySaved = await getDoc(doc(db, "journal_event_keys", `SECURITY_DEPOSIT_${eventIdR}`));
 
   const passR = 
     postRes1?.isValid && 
@@ -608,7 +602,7 @@ export async function runLeaseRenewalAdminFeeIntegritySuite(): Promise<TestRepor
   record(18, "R", "Authoritative journal posting integrity on live Firestore", passR, `Post 1 valid: ${postRes1?.isValid}, Journal Saved: ${checkJournalSaved.exists()}, Key Saved: ${checkEventKeySaved.exists()}, Post 2 rejected: ${!postRes2?.isValid}, Post 3 rejected: ${!postRes3?.isValid}`);
 
   await deleteDoc(doc(db, "journal_entries", testJournalIdR));
-  await deleteDoc(doc(db, "journal_event_keys", `LEASE_SECURITY_DEPOSIT_COLLECTION_${eventIdR}`));
+  await deleteDoc(doc(db, "journal_event_keys", `SECURITY_DEPOSIT_${eventIdR}`));
   await deleteDoc(periodRefR);
   for (const ref of accRefs) {
     await deleteDoc(ref);

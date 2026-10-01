@@ -442,7 +442,164 @@ ${activationLink}
 \u0645\u0639 \u062A\u062D\u064A\u0627\u062A\u060C
 \u0634\u0631\u0643\u0629 \u0635\u0642\u0631 \u0627\u0644\u0625\u0645\u0627\u0631\u0627\u062A \u0644\u0644\u0639\u0642\u0627\u0631\u0627\u062A
 \u0627\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0625\u0644\u0643\u062A\u0631\u0648\u0646\u064A: ${emailConfig.fromEmail||"info@falcon-realestate.ae"}
-        `.trim();if(emailConfig.isLive&&emailConfig.transporter){const mailOptions={from:`"${emailConfig.senderName}" <${emailConfig.fromEmail}>`,to:cleanEmail,subject,text:messageBody};await emailConfig.transporter.sendMail(mailOptions)}}catch(emailErr){console.error("[Portal Provisioning Server] Email notification error:",emailErr)}}return res.json({success:true,user:updatedUser,isNew:isNewAuthUser,activationLink:activationLink||void 0,message:isNewAuthUser?"\u062A\u0645 \u0625\u0646\u0634\u0627\u0621 \u062D\u0633\u0627\u0628 \u0627\u0644\u0628\u0648\u0627\u0628\u0629 \u0648\u0625\u0631\u0633\u0627\u0644 \u0631\u0627\u0628\u0637 \u0627\u0644\u062A\u0641\u0639\u064A\u0644 \u0627\u0644\u0622\u0645\u0646 \u0628\u0646\u062C\u0627\u062D.":"\u062D\u0633\u0627\u0628 \u0627\u0644\u0628\u0648\u0627\u0628\u0629 \u0645\u0633\u062C\u0644 \u0645\u0633\u0628\u0642\u0627\u064B \u0648\u0645\u062D\u062F\u062B."})}catch(err){console.error("[Portal Provisioning Server] Provision error:",err);const errorMessage=err?.message||"Failed to provision portal user";const isPermissionError=errorMessage.includes("insufficient permission")||errorMessage.includes("PERMISSION_DENIED");return res.status(isPermissionError?403:500).json({success:false,error:isPermissionError?"\u062E\u0637\u0623 \u0641\u064A \u0635\u0644\u0627\u062D\u064A\u0627\u062A \u0627\u0644\u062E\u0627\u062F\u0645 (IAM Permission Denied): \u0644\u0627 \u064A\u0645\u0644\u0643 \u0627\u0644\u062E\u0627\u062F\u0645 \u0635\u0644\u0627\u062D\u064A\u0629 \u0643\u0627\u0641\u064A\u0629 \u0644\u0625\u0646\u0634\u0627\u0621 \u0645\u0633\u062A\u062E\u062F\u0645\u064A\u0646 \u0641\u064A Firebase Auth. \u064A\u0631\u062C\u0649 \u062A\u0648\u0641\u064A\u0631 FIREBASE_SERVICE_ACCOUNT_BASE64 \u0641\u064A \u0627\u0644\u0625\u0639\u062F\u0627\u062F\u0627\u062A.":errorMessage})}});app.post("/api/auth/generate-activation-link",authenticateFirebaseToken,requireStaff,async(req,res)=>{try{const{email}=req.body;if(!email||!email.includes("@")){return res.status(400).json({success:false,error:"\u0627\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0625\u0644\u0643\u062A\u0631\u0648\u0646\u064A \u063A\u064A\u0631 \u0635\u0627\u0644\u062D"})}const cleanEmail=email.trim().toLowerCase();const authAdmin=getAdminAuthClient();if(!authAdmin){return res.status(500).json({success:false,error:"Firebase Admin Auth is not configured on the server."})}try{await authAdmin.getUserByEmail(cleanEmail)}catch(err){if(err.code==="auth/user-not-found"){const cryptoPass=crypto.randomBytes(24).toString("hex");await authAdmin.createUser({email:cleanEmail,password:cryptoPass,emailVerified:true})}else{throw err}}const resetLink=await authAdmin.generatePasswordResetLink(cleanEmail);return res.json({success:true,email:cleanEmail,activationLink:resetLink})}catch(err){console.error("[Auth Link Generation Error]:",err);return res.status(500).json({success:false,error:err.message||"Failed to generate activation link"})}});app.post(["/api/auth/send-portal-activation-email","/api/auth/send-portal-activation-email/"],authenticateFirebaseToken,requireStaff,async(req,res)=>{try{const{email,name,role,targetId,customBaseUrl}=req.body;if(!email||!email.includes("@")){return res.status(400).json({success:false,error:"\u0627\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0625\u0644\u0643\u062A\u0631\u0648\u0646\u064A \u063A\u064A\u0631 \u0635\u0627\u0644\u062D"})}const cleanEmail=email.trim().toLowerCase();const dbAdmin=getFirestoreAdmin();const authAdmin=getAdminAuthClient();if(!dbAdmin||!authAdmin){return res.status(500).json({success:false,error:"\u0641\u0634\u0644 \u062A\u0647\u064A\u0626\u0629 \u0646\u0638\u0627\u0645 \u0627\u0644\u062A\u062D\u0642\u0642 \u0627\u0644\u0645\u0631\u0643\u0632\u064A \u0639\u0644\u0649 \u0627\u0644\u062E\u0627\u062F\u0645 \u0627\u0644\u0645\u0631\u0643\u0632\u064A. \u064A\u0631\u062C\u0649 \u0645\u0631\u0627\u062C\u0639\u0629 \u0625\u0639\u062F\u0627\u062F\u0627\u062A Firebase Admin SDK."})}let targetProfile=null;let targetType=null;let targetRecordId=targetId||"";if(targetRecordId){const isOwnerRole=role==="OWNER"||role==="PROPERTY_OWNER";const colName=isOwnerRole?"owners":"tenants";const docSnap=await dbAdmin.collection(colName).doc(targetRecordId).get();if(docSnap.exists){targetProfile=docSnap.data();targetType=isOwnerRole?"OWNER":"TENANT"}}if(!targetProfile){const ownersSnap=await dbAdmin.collection("owners").where("email","==",cleanEmail).limit(1).get();if(!ownersSnap.empty){targetProfile=ownersSnap.docs[0].data();targetType="OWNER";targetRecordId=ownersSnap.docs[0].id}else{const tenantsSnap=await dbAdmin.collection("tenants").where("email","==",cleanEmail).limit(1).get();if(!tenantsSnap.empty){targetProfile=tenantsSnap.docs[0].data();targetType="TENANT";targetRecordId=tenantsSnap.docs[0].id}}}if(!targetProfile){return res.status(404).json({success:false,error:"PROFILE_NOT_FOUND",message:"\u0644\u0645 \u064A\u062A\u0645 \u0627\u0644\u0639\u062B\u0648\u0631 \u0639\u0644\u0649 \u0645\u0644\u0641 \u0634\u062E\u0635\u064A \u0645\u0633\u062C\u0644 \u0628\u0647\u0630\u0627 \u0627\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0625\u0644\u0643\u062A\u0631\u0648\u0646\u064A \u0641\u064A \u0627\u0644\u0646\u0638\u0627\u0645."})}if(targetType!=="OWNER"&&targetType!=="TENANT"){return res.status(400).json({success:false,error:"INVALID_PROFILE_TYPE",message:"\u0627\u0644\u0645\u0644\u0641 \u0627\u0644\u0634\u062E\u0635\u064A \u0627\u0644\u0645\u0633\u062A\u0647\u062F\u0641 \u0644\u064A\u0633 \u0645\u0627\u0644\u0643\u0627\u064B \u0623\u0648 \u0645\u0633\u062A\u0623\u062C\u0631\u0627\u064B"})}const recordEmail=(targetProfile.email||"").trim().toLowerCase();if(recordEmail!==cleanEmail){return res.status(400).json({success:false,error:"EMAIL_MISMATCH",message:"\u0627\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0625\u0644\u0643\u062A\u0631\u0648\u0646\u064A \u0644\u0627 \u064A\u0637\u0627\u0628\u0642 \u0627\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0645\u0633\u062C\u0644 \u0641\u064A \u0645\u0644\u0641 \u0627\u0644\u0645\u0627\u0644\u0643/\u0627\u0644\u0645\u0633\u062A\u0623\u062C\u0631"})}const usersCol=dbAdmin.collection("users");const emailQuery=await usersCol.where("email","==",cleanEmail).limit(1).get();let portalDoc=null;if(!emailQuery.empty){portalDoc=emailQuery.docs[0].data()}let authUser=null;try{authUser=await authAdmin.getUserByEmail(cleanEmail)}catch(err){if(err.code!=="auth/user-not-found"){throw err}}if(authUser&&portalDoc){const linkedRecordId=portalDoc.ownerId||portalDoc.tenantId;if(linkedRecordId&&linkedRecordId!==targetRecordId){return res.status(400).json({success:false,error:"ACCOUNT_LINK_CONFLICT",message:"\u062A\u0639\u0627\u0631\u0636 \u0641\u064A \u0631\u0628\u0637 \u0627\u0644\u062D\u0633\u0627\u0628: \u0647\u0630\u0627 \u0627\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0625\u0644\u0643\u062A\u0631\u0648\u0646\u064A \u0645\u0633\u062C\u0644 \u0644\u0645\u0644\u0641 \u0634\u062E\u0635\u064A \u0622\u062E\u0631 \u0641\u064A \u0627\u0644\u0646\u0638\u0627\u0645."})}}if(!authUser){const expectedId=`usr-${targetType.toLowerCase()}-${targetRecordId}`;const cryptoPass=crypto.randomBytes(24).toString("hex");const userRecord=await authAdmin.createUser({email:cleanEmail,password:cryptoPass,displayName:targetProfile.nameEn||targetProfile.nameAr||cleanEmail,emailVerified:true});const updatedUser={id:userRecord.uid,systemId:expectedId,username:cleanEmail,email:cleanEmail,nameEn:targetProfile.nameEn||cleanEmail,nameAr:targetProfile.nameAr||cleanEmail,phone:targetProfile.phone||"",role:targetType,ownerId:targetType==="OWNER"?targetRecordId:void 0,tenantId:targetType==="TENANT"?targetRecordId:void 0,isActive:true,createdAt:new Date().toISOString(),mustChangePassword:true,isFirstLoginCompleted:false,portalAccountStatus:"PENDING_ACTIVATION",firebaseUid:userRecord.uid};await usersCol.doc(userRecord.uid).set(updatedUser,{merge:true});authUser=userRecord}const resetLink=await authAdmin.generatePasswordResetLink(cleanEmail);const isOwner=targetType==="OWNER";const portalName=isOwner?"\u0628\u0648\u0627\u0628\u0629 \u0627\u0644\u0645\u0627\u0644\u0643 \u0627\u0644\u0627\u0633\u062A\u062B\u0645\u0627\u0631\u064A\u0629":"\u0628\u0648\u0627\u0628\u0629 \u0627\u0644\u0645\u0633\u062A\u0623\u062C\u0631";const portalUrl=customBaseUrl||process.env.PORTAL_URL||req.headers.origin||"https://ais-dev-kurx4d4uvxuhdqsvv4veh2-405724254259.europe-west3.run.app";const loginUrl=isOwner?`${portalUrl}/#owner-login`:`${portalUrl}/#tenant-login`;const configs=loadConfigs();const secrets=loadSecrets();const emailConfig=getEmailTransporter(configs,secrets);const subject=`\u0631\u0627\u0628\u0637 \u062A\u0641\u0639\u064A\u0644 \u062D\u0633\u0627\u0628 ${portalName} \u2014 \u0635\u0642\u0631 \u0627\u0644\u0625\u0645\u0627\u0631\u0627\u062A \u0644\u0644\u0639\u0642\u0627\u0631\u0627\u062A`;const messageBody=`
+        `.trim();if(emailConfig.isLive&&emailConfig.transporter){const mailOptions={from:`"${emailConfig.senderName}" <${emailConfig.fromEmail}>`,to:cleanEmail,subject,text:messageBody};await emailConfig.transporter.sendMail(mailOptions)}}catch(emailErr){console.error("[Portal Provisioning Server] Email notification error:",emailErr)}}return res.json({success:true,user:updatedUser,isNew:isNewAuthUser,activationLink:activationLink||void 0,message:isNewAuthUser?"\u062A\u0645 \u0625\u0646\u0634\u0627\u0621 \u062D\u0633\u0627\u0628 \u0627\u0644\u0628\u0648\u0627\u0628\u0629 \u0648\u0625\u0631\u0633\u0627\u0644 \u0631\u0627\u0628\u0637 \u0627\u0644\u062A\u0641\u0639\u064A\u0644 \u0627\u0644\u0622\u0645\u0646 \u0628\u0646\u062C\u0627\u062D.":"\u062D\u0633\u0627\u0628 \u0627\u0644\u0628\u0648\u0627\u0628\u0629 \u0645\u0633\u062C\u0644 \u0645\u0633\u0628\u0642\u0627\u064B \u0648\u0645\u062D\u062F\u062B."})}catch(err){console.error("[Portal Provisioning Server] Provision error:",err);const errorMessage=err?.message||"Failed to provision portal user";const isPermissionError=errorMessage.includes("insufficient permission")||errorMessage.includes("PERMISSION_DENIED");return res.status(isPermissionError?403:500).json({success:false,error:isPermissionError?"\u062E\u0637\u0623 \u0641\u064A \u0635\u0644\u0627\u062D\u064A\u0627\u062A \u0627\u0644\u062E\u0627\u062F\u0645 (IAM Permission Denied): \u0644\u0627 \u064A\u0645\u0644\u0643 \u0627\u0644\u062E\u0627\u062F\u0645 \u0635\u0644\u0627\u062D\u064A\u0629 \u0643\u0627\u0641\u064A\u0629 \u0644\u0625\u0646\u0634\u0627\u0621 \u0645\u0633\u062A\u062E\u062F\u0645\u064A\u0646 \u0641\u064A Firebase Auth. \u064A\u0631\u062C\u0649 \u062A\u0648\u0641\u064A\u0631 FIREBASE_SERVICE_ACCOUNT_BASE64 \u0641\u064A \u0627\u0644\u0625\u0639\u062F\u0627\u062F\u0627\u062A.":errorMessage})}});app.post(["/api/auth/provision-staff-user", "/api/auth/provision-staff-user/"], authenticateFirebaseToken, requireAdmin, async (req, res) => {
+  try {
+    const { username, email, password, nameAr, nameEn, role, phone, isActive } = req.body;
+    if (!email || !email.includes("@")) {
+      return res.status(400).json({ success: false, error: "VALIDATION_ERROR", message: "البريد الإلكتروني غير صالح أو غير مدخل" });
+    }
+    if (!password || password.length < 6) {
+      return res.status(400).json({ success: false, error: "VALIDATION_ERROR", message: "كلمة المرور يجب أن لا تقل عن 6 رموز" });
+    }
+    if (role === "SYSTEM_OWNER") {
+      return res.status(403).json({ success: false, error: "FORBIDDEN", message: "لا يمكن إنشاء حساب SYSTEM_OWNER آخر" });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanUsername = (username || cleanEmail.split("@")[0]).trim().toLowerCase();
+
+    const dbAdmin = getFirestoreAdmin();
+    const authAdmin = getAdminAuthClient();
+    if (!dbAdmin || !authAdmin) {
+      return res.status(503).json({
+        success: false,
+        error: "SERVICE_UNAVAILABLE",
+        message: "نظام التحقق المركزي غير مهيأ على الخادم."
+      });
+    }
+
+    const usersCol = dbAdmin.collection("users");
+
+    if (cleanUsername) {
+      const uSnap = await usersCol.where("username", "==", cleanUsername).limit(1).get();
+      if (!uSnap.empty && uSnap.docs[0].data().email !== cleanEmail) {
+        return res.status(400).json({ success: false, error: "DUPLICATE_USERNAME", message: "اسم المستخدم مسجل مسبقاً لمستخدم آخر" });
+      }
+    }
+
+    let userRecord;
+    let isNewAuthUser = false;
+    try {
+      userRecord = await authAdmin.getUserByEmail(cleanEmail);
+      await authAdmin.updateUser(userRecord.uid, {
+        password: password,
+        displayName: nameEn || nameAr || cleanUsername,
+        emailVerified: true
+      });
+    } catch (e: any) {
+      if (e.code === "auth/user-not-found") {
+        userRecord = await authAdmin.createUser({
+          email: cleanEmail,
+          password: password,
+          displayName: nameEn || nameAr || cleanUsername,
+          emailVerified: true
+        });
+        isNewAuthUser = true;
+      } else {
+        throw e;
+      }
+    }
+
+    const uid = userRecord.uid;
+    const newUserDoc: UserProfile = {
+      id: uid,
+      systemId: "usr-" + Date.now(),
+      username: cleanUsername,
+      email: cleanEmail,
+      nameAr: nameAr || cleanUsername,
+      nameEn: nameEn || nameAr || cleanUsername,
+      phone: phone || "",
+      role: role || "PROPERTY_MANAGER",
+      isActive: isActive !== false,
+      createdAt: new Date().toISOString(),
+      mustChangePassword: false,
+      isFirstLoginCompleted: true,
+      portalAccountStatus: "ACTIVE",
+      firebaseUid: uid,
+      password: crypto.createHash("sha256").update(password).digest("hex")
+    };
+
+    await usersCol.doc(uid).set(newUserDoc, { merge: true });
+
+    await dbAdmin.collection("users_by_email").doc(cleanEmail).set({
+      id: uid,
+      firebaseUid: uid,
+      email: cleanEmail,
+      username: cleanUsername,
+      role: newUserDoc.role,
+      isActive: newUserDoc.isActive
+    }, { merge: true });
+
+    return res.json({
+      success: true,
+      user: newUserDoc,
+      isNew: isNewAuthUser,
+      message: "تم إنشاء وترخيص حساب المستخدم بنجاح في نظام الموثوقية"
+    });
+  } catch (err: any) {
+    console.error("[Provision Staff User Server Error]:", err);
+    return res.status(500).json({ success: false, error: err?.message || "فشل إنشاء حساب المستخدم" });
+  }
+});
+
+app.post(["/api/auth/update-user-password", "/api/auth/update-user-password/"], authenticateFirebaseToken, requireAdmin, async (req, res) => {
+  try {
+    const { userId, email, newPassword } = req.body;
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ success: false, error: "VALIDATION_ERROR", message: "كلمة المرور يجب أن لا تقل عن 6 رموز" });
+    }
+
+    const authAdmin = getAdminAuthClient();
+    const dbAdmin = getFirestoreAdmin();
+    if (!authAdmin || !dbAdmin) {
+      return res.status(503).json({ success: false, error: "SERVICE_UNAVAILABLE", message: "نظام التحقق المركزي غير مهيأ" });
+    }
+
+    let targetEmail = (email || "").trim().toLowerCase();
+    if (!targetEmail && userId) {
+      const uDoc = await dbAdmin.collection("users").doc(userId).get();
+      if (uDoc.exists) {
+        targetEmail = (uDoc.data()?.email || "").trim().toLowerCase();
+      }
+    }
+
+    if (!targetEmail) {
+      return res.status(404).json({ success: false, error: "NOT_FOUND", message: "لم يتم العثور على البريد الإلكتروني للمستخدم" });
+    }
+
+    let userRecord;
+    try {
+      userRecord = await authAdmin.getUserByEmail(targetEmail);
+      await authAdmin.updateUser(userRecord.uid, {
+        password: newPassword,
+        emailVerified: true
+      });
+    } catch (e: any) {
+      if (e.code === "auth/user-not-found") {
+        userRecord = await authAdmin.createUser({
+          email: targetEmail,
+          password: newPassword,
+          emailVerified: true
+        });
+      } else {
+        throw e;
+      }
+    }
+
+    const passHash = crypto.createHash("sha256").update(newPassword).digest("hex");
+    await dbAdmin.collection("users").doc(userRecord.uid).set({
+      password: passHash,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+
+    return res.json({ success: true, message: "تم تحديث كلمة المرور في نظام المصادقة بنجاح" });
+  } catch (err: any) {
+    console.error("[Update Password Server Error]:", err);
+    return res.status(500).json({ success: false, error: err?.message || "فشل تحديث كلمة المرور" });
+  }
+});
+
+app.post("/api/auth/generate-activation-link",authenticateFirebaseToken,requireStaff,async(req,res)=>{try{const{email}=req.body;if(!email||!email.includes("@")){return res.status(400).json({success:false,error:"\u0627\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0625\u0644\u0643\u062A\u0631\u0648\u0646\u064A \u063A\u064A\u0631 \u0635\u0627\u0644\u062D"})}const cleanEmail=email.trim().toLowerCase();const authAdmin=getAdminAuthClient();if(!authAdmin){return res.status(500).json({success:false,error:"Firebase Admin Auth is not configured on the server."})}try{await authAdmin.getUserByEmail(cleanEmail)}catch(err){if(err.code==="auth/user-not-found"){const cryptoPass=crypto.randomBytes(24).toString("hex");await authAdmin.createUser({email:cleanEmail,password:cryptoPass,emailVerified:true})}else{throw err}}const resetLink=await authAdmin.generatePasswordResetLink(cleanEmail);return res.json({success:true,email:cleanEmail,activationLink:resetLink})}catch(err){console.error("[Auth Link Generation Error]:",err);return res.status(500).json({success:false,error:err.message||"Failed to generate activation link"})}});app.post(["/api/auth/send-portal-activation-email","/api/auth/send-portal-activation-email/"],authenticateFirebaseToken,requireStaff,async(req,res)=>{try{const{email,name,role,targetId,customBaseUrl}=req.body;if(!email||!email.includes("@")){return res.status(400).json({success:false,error:"\u0627\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0625\u0644\u0643\u062A\u0631\u0648\u0646\u064A \u063A\u064A\u0631 \u0635\u0627\u0644\u062D"})}const cleanEmail=email.trim().toLowerCase();const dbAdmin=getFirestoreAdmin();const authAdmin=getAdminAuthClient();if(!dbAdmin||!authAdmin){return res.status(500).json({success:false,error:"\u0641\u0634\u0644 \u062A\u0647\u064A\u0626\u0629 \u0646\u0638\u0627\u0645 \u0627\u0644\u062A\u062D\u0642\u0642 \u0627\u0644\u0645\u0631\u0643\u0632\u064A \u0639\u0644\u0649 \u0627\u0644\u062E\u0627\u062F\u0645 \u0627\u0644\u0645\u0631\u0643\u0632\u064A. \u064A\u0631\u062C\u0649 \u0645\u0631\u0627\u062C\u0639\u0629 \u0625\u0639\u062F\u0627\u062F\u0627\u062A Firebase Admin SDK."})}let targetProfile=null;let targetType=null;let targetRecordId=targetId||"";if(targetRecordId){const isOwnerRole=role==="OWNER"||role==="PROPERTY_OWNER";const colName=isOwnerRole?"owners":"tenants";const docSnap=await dbAdmin.collection(colName).doc(targetRecordId).get();if(docSnap.exists){targetProfile=docSnap.data();targetType=isOwnerRole?"OWNER":"TENANT"}}if(!targetProfile){const ownersSnap=await dbAdmin.collection("owners").where("email","==",cleanEmail).limit(1).get();if(!ownersSnap.empty){targetProfile=ownersSnap.docs[0].data();targetType="OWNER";targetRecordId=ownersSnap.docs[0].id}else{const tenantsSnap=await dbAdmin.collection("tenants").where("email","==",cleanEmail).limit(1).get();if(!tenantsSnap.empty){targetProfile=tenantsSnap.docs[0].data();targetType="TENANT";targetRecordId=tenantsSnap.docs[0].id}}}if(!targetProfile){return res.status(404).json({success:false,error:"PROFILE_NOT_FOUND",message:"\u0644\u0645 \u064A\u062A\u0645 \u0627\u0644\u0639\u062B\u0648\u0631 \u0639\u0644\u0649 \u0645\u0644\u0641 \u0634\u062E\u0635\u064A \u0645\u0633\u062C\u0644 \u0628\u0647\u0630\u0627 \u0627\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0625\u0644\u0643\u062A\u0631\u0648\u0646\u064A \u0641\u064A \u0627\u0644\u0646\u0638\u0627\u0645."})}if(targetType!=="OWNER"&&targetType!=="TENANT"){return res.status(400).json({success:false,error:"INVALID_PROFILE_TYPE",message:"\u0627\u0644\u0645\u0644\u0641 \u0627\u0644\u0634\u062E\u0635\u064A \u0627\u0644\u0645\u0633\u062A\u0647\u062F\u0641 \u0644\u064A\u0633 \u0645\u0627\u0644\u0643\u0627\u064B \u0623\u0648 \u0645\u0633\u062A\u0623\u062C\u0631\u0627\u064B"})}const recordEmail=(targetProfile.email||"").trim().toLowerCase();if(recordEmail!==cleanEmail){return res.status(400).json({success:false,error:"EMAIL_MISMATCH",message:"\u0627\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0625\u0644\u0643\u062A\u0631\u0648\u0646\u064A \u0644\u0627 \u064A\u0637\u0627\u0628\u0642 \u0627\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0645\u0633\u062C\u0644 \u0641\u064A \u0645\u0644\u0641 \u0627\u0644\u0645\u0627\u0644\u0643/\u0627\u0644\u0645\u0633\u062A\u0623\u062C\u0631"})}const usersCol=dbAdmin.collection("users");const emailQuery=await usersCol.where("email","==",cleanEmail).limit(1).get();let portalDoc=null;if(!emailQuery.empty){portalDoc=emailQuery.docs[0].data()}let authUser=null;try{authUser=await authAdmin.getUserByEmail(cleanEmail)}catch(err){if(err.code!=="auth/user-not-found"){throw err}}if(authUser&&portalDoc){const linkedRecordId=portalDoc.ownerId||portalDoc.tenantId;if(linkedRecordId&&linkedRecordId!==targetRecordId){return res.status(400).json({success:false,error:"ACCOUNT_LINK_CONFLICT",message:"\u062A\u0639\u0627\u0631\u0636 \u0641\u064A \u0631\u0628\u0637 \u0627\u0644\u062D\u0633\u0627\u0628: \u0647\u0630\u0627 \u0627\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0625\u0644\u0643\u062A\u0631\u0648\u0646\u064A \u0645\u0633\u062C\u0644 \u0644\u0645\u0644\u0641 \u0634\u062E\u0635\u064A \u0622\u062E\u0631 \u0641\u064A \u0627\u0644\u0646\u0638\u0627\u0645."})}}if(!authUser){const expectedId=`usr-${targetType.toLowerCase()}-${targetRecordId}`;const cryptoPass=crypto.randomBytes(24).toString("hex");const userRecord=await authAdmin.createUser({email:cleanEmail,password:cryptoPass,displayName:targetProfile.nameEn||targetProfile.nameAr||cleanEmail,emailVerified:true});const updatedUser={id:userRecord.uid,systemId:expectedId,username:cleanEmail,email:cleanEmail,nameEn:targetProfile.nameEn||cleanEmail,nameAr:targetProfile.nameAr||cleanEmail,phone:targetProfile.phone||"",role:targetType,ownerId:targetType==="OWNER"?targetRecordId:void 0,tenantId:targetType==="TENANT"?targetRecordId:void 0,isActive:true,createdAt:new Date().toISOString(),mustChangePassword:true,isFirstLoginCompleted:false,portalAccountStatus:"PENDING_ACTIVATION",firebaseUid:userRecord.uid};await usersCol.doc(userRecord.uid).set(updatedUser,{merge:true});authUser=userRecord}const resetLink=await authAdmin.generatePasswordResetLink(cleanEmail);const isOwner=targetType==="OWNER";const portalName=isOwner?"\u0628\u0648\u0627\u0628\u0629 \u0627\u0644\u0645\u0627\u0644\u0643 \u0627\u0644\u0627\u0633\u062A\u062B\u0645\u0627\u0631\u064A\u0629":"\u0628\u0648\u0627\u0628\u0629 \u0627\u0644\u0645\u0633\u062A\u0623\u062C\u0631";const portalUrl=customBaseUrl||process.env.PORTAL_URL||req.headers.origin||"https://ais-dev-kurx4d4uvxuhdqsvv4veh2-405724254259.europe-west3.run.app";const loginUrl=isOwner?`${portalUrl}/#owner-login`:`${portalUrl}/#tenant-login`;const configs=loadConfigs();const secrets=loadSecrets();const emailConfig=getEmailTransporter(configs,secrets);const subject=`\u0631\u0627\u0628\u0637 \u062A\u0641\u0639\u064A\u0644 \u062D\u0633\u0627\u0628 ${portalName} \u2014 \u0635\u0642\u0631 \u0627\u0644\u0625\u0645\u0627\u0631\u0627\u062A \u0644\u0644\u0639\u0642\u0627\u0631\u0627\u062A`;const messageBody=`
 \u0639\u0632\u064A\u0632\u064A/\u0639\u0632\u064A\u0632\u062A\u064A ${name||cleanEmail}\u060C
 
 \u062A\u062D\u064A\u0629 \u0637\u064A\u0628\u0629\u060C

@@ -81,13 +81,13 @@ export const AdminControlPanel: React.FC = () => {
     setTimeout(() => setFeedback(null), 4000);
   };
 
-  const handleCreateUser = (e: React.FormEvent) => {
+  const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUsername || !newEmail || !newNameAr || !newPassword) {
       showMsg("error", language === "ar" ? "يرجى ملء كافة الحقول المطلوبة بما فيها كلمة المرور" : "Please fill all required fields including password");
       return;
     }
-    const res = createUser({
+    const res = await createUser({
       username: newUsername,
       email: newEmail,
       nameAr: newNameAr,
