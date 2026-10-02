@@ -618,11 +618,11 @@ interface AuthContextType {
   getEffectivePermission: (permissionId: string, userId?: string) => EffectivePermissionResult;
   addUserPermissionOverride: (overrideData: { userId: string; permissionId: string; effect: "GRANT" | "DENY"; reason?: string; expiresAt?: string | null }) => { success: boolean; error?: string };
   revokeUserPermissionOverride: (overrideId: string) => { success: boolean; error?: string };
-  createUser: (userData: Omit<User, "id" | "createdAt">) => { success: boolean; user?: User; error?: string };
+  createUser: (userData: Omit<User, "id" | "createdAt">) => Promise<{ success: boolean; user?: User; error?: string }>;
   updateUser: (userId: string, patch: Partial<User>) => { success: boolean; error?: string };
   updateUserStatus: (userId: string, isActive: boolean) => { success: boolean; error?: string };
   updateUserRole: (userId: string, newRole: UserRole) => { success: boolean; error?: string };
-  resetUserPassword: (userId: string, newPassword?: string) => string;
+  resetUserPassword: (userId: string, newPassword?: string) => Promise<{ success: boolean; error?: string; password?: string }>;
   changeOwnPassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   deleteUser: (userId: string) => { success: boolean; error?: string };
   importUsersBatch: (records: Partial<User>[]) => Promise<{ total: number; importedCount: number; updatedCount: number; errors: string[] }>;
@@ -1435,13 +1435,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true };
   };
 
-  const createUser = async (userData: Omit<User, "id" | "createdAt">): Promise<{ success: boolean; user?: User; error?: string }> => {
+  const createUser = async (userData: Omit<User, "id" | "createdAt" | "password"> & { password?: string }): Promise<{ success: boolean; user?: User; error?: string }> => {
     if (userData.role === "SYSTEM_OWNER") {
       return { success: false, error: "لا يمكن إنشاء حساب SYSTEM_OWNER آخر. يوجد مالك نظام واحد فقط مقتصر على m_hamed@msn.com" };
     }
 
     if (!currentUser || !isSystemOwnerUser(currentUser)) {
       return { success: false, error: "فقط مالك النظام SYSTEM_OWNER مصرح له بإنشاء حسابات مستخدمين جديدة" };
+    }
+
+    if (!userData.password || userData.password.trim().length < 6) {
+      return { success: false, error: "يجب إدخال كلمة مرور صالحة لا تقل عن 6 رموز" };
     }
 
     const isTenant = userData.role === "TENANT";
@@ -1458,7 +1462,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         body: JSON.stringify({
           username: userData.username,
           email: userData.email,
-          password: userData.password || "Falcon@1234",
+          password: userData.password,
           nameAr: userData.nameAr,
           nameEn: userData.nameEn,
           role: userData.role,
@@ -1469,30 +1473,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const data = await res.json();
       if (data.success && data.user) {
         const newUser: User = data.user;
+        // Strip out password property from local state / memory for maximum password security
+        delete (newUser as any).password;
         setUsers((prev) => [...prev.filter((u) => u.id !== newUser.id), newUser]);
         return { success: true, user: newUser };
       } else {
         return { success: false, error: data.error || data.message || "فشل إنشاء وتفعيل حساب المستخدم في Firebase Auth" };
       }
     } catch (err: any) {
-      console.warn("[AuthContext] Provision staff user API fallback:", err?.message);
-      const newId = "usr-" + Date.now();
-      const newUser: User = {
-        ...userData,
-        id: newId,
-        createdAt: new Date().toISOString(),
-      };
-      setUsers((prev) => [...prev, newUser]);
-      await setDoc(doc(db, "users", newId), sanitizeForFirestore(newUser), { merge: true }).catch(() => {});
-      if (newUser.email) {
-        await setDoc(doc(db, "users_by_email", newUser.email.trim().toLowerCase()), {
-          id: newId,
-          email: newUser.email,
-          role: newUser.role,
-          isActive: newUser.isActive,
-        }, { merge: true }).catch(() => {});
-      }
-      return { success: true, user: newUser };
+      console.error("[AuthContext] Provision staff user API error:", err?.message);
+      return { success: false, error: err?.message || "فشل إنشاء وتفعيل حساب المستخدم في Firebase Auth بسبب خطأ في الخادم" };
     }
   };
 
@@ -1628,37 +1618,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true };
   };
 
-  const resetUserPassword = (userId: string, newPassword?: string): string => {
+  const resetUserPassword = async (userId: string, newPassword?: string): Promise<{ success: boolean; error?: string; password?: string }> => {
     const targetUser = users.find(u => u.id === userId);
-    if (targetUser && (targetUser.role === "OWNER" || targetUser.role === "TENANT")) {
-      console.warn("resetUserPassword called for Owner/Tenant. This is forbidden. Use Firebase Secure Reset.");
-      return "";
+    if (!targetUser) {
+      return { success: false, error: "المستخدم غير موجود" };
     }
-    const rawPass = newPassword || ("Falcon@" + (Date.now() % 10000));
-    const finalPass = sha256(rawPass);
-    setUsers((prev) =>
-      prev.map((u) => {
-        if (u.id === userId) {
-          const updated = { ...u, password: finalPass };
-          if (currentUser?.id === userId) {
-            setCurrentUser(updated);
-          }
-          return updated;
-        }
-        return u;
-      })
-    );
-    // Persist to Firestore & sync with Firebase Authentication
-    setDoc(doc(db, "users", userId), { password: finalPass }, { merge: true }).catch((e) => {
-      console.warn("[AuthContext] Firestore reset password error:", e.message);
-    });
-    if (targetUser && targetUser.email) {
-      authenticatedFetch("/api/auth/update-user-password", {
+    if (targetUser.role === "OWNER" || targetUser.role === "TENANT") {
+      return { success: false, error: "إعادة تعيين كلمة المرور غير متاحة للمالك أو المستأجر من هنا. يرجى استخدام رابط إعادة التعيين الآمن." };
+    }
+    const rawPass = newPassword || ("Falcon@" + (Math.floor(Math.random() * 90000) + 10000));
+
+    try {
+      const res = await authenticatedFetch("/api/auth/update-user-password", {
         method: "POST",
         body: JSON.stringify({ userId: targetUser.id, email: targetUser.email, newPassword: rawPass })
-      }).catch((e) => console.warn("[AuthContext] Firebase Auth sync reset password warning:", e?.message));
+      });
+      const data = await res.json();
+      if (data.success) {
+        setUsers((prev) =>
+          prev.map((u) => {
+            if (u.id === userId) {
+              const updated = { ...u };
+              delete (updated as any).password;
+              if (currentUser?.id === userId) {
+                setCurrentUser(updated);
+              }
+              return updated;
+            }
+            return u;
+          })
+        );
+        // Persist only non-sensitive metadata update (no passwords stored in Firestore!)
+        await setDoc(doc(db, "users", userId), { updatedAt: new Date().toISOString() }, { merge: true });
+        return { success: true, password: rawPass };
+      } else {
+        return { success: false, error: data.error || data.message || "فشل تحديث كلمة المرور في نظام المصادقة" };
+      }
+    } catch (err: any) {
+      console.error("[AuthContext] Firebase Auth reset password failed:", err?.message);
+      return { success: false, error: err?.message || "فشل تحديث كلمة المرور بسبب خطأ في الخادم" };
     }
-    return rawPass;
   };
 
   const changeOwnPassword = async (currentPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> => {
@@ -1702,12 +1701,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const saveUser = (userToSave: User) => {
     let finalUser = { ...userToSave };
-    // Do not allow password fields for Owner/Tenant portal authentication
-    if (finalUser.role === "OWNER" || finalUser.role === "TENANT") {
-      delete finalUser.password;
-    } else if (finalUser.password && finalUser.password.length < 20 && !finalUser.password.endsWith("==") && finalUser.password.length !== 64) {
-      finalUser.password = sha256(finalUser.password);
-    }
+    delete finalUser.password;
     setUsers((prev) => {
       const idx = prev.findIndex((u) => u.id === finalUser.id);
       if (idx >= 0) {
@@ -1830,7 +1824,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isActive: rec.isActive !== undefined ? rec.isActive : true,
           createdAt: rec.createdAt || new Date().toISOString(),
           lastLogin: rec.lastLogin,
-          password: rec.password || "Falcon@1234",
           mustChangePassword: rec.mustChangePassword || false,
           isFirstLoginCompleted: rec.isFirstLoginCompleted !== undefined ? rec.isFirstLoginCompleted : true,
           portalAccountStatus: rec.portalAccountStatus || "ACTIVE",

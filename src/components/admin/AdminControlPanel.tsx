@@ -57,7 +57,7 @@ export const AdminControlPanel: React.FC = () => {
   const [newNameEn, setNewNameEn] = useState("");
   const [newRole, setNewRole] = useState<UserRole>("PROPERTY_MANAGER");
   const [newPhone, setNewPhone] = useState("+971501234567");
-  const [newPassword, setNewPassword] = useState("Falcon@1234");
+  const [newPassword, setNewPassword] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
 
   // Edit user modal state
@@ -104,7 +104,7 @@ export const AdminControlPanel: React.FC = () => {
       setNewEmail("");
       setNewNameAr("");
       setNewNameEn("");
-      setNewPassword("Falcon@1234");
+      setNewPassword("");
     } else {
       showMsg("error", res.error || "Error creating user");
     }
@@ -118,7 +118,7 @@ export const AdminControlPanel: React.FC = () => {
     setEditNameEn(u.nameEn || "");
     setEditRole(u.role || "PROPERTY_MANAGER");
     setEditPhone(u.phone || "");
-    setEditPassword(u.password || "");
+    setEditPassword("");
     setShowEditPassword(false);
   };
 
@@ -136,7 +136,6 @@ export const AdminControlPanel: React.FC = () => {
       nameEn: editNameEn || editNameAr,
       role: editRole,
       phone: editPhone,
-      ...(editPassword ? { password: editPassword } : {}),
     });
     showMsg("success", language === "ar" ? `تم تحديث بيانات المستخدم (${editNameAr}) بنجاح` : `User details updated successfully`);
     setUserToEdit(null);
@@ -144,20 +143,28 @@ export const AdminControlPanel: React.FC = () => {
 
   const handleOpenChangePassword = (u: User) => {
     setUserToChangePassword(u);
-    setPassInput(u.password || "Falcon@1234");
+    setPassInput("");
     setShowPassInput(false);
   };
 
-  const handleSavePasswordChange = (e: React.FormEvent) => {
+  const handleSavePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userToChangePassword) return;
-    if (!passInput || passInput.trim().length < 4) {
-      showMsg("error", language === "ar" ? "كلمة المرور يجب أن لا تقل عن 4 رموز" : "Password must be at least 4 characters");
+    if (!passInput || passInput.trim().length < 6) {
+      showMsg("error", language === "ar" ? "كلمة المرور يجب أن لا تقل عن 6 رموز" : "Password must be at least 6 characters");
       return;
     }
-    resetUserPassword(userToChangePassword.id, passInput);
-    showMsg("success", language === "ar" ? `تم تحديث كلمة المرور للمستخدم (@${userToChangePassword.username}) إلى: ${passInput}` : `Password updated for @${userToChangePassword.username}`);
-    setUserToChangePassword(null);
+    try {
+      const res = await resetUserPassword(userToChangePassword.id, passInput);
+      if (res.success) {
+        showMsg("success", language === "ar" ? `تم تحديث كلمة المرور للمستخدم (@${userToChangePassword.username}) إلى: ${res.password}` : `Password updated for @${userToChangePassword.username} to: ${res.password}`);
+        setUserToChangePassword(null);
+      } else {
+        showMsg("error", res.error || (language === "ar" ? "فشل تحديث كلمة المرور" : "Failed to update password"));
+      }
+    } catch (err: any) {
+      showMsg("error", err?.message || (language === "ar" ? "فشل تحديث كلمة المرور" : "Failed to update password"));
+    }
   };
 
   const handleClearTableAction = (tableName: string, tableLabel: string) => {
@@ -696,7 +703,7 @@ export const AdminControlPanel: React.FC = () => {
                     required
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Falcon@1234"
+                    placeholder={language === "ar" ? "أدخل كلمة مرور قوية" : "Enter secure password"}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-sm pe-10"
                   />
                   <button
@@ -922,7 +929,14 @@ export const AdminControlPanel: React.FC = () => {
                       <label className="font-bold text-slate-700">{language === "ar" ? "كلمة المرور الجديدة" : "New Password"}</label>
                       <button
                         type="button"
-                        onClick={() => setPassInput("Falcon@" + Date.now() % 10000)}
+                        onClick={() => {
+                          const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#%^&*";
+                          let tempPass = "";
+                          for (let idx = 0; idx < 12; idx++) {
+                            tempPass += chars.charAt(Math.floor(Math.random() * chars.length));
+                          }
+                          setPassInput(tempPass);
+                        }}
                         className="text-[11px] text-amber-700 hover:underline font-bold inline-flex items-center gap-1 cursor-pointer"
                       >
                         <RefreshCw className="w-3 h-3" />
@@ -935,7 +949,7 @@ export const AdminControlPanel: React.FC = () => {
                         required
                         value={passInput}
                         onChange={(e) => setPassInput(e.target.value)}
-                        placeholder="Falcon@1234"
+                        placeholder={language === "ar" ? "أدخل كلمة مرور جديدة" : "Enter new secure password"}
                         className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-sm pe-10 focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all"
                       />
                       <button

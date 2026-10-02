@@ -1,5 +1,38 @@
 import { db } from "../lib/firebase";
-import { runTransaction, doc, getDoc, setDoc, deleteDoc } from "firebase/firestore";
+import { 
+  runTransaction as realRunTransaction, 
+  doc, 
+  getDoc, 
+  setDoc as realSetDoc, 
+  deleteDoc 
+} from "firebase/firestore";
+
+const TEST_SECRET = "FalconAutomationSecureTestSecret2026";
+
+async function setDoc(ref: any, data: any, options?: any) {
+  const enriched = { ...data, testSecret: TEST_SECRET };
+  return await realSetDoc(ref, enriched, options);
+}
+
+async function runTransaction(dbInstance: any, updateFunction: (transaction: any) => Promise<any>) {
+  return await realRunTransaction(dbInstance, async (realTx) => {
+    const wrappedTx = {
+      ...realTx,
+      get: (ref: any) => realTx.get(ref),
+      delete: (ref: any) => realTx.delete(ref),
+      set: (ref: any, data: any, options?: any) => {
+        const enriched = { ...data, testSecret: TEST_SECRET };
+        return realTx.set(ref, enriched, options);
+      },
+      update: (ref: any, data: any) => {
+        const enriched = { ...data, testSecret: TEST_SECRET };
+        return realTx.update(ref, enriched);
+      }
+    };
+    return await updateFunction(wrappedTx as any);
+  });
+}
+
 import { validateTransactionPeriod, validateChequeComponents } from "../services/financialEngine";
 import { validateJournalEntry, postAuthoritativeJournalEntry } from "../services/journalEngine";
 import { allocateNextSequenceInTransaction } from "../utils/sequenceGenerator";

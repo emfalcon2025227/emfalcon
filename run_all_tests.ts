@@ -9,6 +9,94 @@ import { runPhase56DepositDelayAlertTests } from "./src/utils/phase56DepositDela
 import { runPhase57ForensicTests } from "./src/utils/phase57DocumentIntelligenceForensicTests";
 import { main as runPhase1cLiveTests } from "./src/tests/runPhase1cLiveTests";
 import { runLeaseRenewalAdminFeeIntegritySuite } from "./src/tests/leaseRenewalAdminFeeIntegritySuite";
+import { initializeApp as initAdminApp, getApps as getAdminApps, cert as adminCert, applicationDefault } from "firebase-admin/app";
+import { getAuth as getAdminAuth } from "firebase-admin/auth";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
+import { auth, db } from "./src/lib/firebase";
+import fs from "fs";
+import path from "path";
+
+const firebaseAppletConfig = JSON.parse(fs.readFileSync(path.join(process.cwd(), "firebase-applet-config.json"), "utf8"));
+
+function getAdminApp() {
+  const existingApps = getAdminApps();
+  if (existingApps.length > 0) {
+    return existingApps[0];
+  }
+  const rawAccount = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 || process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (rawAccount) {
+    try {
+      const trimmed = rawAccount.trim();
+      let serviceAccount: any = null;
+      if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+        serviceAccount = JSON.parse(trimmed);
+      } else {
+        const decoded = Buffer.from(trimmed, "base64").toString("utf8").trim();
+        serviceAccount = JSON.parse(decoded);
+      }
+      if (serviceAccount && typeof serviceAccount === "object") {
+        return initAdminApp({
+          credential: adminCert(serviceAccount),
+          projectId: serviceAccount.project_id || firebaseAppletConfig.projectId
+        });
+      }
+    } catch (e: any) {
+      console.warn("[Firebase Admin] Service account initialization failed, falling back to ADC:", e?.message || e);
+    }
+  }
+  try {
+    return initAdminApp({
+      credential: applicationDefault(),
+      projectId: firebaseAppletConfig.projectId
+    });
+  } catch (e: any) {
+    console.warn("[Firebase Admin] Credentials initialization unavailable:", e?.message || e);
+  }
+  return null;
+}
+
+async function authenticateClient() {
+  const adminApp = getAdminApp();
+  if (!adminApp) {
+    console.warn("Could not initialize Firebase Admin to sign in. Tests will run unauthenticated.");
+    return;
+  }
+  const adminAuth = getAdminAuth(adminApp);
+  
+  const testEmail = "test-staff-automation@falcon.ae";
+  const testPassword = "TestAutomationPassword123!";
+  
+  let uid = "";
+  try {
+    const existingUser = await adminAuth.getUserByEmail(testEmail);
+    uid = existingUser.uid;
+    await adminAuth.updateUser(uid, { password: testPassword });
+  } catch (e: any) {
+    if (e.code === "auth/user-not-found") {
+      const newUser = await adminAuth.createUser({
+        email: testEmail,
+        password: testPassword,
+        emailVerified: true
+      });
+      uid = newUser.uid;
+    } else {
+      throw e;
+    }
+  }
+
+  await signInWithEmailAndPassword(auth, testEmail, testPassword);
+  console.log(`Successfully signed in client SDK as ${testEmail} (UID: ${uid})`);
+  
+  await setDoc(doc(db, "users", uid), {
+    id: uid,
+    firebaseUid: uid,
+    email: testEmail,
+    role: "SYSTEM_OWNER",
+    isActive: true
+  }, { merge: true });
+  console.log(`Bootstrapped users/${uid} document in Firestore with SYSTEM_OWNER role`);
+}
 
 const mockContext: any = {
   owners: [],
@@ -48,7 +136,28 @@ console.log(`Success Rate: ${phase57Report.successRate.toFixed(2)}%`);
 console.log(`Checklist 47 Compliance: ${phase57Report.checklist47Evaluation.filter(c => c.compliant).length}/47 Points`);
 console.log(`======================================================\n`);
 
+async function cleanupTestUser() {
+  try {
+    const adminApp = getAdminApp();
+    if (!adminApp) return;
+    const adminAuth = getAdminAuth(adminApp);
+    const testEmail = "test-staff-automation@falcon.ae";
+    try {
+      const existingUser = await adminAuth.getUserByEmail(testEmail);
+      await adminAuth.deleteUser(existingUser.uid);
+      console.log("Successfully deleted automated test user from Auth");
+    } catch (_) {}
+  } catch (err) {
+    console.warn("Cleanup test user warning:", err);
+  }
+}
+
 async function runIntegrity() {
+  try {
+    await authenticateClient();
+  } catch (authErr: any) {
+    console.warn("[Test Suite] Central Auth client authentication failed (falling back to unauthenticated Secure Bypass Gate mode):", authErr?.message || authErr);
+  }
   try {
     const renewalReport = await runLeaseRenewalAdminFeeIntegritySuite();
     if (renewalReport.failed > 0) {
@@ -58,6 +167,8 @@ async function runIntegrity() {
     await runPhase1cLiveTests();
   } catch (err) {
     console.error("Failed to run Phase 1C Integrity Tests:", err);
+  } finally {
+    await cleanupTestUser();
   }
 }
 

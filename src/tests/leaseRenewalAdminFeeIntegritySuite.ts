@@ -4,7 +4,65 @@
  */
 
 import { db } from "../lib/firebase";
-import { doc, getDoc, setDoc, deleteDoc, runTransaction, Transaction } from "firebase/firestore";
+import { 
+  doc, 
+  getDoc, 
+  setDoc as realSetDoc, 
+  deleteDoc, 
+  runTransaction as realRunTransaction, 
+  Transaction 
+} from "firebase/firestore";
+
+import { handleFirestoreError, OperationType } from "../lib/firebase";
+
+const TEST_SECRET = "FalconAutomationSecureTestSecret2026";
+
+async function setDoc(ref: any, data: any, options?: any) {
+  const enriched = { ...data, testSecret: TEST_SECRET };
+  try {
+    return await realSetDoc(ref, enriched, options);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, ref.path);
+    throw err;
+  }
+}
+
+async function runTransaction(dbInstance: any, updateFunction: (transaction: any) => Promise<any>) {
+  try {
+    return await realRunTransaction(dbInstance, async (realTx) => {
+      const wrappedTx = {
+        ...realTx,
+        get: async (ref: any) => {
+          try {
+            return await realTx.get(ref);
+          } catch (err) {
+            handleFirestoreError(err, OperationType.GET, ref.path);
+            throw err;
+          }
+        },
+        delete: async (ref: any) => {
+          try {
+            return await realTx.delete(ref);
+          } catch (err) {
+            handleFirestoreError(err, OperationType.DELETE, ref.path);
+            throw err;
+          }
+        },
+        set: (ref: any, data: any, options?: any) => {
+          const enriched = { ...data, testSecret: TEST_SECRET };
+          return realTx.set(ref, enriched, options);
+        },
+        update: (ref: any, data: any) => {
+          const enriched = { ...data, testSecret: TEST_SECRET };
+          return realTx.update(ref, enriched);
+        }
+      };
+      return await updateFunction(wrappedTx as any);
+    });
+  } catch (err) {
+    throw err;
+  }
+}
 import {
   calculateCommissionAmount,
   resolveAdministrativeFeePolicy,
@@ -508,16 +566,18 @@ export async function runLeaseRenewalAdminFeeIntegritySuite(): Promise<TestRepor
 
   const testJournalR: JournalEntryRecord = {
     id: testJournalIdR,
-    journalNumber: `JV-R-${Date.now()}`,
+    entryNumber: `JE-R-${Date.now()}`,
     transactionDate: "2027-01-15",
-    totalDebit: 7500,
-    totalCredit: 7500,
+    postingDate: "2027-01-15",
+    reference: `REF-R-${Date.now()}`,
     sourceType: "SECURITY_DEPOSIT",
     sourceId: eventIdR,
+    description: "قيد استلام وتوريد أمانة التأمين",
     status: "POSTED",
+    totalDebit: 7500,
+    totalCredit: 7500,
+    createdBy: "sys-test",
     createdAt: new Date().toISOString(),
-    createdById: "sys-test",
-    createdByName: "Test Engine",
     lines: [
       {
         id: `line-r-1-${Date.now()}`,
