@@ -51,16 +51,64 @@ service cloud.firestore {
       return isSignedIn() && getUserRole() == "TENANT";
     }
 
+    function isSystemOwner() {
+      return isSignedIn() && getUserRole() == "SYSTEM_OWNER";
+    }
+
+    function isAdminOrSystemOwner() {
+      return isSignedIn() && (
+        getUserRole() == "SYSTEM_OWNER" ||
+        getUserRole() == "ADMIN" ||
+        getUserRole() == "SUPER_ADMIN"
+      );
+    }
+
     // --- Users & Profiles Collection ---
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isStaff());
-      allow write: if isStaff() || (isSignedIn() && request.auth.uid == userId);
+
+      // CREATE: Staff/Admin can create user profiles (only System Owner can create SYSTEM_OWNER).
+      // Self-creation is restricted to initial bootstrap or non-privileged roles.
+      allow create: if (
+        isSystemOwner() ||
+        (isAdminOrSystemOwner() && request.resource.data.role != "SYSTEM_OWNER") ||
+        (isStaff() && request.resource.data.role != "SYSTEM_OWNER" && request.resource.data.role != "ADMIN" && request.resource.data.role != "SUPER_ADMIN") ||
+        (isSignedIn() && request.auth.uid == userId && (
+          !('role' in request.resource.data) || 
+          request.resource.data.role == "GUEST" || 
+          request.resource.data.role == "TENANT" || 
+          request.resource.data.role == "OWNER"
+        ))
+      );
+
+      // UPDATE: System Owner has full control. Admin can update non-SYSTEM_OWNER profiles.
+      // Self-updates by ordinary users CANNOT modify sensitive authorization fields (role, ownerId, tenantId, permissions, isActive, firebaseUid).
+      allow update: if (
+        isSystemOwner() ||
+        (isAdminOrSystemOwner() && resource.data.role != "SYSTEM_OWNER" && request.resource.data.role != "SYSTEM_OWNER") ||
+        (isSignedIn() && request.auth.uid == userId && (
+          // Identity & authorization fields must remain strictly immutable in self-service updates
+          request.resource.data.role == resource.data.role &&
+          (!('ownerId' in resource.data) || request.resource.data.ownerId == resource.data.ownerId) &&
+          (!('tenantId' in resource.data) || request.resource.data.tenantId == resource.data.tenantId) &&
+          (!('isActive' in resource.data) || request.resource.data.isActive == resource.data.isActive) &&
+          (!('firebaseUid' in resource.data) || request.resource.data.firebaseUid == resource.data.firebaseUid) &&
+          (!('permissions' in resource.data) || request.resource.data.permissions == resource.data.permissions)
+        ))
+      );
+
+      // DELETE: Only System Owner can delete users, or Admins deleting non-SYSTEM_OWNER records.
+      allow delete: if isSystemOwner() || (isAdminOrSystemOwner() && resource.data.role != "SYSTEM_OWNER");
     }
+
     match /users_by_email/{docId} {
-      allow read, write: if isSignedIn();
+      allow read: if isStaff() || (isSignedIn() && (docId == request.auth.token.email || (hasUserDoc() && 'email' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.email == docId)));
+      allow write: if isStaff();
     }
+
     match /userPermissionOverrides/{docId} {
-      allow read, write: if isStaff();
+      allow read: if isStaff() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow write: if isAdminOrSystemOwner();
     }
 
     // --- Core Master Data ---
