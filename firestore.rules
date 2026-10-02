@@ -103,7 +103,7 @@ service cloud.firestore {
 
     match /users_by_email/{docId} {
       allow read: if isStaff() || (isSignedIn() && (docId == request.auth.token.email || (hasUserDoc() && 'email' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.email == docId)));
-      allow write: if isStaff();
+      allow write: if isAdminOrSystemOwner();
     }
 
     match /userPermissionOverrides/{docId} {
