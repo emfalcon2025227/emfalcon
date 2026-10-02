@@ -2,11 +2,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Secure Automation Test Bypass Gate (Isolated to documents matching test ID patterns)
-    match /{collectionName}/{docId} {
-      allow read, write: if docId.matches(".*([tT][eE][sS][tT]|[rR][eE][nN][tT]|[jJ][oO][uU][rR][nN][aA][lL]|[fF][iI][nN][aA][nN][cC][iI][aA][lL]|[hHiIjJkKlL]-[sS][rR][cC]|[fF][aA][iI][lL]|[rR][eE][tT][rR][yY]|[lL][eE][aA][sS][eE]|[fF][pP]-|[jJ][rR]-|[jJ][eE]-|[eE][vV][eE][nN][tT]|[sS][eE][cC][uU][rR][iI][tT][yY]_[dD][eE][pP][oO][sS][iI][tT]|[cC][oO][mM]-|[cC][aA][sS][eE]-|[cC][oO][lL]-|[pP][aA][lL]-|[aA][cC][cC]-|[sS][rR][cC]-|[cC][oO][nN][cC]|[aA][tT][oO][mM]|[oO][rR][iI][gG]|[rR][eE][vV]|[dD][eE][pP]).*") || docId == "1010" || docId == "4010";
-    }
-
     // Helper functions
     function isSignedIn() {
       return request.auth != null;
@@ -182,18 +177,18 @@ service cloud.firestore {
 
     // --- Maintenance, Technicians, Cases, Notifications, Archive, Audit Logs, History ---
     match /maintenance_requests/{requestId} {
-      allow read: if isStaff() || (isTenant() && resource.data.tenantId == getUserData().tenantId) || (isOwner() && resource.data.ownerId == getUserData().ownerId);
+      allow read: if isStaff() || (isTenant() && resource.data.tenantId == getUserTenantId()) || (isOwner() && resource.data.ownerId == getUserOwnerId());
       allow write: if isStaff() || isTenant();
     }
     match /technicians/{techId} {
       allow read, write: if isStaff();
     }
     match /cases/{docId} {
-      allow read: if isStaff() || (isTenant() && resource.data.tenantId == getUserData().tenantId);
+      allow read: if isStaff() || (isTenant() && resource.data.tenantId == getUserTenantId());
       allow write: if isStaff();
     }
     match /notifications/{docId} {
-      allow read: if isStaff() || (isTenant() && resource.data.tenantId == getUserData().tenantId) || (isOwner() && resource.data.ownerId == getUserData().ownerId);
+      allow read: if isStaff() || (isTenant() && resource.data.tenantId == getUserTenantId()) || (isOwner() && resource.data.ownerId == getUserOwnerId());
       allow write: if isStaff();
     }
     match /archive/{docId} {
