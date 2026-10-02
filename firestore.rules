@@ -68,32 +68,42 @@ service cloud.firestore {
       allow read: if isSignedIn() && (request.auth.uid == userId || isStaff());
 
       // CREATE: Staff/Admin can create user profiles (only System Owner can create SYSTEM_OWNER).
-      // Self-creation is restricted to initial bootstrap or non-privileged roles.
+      // Self-creation by an ordinary user CANNOT set privileged roles or link arbitrary ownerId/tenantId/permissions/employeeId.
       allow create: if (
         isSystemOwner() ||
         (isAdminOrSystemOwner() && request.resource.data.role != "SYSTEM_OWNER") ||
         (isStaff() && request.resource.data.role != "SYSTEM_OWNER" && request.resource.data.role != "ADMIN" && request.resource.data.role != "SUPER_ADMIN") ||
         (isSignedIn() && request.auth.uid == userId && (
-          !('role' in request.resource.data) || 
-          request.resource.data.role == "GUEST" || 
-          request.resource.data.role == "TENANT" || 
-          request.resource.data.role == "OWNER"
+          (!('role' in request.resource.data) || request.resource.data.role == "GUEST") &&
+          !('ownerId' in request.resource.data) &&
+          !('tenantId' in request.resource.data) &&
+          !('permissions' in request.resource.data) &&
+          !('isSystemOwner' in request.resource.data) &&
+          !('employeeId' in request.resource.data)
         ))
       );
 
       // UPDATE: System Owner has full control. Admin can update non-SYSTEM_OWNER profiles.
-      // Self-updates by ordinary users CANNOT modify sensitive authorization fields (role, ownerId, tenantId, permissions, isActive, firebaseUid).
+      // Self-updates by ordinary users CANNOT modify or inject sensitive authorization fields.
       allow update: if (
         isSystemOwner() ||
         (isAdminOrSystemOwner() && resource.data.role != "SYSTEM_OWNER" && request.resource.data.role != "SYSTEM_OWNER") ||
         (isSignedIn() && request.auth.uid == userId && (
-          // Identity & authorization fields must remain strictly immutable in self-service updates
-          request.resource.data.role == resource.data.role &&
-          (!('ownerId' in resource.data) || request.resource.data.ownerId == resource.data.ownerId) &&
-          (!('tenantId' in resource.data) || request.resource.data.tenantId == resource.data.tenantId) &&
-          (!('isActive' in resource.data) || request.resource.data.isActive == resource.data.isActive) &&
-          (!('firebaseUid' in resource.data) || request.resource.data.firebaseUid == resource.data.firebaseUid) &&
-          (!('permissions' in resource.data) || request.resource.data.permissions == resource.data.permissions)
+          // Identity & authorization fields must remain strictly immutable and cannot be added or modified in self-service updates
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'role', 
+            'ownerId', 
+            'tenantId', 
+            'permissions', 
+            'userPermissionOverrides', 
+            'isActive', 
+            'disabled', 
+            'firebaseUid', 
+            'employeeId', 
+            'portalAccountStatus', 
+            'isSystemOwner', 
+            'systemId'
+          ])
         ))
       );
 
