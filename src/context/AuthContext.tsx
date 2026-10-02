@@ -21,7 +21,6 @@ import {
   PortalAccountDisplayInfo
 } from "../services/portalProvisioningService";
 import { authenticatedFetch } from "../utils/apiClient";
-import { INITIAL_OWNERS, INITIAL_TENANTS } from "../data/seedData";
 
 export const VALID_ERP_ROLES: readonly UserRole[] = [
   "SYSTEM_OWNER",
@@ -717,25 +716,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (userDocSnap.exists()) {
           const profileData = userDocSnap.data() as User;
           if (profileData && profileData.role) {
-            let authoritativeRole = profileData.role;
-            if (fEmail === "m_hamed@msn.com" || fEmail === "emfalcon2025227@gmail.com") {
-              authoritativeRole = "SYSTEM_OWNER";
+            // Verify role is in the authoritative ERP role allowlist
+            if (!VALID_ERP_ROLES.includes(profileData.role)) {
+              console.warn("[AuthContext] User profile has invalid or unsupported role:", profileData.role);
+              return null;
             }
+
             const authoritativeProfile: User = {
               ...profileData,
               id: fUid,
               firebaseUid: fUid,
-              role: authoritativeRole,
+              role: profileData.role,
               lastLogin: new Date().toISOString()
             };
-            if (authoritativeRole !== profileData.role) {
-              setDoc(userDocRef, { role: authoritativeRole, lastLogin: authoritativeProfile.lastLogin }, { merge: true }).catch(() => {});
-              if (fEmail) {
-                setDoc(doc(db, "users_by_email", fEmail), { role: authoritativeRole, firebaseUid: fUid, id: fUid }, { merge: true }).catch(() => {});
-              }
-            } else {
-              setDoc(userDocRef, { lastLogin: authoritativeProfile.lastLogin }, { merge: true }).catch(() => {});
-            }
+
+            // Update only non-sensitive lastLogin metadata
+            setDoc(userDocRef, { lastLogin: authoritativeProfile.lastLogin }, { merge: true }).catch(() => {});
             return authoritativeProfile;
           }
         }
@@ -743,106 +739,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn("[AuthContext] Direct users/{fUid} lookup notice:", err?.message);
       }
 
-      // 2. Controlled initial bootstrap: If this is the designated initial owner (m_hamed@msn.com),
-      // and no document exists yet for this UID in Firestore, bootstrap their SYSTEM_OWNER document
-      const isInitialSystemOwner = fEmail === "m_hamed@msn.com" || fEmail === "emfalcon2025227@gmail.com";
-      if (isInitialSystemOwner) {
-        try {
-          console.log(`[AuthContext] Running controlled SYSTEM_OWNER bootstrap for UID: ${fUid}, Email: ${fEmail}`);
-          const userDocRef = doc(db, "users", fUid);
-
-          let baseFields = { ...INITIAL_SYSTEM_OWNER };
-          try {
-            const legacyDoc = await getDoc(doc(db, "users", "usr-01"));
-            if (legacyDoc.exists()) {
-              baseFields = { ...baseFields, ...(legacyDoc.data() as User) };
-            }
-          } catch (_) {}
-
-          const newSystemOwnerProfile: User = {
-            id: fUid,
-            firebaseUid: fUid,
-            systemId: "usr-01",
-            username: "Mahmoud",
-            nameAr: baseFields.nameAr || "محمود محمد محمود حامد",
-            nameEn: baseFields.nameEn || "Mahmoud Mohamed Mahmoud Hamed",
-            email: fEmail,
-            role: "SYSTEM_OWNER",
-            isActive: true,
-            phone: baseFields.phone || "+971501234567",
-            createdAt: baseFields.createdAt || new Date().toISOString(),
-            lastLogin: new Date().toISOString(),
-            mustChangePassword: false,
-            isFirstLoginCompleted: true,
-            portalAccountStatus: "ACTIVE"
-          };
-
-          const sanitized = sanitizeForFirestore(newSystemOwnerProfile);
-          await setDoc(userDocRef, sanitized, { merge: true });
-
-          try {
-            await setDoc(doc(db, "users_by_email", fEmail), {
-              id: fUid,
-              firebaseUid: fUid,
-              email: fEmail,
-              role: "SYSTEM_OWNER",
-              isActive: true,
-              username: newSystemOwnerProfile.username,
-              nameAr: newSystemOwnerProfile.nameAr,
-              nameEn: newSystemOwnerProfile.nameEn
-            }, { merge: true });
-          } catch (eEmail: any) {
-            console.warn("[AuthContext] users_by_email mapping notice:", eEmail?.message);
-          }
-
-          return newSystemOwnerProfile;
-        } catch (err: any) {
-          console.error("[AuthContext] Error during SYSTEM_OWNER bootstrap:", err);
-          return {
-            ...INITIAL_SYSTEM_OWNER,
-            id: fUid,
-            firebaseUid: fUid,
-            email: fEmail,
-            username: "Mahmoud",
-            nameAr: "محمود محمد محمود حامد",
-            nameEn: "Mahmoud Mohamed Mahmoud Hamed",
-            role: "SYSTEM_OWNER",
-            isActive: true
-          };
-        }
-      }
-
-      // 3. For all other users: Lookup existing profile (NO auto-escalation to SYSTEM_OWNER or ADMIN)
+      // 2. Lookup existing profile in users collection if keyed by custom ID
       let match: User | null = null;
 
-      // Lookup in users_by_email mapping table
-      if (!match && fEmail) {
-        try {
-          const emailDoc = await getDoc(doc(db, "users_by_email", fEmail));
-          if (emailDoc.exists()) {
-            const emailData = emailDoc.data();
-            const targetId = emailData.id;
-            if (targetId) {
-              try {
-                const targetDoc = await getDoc(doc(db, "users", targetId));
-                if (targetDoc.exists()) {
-                  const targetData = targetDoc.data() as User;
-                  match = { ...targetData, id: targetId, firebaseUid: fUid };
-                  if (targetData.firebaseUid !== fUid) {
-                    await setDoc(doc(db, "users", targetId), { firebaseUid: fUid }, { merge: true }).catch(() => {});
-                  }
-                }
-              } catch (targetErr: any) {
-                console.warn("[AuthContext] Target user doc lookup notice:", targetErr?.message);
-              }
-            }
-          }
-        } catch (err: any) {
-          console.warn("[AuthContext] users_by_email lookup error:", err?.message);
-        }
-      }
-
-      // Fallback query by firebaseUid
+      // Query by firebaseUid field in users collection
       if (!match) {
         try {
           const qUid = query(collection(db, "users"), where("firebaseUid", "==", fUid));
@@ -856,6 +756,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
+      // Read-only lookup via users_by_email mapping table to locate custom user document ID
+      if (!match && fEmail) {
+        try {
+          const emailDoc = await getDoc(doc(db, "users_by_email", fEmail));
+          if (emailDoc.exists()) {
+            const emailData = emailDoc.data();
+            const targetId = emailData.id;
+            if (targetId) {
+              try {
+                const targetDoc = await getDoc(doc(db, "users", targetId));
+                if (targetDoc.exists()) {
+                  const targetData = targetDoc.data() as User;
+                  match = { ...targetData, id: targetId, firebaseUid: fUid };
+                }
+              } catch (targetErr: any) {
+                console.warn("[AuthContext] Target user doc lookup notice:", targetErr?.message);
+              }
+            }
+          }
+        } catch (err: any) {
+          console.warn("[AuthContext] users_by_email lookup notice:", err?.message);
+        }
+      }
+
       // Fallback query by email in Firestore users collection
       if (!match && fEmail) {
         try {
@@ -864,141 +788,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (!snapEmail.empty) {
             const d = snapEmail.docs[0].data() as User;
             match = { ...d, id: snapEmail.docs[0].id, firebaseUid: fUid };
-            if (d.firebaseUid !== fUid) {
-              await setDoc(doc(db, "users", snapEmail.docs[0].id), { firebaseUid: fUid }, { merge: true }).catch(() => {});
-            }
           }
         } catch (err: any) {
           console.warn("[AuthContext] users query by email notice:", err?.message);
         }
       }
 
-      // Check Tenant records by email
-      if (!match && fEmail) {
-        const matchedLocalTenant = INITIAL_TENANTS.find(t => (t.email || "").trim().toLowerCase() === fEmail);
-        if (matchedLocalTenant) {
-          match = {
-            id: fUid,
-            systemId: "usr-tnt-" + matchedLocalTenant.id,
-            username: fEmail.split("@")[0],
-            nameEn: matchedLocalTenant.nameEn || fDisplayName || "Tenant",
-            nameAr: matchedLocalTenant.nameAr || "مستأجر",
-            email: fEmail,
-            role: "TENANT",
-            tenantId: matchedLocalTenant.id,
-            isActive: matchedLocalTenant.status !== "INACTIVE",
-            firebaseUid: fUid,
-            createdAt: new Date().toISOString(),
-            lastLogin: new Date().toISOString()
-          };
-        } else {
-          try {
-            const qTenant = query(collection(db, "tenants"), where("email", "==", fEmail));
-            const snapTenant = await getDocs(qTenant);
-            if (!snapTenant.empty) {
-              const tenantData = snapTenant.docs[0].data();
-              match = {
-                id: fUid,
-                systemId: "usr-tnt-" + snapTenant.docs[0].id,
-                username: fEmail.split("@")[0],
-                nameEn: tenantData.nameEn || fDisplayName || "Tenant",
-                nameAr: tenantData.nameAr || "مستأجر",
-                email: fEmail,
-                role: "TENANT",
-                tenantId: snapTenant.docs[0].id,
-                isActive: tenantData.status !== "INACTIVE",
-                firebaseUid: fUid,
-                createdAt: new Date().toISOString(),
-                lastLogin: new Date().toISOString()
-              };
-              if (tenantData.firebaseUid !== fUid) {
-                await setDoc(doc(db, "tenants", snapTenant.docs[0].id), { firebaseUid: fUid }, { merge: true }).catch(() => {});
-              }
-            }
-          } catch (err: any) {
-            console.warn("[AuthContext] Tenant lookup by email notice:", err?.message);
-          }
-        }
-      }
-
-      // Check Owner records by email
-      if (!match && fEmail) {
-        const matchedLocalOwner = INITIAL_OWNERS.find(o => (o.email || "").trim().toLowerCase() === fEmail);
-        if (matchedLocalOwner) {
-          match = {
-            id: fUid,
-            systemId: "usr-own-" + matchedLocalOwner.id,
-            username: fEmail.split("@")[0],
-            nameEn: matchedLocalOwner.nameEn || fDisplayName || "Property Owner",
-            nameAr: matchedLocalOwner.nameAr || "مالك عقار",
-            email: fEmail,
-            role: "OWNER",
-            ownerId: matchedLocalOwner.id,
-            isActive: matchedLocalOwner.status !== "INACTIVE",
-            firebaseUid: fUid,
-            createdAt: new Date().toISOString(),
-            lastLogin: new Date().toISOString()
-          };
-        } else {
-          try {
-            const qOwner = query(collection(db, "owners"), where("email", "==", fEmail));
-            const snapOwner = await getDocs(qOwner);
-            if (!snapOwner.empty) {
-              const ownerData = snapOwner.docs[0].data();
-              match = {
-                id: fUid,
-                systemId: "usr-own-" + snapOwner.docs[0].id,
-                username: fEmail.split("@")[0],
-                nameEn: ownerData.nameEn || fDisplayName || "Property Owner",
-                nameAr: ownerData.nameAr || "مالك عقار",
-                email: fEmail,
-                role: "OWNER",
-                ownerId: snapOwner.docs[0].id,
-                isActive: ownerData.status !== "INACTIVE",
-                firebaseUid: fUid,
-                createdAt: new Date().toISOString(),
-                lastLogin: new Date().toISOString()
-              };
-              if (ownerData.firebaseUid !== fUid) {
-                await setDoc(doc(db, "owners", snapOwner.docs[0].id), { firebaseUid: fUid }, { merge: true }).catch(() => {});
-              }
-            }
-          } catch (err: any) {
-            console.warn("[AuthContext] Owner lookup by email notice:", err?.message);
-          }
-        }
-      }
-
-      // If match found for regular user, save to Firestore if needed
+      // If match found in Firestore, validate and return authoritative profile
       if (match) {
-        if (fEmail === "emfalcon2025227@gmail.com" || fEmail === "m_hamed@msn.com") {
-          match.role = "SYSTEM_OWNER";
-        }
-
         // Enforce explicit valid ERP role allowlist
         if (!VALID_ERP_ROLES.includes(match.role)) {
           console.warn("[AuthContext] User profile has invalid or unsupported role:", match.role);
           return null;
         }
 
-        try {
-          const sanitizedMatch = sanitizeForFirestore({
-            ...match,
-            id: match.id || fUid,
-            firebaseUid: fUid,
-            lastLogin: new Date().toISOString()
-          });
-          await setDoc(doc(db, "users", match.id || fUid), sanitizedMatch, { merge: true }).catch(() => {});
-          if (fEmail) {
-            await setDoc(doc(db, "users_by_email", fEmail.trim().toLowerCase()), { role: match.role, firebaseUid: fUid, id: match.id || fUid }, { merge: true }).catch(() => {});
-          }
-        } catch (e: any) {
-          console.warn("[AuthContext] setDoc update error:", e?.message);
-        }
+        return {
+          ...match,
+          id: match.id || fUid,
+          firebaseUid: fUid,
+          lastLogin: new Date().toISOString()
+        };
       }
 
-      // If no profile match found, do NOT auto-provision an ERP profile. Fail closed to null.
-      return match;
+      // If no authoritative profile found in Firestore, do NOT manufacture one from seed data. Fail closed to null.
+      return null;
     })().finally(() => {
       inFlightResolutions.current.delete(fUid);
     });
