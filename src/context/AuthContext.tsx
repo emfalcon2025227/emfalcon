@@ -1166,74 +1166,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateUser = (userId: string, patch: Partial<User>): { success: boolean; error?: string } => {
-    if (!currentUser) {
-      return { success: false, error: "المستخدم غير مسجل الدخول" };
-    }
+    if (!currentUser) return { success: false, error: "المستخدم غير مسجل الدخول" };
     const target = users.find((u) => u.id === userId);
     if (!target) return { success: false, error: "المستخدم غير موجود" };
 
     const isCallerSystemOwner = isSystemOwnerUser(currentUser);
     const isCallerAdmin = currentUser.role === "ADMIN" || currentUser.role === "SUPER_ADMIN";
-
-    if (isSystemOwnerUser(target)) {
-      if (!isCallerSystemOwner) {
-        return { success: false, error: "لا يمكن لأي مدير أو مستخدم آخر تعديل حساب مالك النظام SYSTEM_OWNER" };
-      }
-      if (patch.role && patch.role !== "SYSTEM_OWNER") {
-        return { success: false, error: "لا يمكن تخفيض دور أو رتبة مالك النظام SYSTEM_OWNER" };
-      }
+    if (isSystemOwnerUser(target) && !isCallerSystemOwner) {
+      return { success: false, error: "لا يمكن تعديل حساب مالك النظام إلا بواسطة مالك النظام" };
+    }
+    if (patch.role !== undefined) {
+      return { success: false, error: "تغيير الدور يتم عبر مسار إدارة الأدوار المخصص" };
+    }
+    if (!isCallerSystemOwner && !isCallerAdmin && currentUser.id !== userId) {
+      return { success: false, error: "غير مصرح: لا يمكنك تعديل بيانات مستخدمين آخرين" };
     }
 
-    if (patch.role === "SYSTEM_OWNER" && !isSystemOwnerUser(target)) {
-      return { success: false, error: "لا يمكن ترقية أي مستخدم إلى SYSTEM_OWNER" };
-    }
-
-    // If caller is an ordinary user updating their own profile, filter out sensitive authorization fields
-    let safePatch: Partial<User> = { ...patch };
+    const safePatch: Partial<User> = { ...patch };
     if (!isCallerSystemOwner && !isCallerAdmin) {
-      if (currentUser.id !== userId) {
-        return { success: false, error: "غير مصرح: لا يمكنك تعديل بيانات مستخدمين آخرين" };
-      }
-      delete safePatch.role;
-      delete safePatch.ownerId;
-      delete safePatch.tenantId;
-      delete safePatch.permissions;
-      delete safePatch.userPermissionOverrides;
-      delete safePatch.isActive;
+      delete (safePatch as any).ownerId;
+      delete (safePatch as any).tenantId;
+      delete (safePatch as any).permissions;
+      delete (safePatch as any).userPermissionOverrides;
+      delete (safePatch as any).isActive;
       delete (safePatch as any).disabled;
-      delete safePatch.firebaseUid;
+      delete (safePatch as any).firebaseUid;
       delete (safePatch as any).employeeId;
-      delete safePatch.portalAccountStatus;
+      delete (safePatch as any).portalAccountStatus;
       delete (safePatch as any).isSystemOwner;
-      delete safePatch.systemId;
+      delete (safePatch as any).systemId;
     }
 
-    const updated = { ...target, ...safePatch };
-    setUsers((prev) =>
-      prev.map((u) => {
-        if (u.id === userId) {
-          if (currentUser?.id === userId) {
-            setCurrentUser(updated);
-          }
-          return updated;
-        }
-        return u;
-      })
-    );
-    // Persist to Firestore
-    setDoc(doc(db, "users", userId), sanitizeForFirestore(safePatch), { merge: true }).catch((e) => {
-      console.warn("[AuthContext] Firestore update user error:", e.message);
+    const optimistic = { ...target, ...safePatch };
+    setUsers((prev) => prev.map((u) => u.id === userId ? optimistic : u));
+    if (currentUser.id === userId) setCurrentUser(optimistic);
+
+    void authenticatedFetch("/api/auth/update-user-profile", {
+      method: "POST",
+      body: JSON.stringify({ userId, patch: safePatch }),
+    }).then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success || !data.user) throw new Error(data.error || data.message || "فشل تحديث المستخدم");
+      setUsers((prev) => prev.map((u) => u.id === userId ? data.user : u));
+      if (currentUser.id === userId) setCurrentUser(data.user);
+    }).catch((e) => {
+      console.warn("[AuthContext] Server rejected user update:", e?.message || e);
     });
-    if (updated.email && (isCallerSystemOwner || isCallerAdmin)) {
-      setDoc(doc(db, "users_by_email", updated.email.trim().toLowerCase()), {
-        id: updated.id,
-        email: updated.email,
-        role: updated.role,
-        isActive: updated.isActive
-      }, { merge: true }).catch((e) => {
-        console.warn("[AuthContext] Firestore users_by_email sync error:", e.message);
-      });
-    }
+
     return { success: true };
   };
 
@@ -1243,33 +1222,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     const target = users.find((u) => u.id === userId);
     if (!target) return { success: false, error: "المستخدم غير موجود" };
+    if (isSystemOwnerUser(target)) return { success: false, error: "حساب مالك النظام SYSTEM_OWNER محمي نهائياً ولا يمكن تعطيله" };
 
-    if (isSystemOwnerUser(target)) {
-      return { success: false, error: "حساب مالك النظام SYSTEM_OWNER محمي نهائياً ولا يمكن تعطيله" };
-    }
-
-    setUsers((prev) =>
-      prev.map((u) => {
-        if (u.id === userId) {
-          if (currentUser?.id === userId && !isActive) {
-            setTimeout(() => logout(), 100);
-          }
-          return { ...u, isActive };
-        }
-        return u;
-      })
-    );
-    // Persist to Firestore
-    setDoc(doc(db, "users", userId), { isActive }, { merge: true }).catch((e) => {
-      console.warn("[AuthContext] Firestore update user status error:", e.message);
+    const previous = target;
+    setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, isActive } : u));
+    void authenticatedFetch("/api/auth/update-user-status", {
+      method: "POST",
+      body: JSON.stringify({ userId, isActive }),
+    }).then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success || !data.user) throw new Error(data.error || data.message || "فشل تغيير حالة الحساب");
+      setUsers((prev) => prev.map((u) => u.id === userId ? data.user : u));
+    }).catch((e) => {
+      console.warn("[AuthContext] Server rejected user status update:", e?.message || e);
+      setUsers((prev) => prev.map((u) => u.id === userId ? previous : u));
     });
-    if (target.email) {
-      setDoc(doc(db, "users_by_email", target.email.trim().toLowerCase()), {
-        isActive
-      }, { merge: true }).catch((e) => {
-        console.warn("[AuthContext] Firestore users_by_email sync status error:", e.message);
-      });
-    }
     return { success: true };
   };
 
@@ -1279,42 +1246,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     const target = users.find((u) => u.id === userId);
     if (!target) return { success: false, error: "المستخدم غير موجود" };
+    if (!VALID_ERP_ROLES.includes(newRole)) return { success: false, error: "الدور المحدد غير معتمد في النظام" };
+    if (isSystemOwnerUser(target) && newRole !== "SYSTEM_OWNER") return { success: false, error: "لا يمكن تخفيض دور مالك النظام" };
+    if (!isSystemOwnerUser(target) && newRole === "SYSTEM_OWNER") return { success: false, error: "لا يمكن تعيين دور SYSTEM_OWNER لأي مستخدم آخر" };
 
-    if (isSystemOwnerUser(target) && newRole !== "SYSTEM_OWNER") {
-      return { success: false, error: "لا يمكن تغيير أو تخفيض دور مالك النظام SYSTEM_OWNER" };
-    }
-
-    if (newRole === "SYSTEM_OWNER" && !isSystemOwnerUser(target)) {
-      return { success: false, error: "لا يمكن تعيين دور SYSTEM_OWNER لأي مستخدم آخر" };
-    }
-
-    if (!VALID_ERP_ROLES.includes(newRole)) {
-      return { success: false, error: "الدور المحدد غير معتمد في النظام" };
-    }
-
-    setUsers((prev) =>
-      prev.map((u) => {
-        if (u.id === userId) {
-          const updated = { ...u, role: newRole };
-          if (currentUser?.id === userId) {
-            setCurrentUser(updated);
-          }
-          return updated;
-        }
-        return u;
-      })
-    );
-    // Persist to Firestore
-    setDoc(doc(db, "users", userId), { role: newRole }, { merge: true }).catch((e) => {
-      console.warn("[AuthContext] Firestore update user role error:", e.message);
+    const previous = target;
+    setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, role: newRole } : u));
+    void authenticatedFetch("/api/auth/update-user-role", {
+      method: "POST",
+      body: JSON.stringify({ userId, newRole }),
+    }).then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success || !data.user) throw new Error(data.error || data.message || "فشل تغيير الدور");
+      setUsers((prev) => prev.map((u) => u.id === userId ? data.user : u));
+      if (currentUser.id === userId) setCurrentUser(data.user);
+    }).catch((e) => {
+      console.warn("[AuthContext] Server rejected role update:", e?.message || e);
+      setUsers((prev) => prev.map((u) => u.id === userId ? previous : u));
     });
-    if (target.email) {
-      setDoc(doc(db, "users_by_email", target.email.trim().toLowerCase()), {
-        role: newRole
-      }, { merge: true }).catch((e) => {
-        console.warn("[AuthContext] Firestore users_by_email sync role error:", e.message);
-      });
-    }
     return { success: true };
   };
 
@@ -1400,7 +1349,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const saveUser = (userToSave: User) => {
-    let finalUser = { ...userToSave };
+    const finalUser = { ...userToSave };
     delete finalUser.password;
     setUsers((prev) => {
       const idx = prev.findIndex((u) => u.id === finalUser.id);
@@ -1410,9 +1359,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return next;
       }
       return [...prev, finalUser];
-    });
-    setDoc(doc(db, "users", finalUser.id), sanitizeForFirestore(finalUser), { merge: true }).catch((e) => {
-      console.warn("[AuthContext] Firestore saveUser error:", e.message);
     });
   };
 
@@ -1460,108 +1406,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deleteUser = (userId: string): { success: boolean; error?: string } => {
-    const userToDelete = users.find((u) => u.id === userId);
-    if (isSystemOwnerUser(userToDelete)) {
-      return { success: false, error: "حساب مالك النظام SYSTEM_OWNER محمي نهائياً ولا يمكن حذفه" };
+    const target = users.find((u) => u.id === userId);
+    if (!target) return { success: false, error: "المستخدم غير موجود" };
+    if (isSystemOwnerUser(target)) return { success: false, error: "حساب مالك النظام SYSTEM_OWNER محمي نهائياً ولا يمكن حذفه" };
+    if (!currentUser || (!isSystemOwnerUser(currentUser) && currentUser.role !== "ADMIN" && currentUser.role !== "SUPER_ADMIN")) {
+      return { success: false, error: "فقط مالك النظام أو المشرف العام مصرح له بحذف حسابات المستخدمين" };
     }
 
-    if (!currentUser || !isSystemOwnerUser(currentUser)) {
-      return { success: false, error: "فقط مالك النظام SYSTEM_OWNER مصرح له بحذف حسابات المستخدمين" };
-    }
-
-    setUsers((prev) => prev.filter((u) => u.id !== userId));
-    // Delete from Firestore
-    deleteDoc(doc(db, "users", userId)).catch((e) => {
-      console.warn("[AuthContext] Firestore delete user error:", e.message);
+    void authenticatedFetch("/api/auth/delete-user", {
+      method: "POST",
+      body: JSON.stringify({ userId }),
+    }).then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) throw new Error(data.error || data.message || "فشل حذف المستخدم");
+      setUsers((prev) => prev.filter((u) => u.id !== userId));
+    }).catch((e) => {
+      console.warn("[AuthContext] Server rejected user deletion:", e?.message || e);
     });
-    if (currentUser?.id === userId) {
-      setTimeout(() => logout(), 100);
-    }
     return { success: true };
   };
 
   const importUsersBatch = async (records: Partial<User>[]): Promise<{ total: number; importedCount: number; updatedCount: number; errors: string[] }> => {
-    let importedCount = 0;
-    let updatedCount = 0;
-    const errors: string[] = [];
-
-    for (let i = 0; i < records.length; i++) {
-      const rec = records[i];
-      try {
-        if (!rec.username && !rec.email && !rec.nameAr && !rec.nameEn) {
-          errors.push(`السجل رقم ${i + 1}: ينقصه اسم المستخدم أو البريد الإلكتروني`);
-          continue;
-        }
-
-        const emailClean = (rec.email || "").trim().toLowerCase();
-        const usernameClean = (rec.username || "").trim().toLowerCase();
-
-        // Preserve ROOT system owner
-        if (rec.role === "SYSTEM_OWNER" || rec.id === "usr-01" || emailClean === "m_hamed@msn.com") {
-          continue;
-        }
-
-        const existingUser = users.find(u => 
-          (rec.id && u.id === rec.id) || 
-          (emailClean && (u.email || "").trim().toLowerCase() === emailClean) ||
-          (usernameClean && (u.username || "").trim().toLowerCase() === usernameClean)
-        );
-
-        const userId = rec.id || (existingUser ? existingUser.id : "usr-" + Date.now() + "-" + Math.random().toString(36).substring(2, 6));
-
-        const fullUser: User = {
-          id: userId,
-          username: rec.username || emailClean.split("@")[0] || ("user_" + userId.slice(-4)),
-          email: rec.email || "",
-          nameAr: rec.nameAr || rec.nameEn || rec.username || "مستخدم",
-          nameEn: rec.nameEn || rec.nameAr || rec.username || "User",
-          role: rec.role || "PROPERTY_MANAGER",
-          phone: rec.phone || "",
-          tenantId: rec.tenantId,
-          ownerId: rec.ownerId,
-          permissions: rec.permissions || [],
-          userPermissionOverrides: rec.userPermissionOverrides || [],
-          isActive: rec.isActive !== undefined ? rec.isActive : true,
-          createdAt: rec.createdAt || new Date().toISOString(),
-          lastLogin: rec.lastLogin,
-          mustChangePassword: rec.mustChangePassword || false,
-          isFirstLoginCompleted: rec.isFirstLoginCompleted !== undefined ? rec.isFirstLoginCompleted : true,
-          portalAccountStatus: rec.portalAccountStatus || "ACTIVE",
-          firebaseUid: rec.firebaseUid
-        };
-
-        if (existingUser) {
-          updatedCount++;
-        } else {
-          importedCount++;
-        }
-
-        setUsers(prev => {
-          const idx = prev.findIndex(u => u.id === fullUser.id);
-          if (idx >= 0) {
-            const copy = [...prev];
-            copy[idx] = fullUser;
-            return copy;
-          }
-          return [...prev, fullUser];
-        });
-
-        // Persist doc into Firestore
-        await setDoc(doc(db, "users", fullUser.id), sanitizeForFirestore(fullUser), { merge: true });
-        if (fullUser.email) {
-          await setDoc(doc(db, "users_by_email", fullUser.email.trim().toLowerCase()), {
-            id: fullUser.id,
-            email: fullUser.email,
-            role: fullUser.role,
-            isActive: fullUser.isActive
-          }, { merge: true });
-        }
-      } catch (err: any) {
-        errors.push(`خطأ في السجل رقم ${i + 1}: ${err?.message || String(err)}`);
-      }
+    if (!currentUser || (!isSystemOwnerUser(currentUser) && currentUser.role !== "ADMIN" && currentUser.role !== "SUPER_ADMIN")) {
+      return { total: records.length, importedCount: 0, updatedCount: 0, errors: ["غير مصرح: استيراد المستخدمين يتطلب صلاحية إدارية"] };
     }
 
-    return { total: records.length, importedCount, updatedCount, errors };
+    try {
+      const res = await authenticatedFetch("/api/auth/import-users", {
+        method: "POST",
+        body: JSON.stringify({ records }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        return { total: records.length, importedCount: 0, updatedCount: 0, errors: [data.error || data.message || "فشل استيراد المستخدمين"] };
+      }
+      if (Array.isArray(data.users)) {
+        setUsers((prev) => {
+          const byId = new Map(prev.map((u) => [u.id, u]));
+          for (const u of data.users as User[]) byId.set(u.id, u);
+          return Array.from(byId.values());
+        });
+      }
+      return {
+        total: records.length,
+        importedCount: Number(data.importedCount || 0),
+        updatedCount: Number(data.updatedCount || 0),
+        errors: Array.isArray(data.errors) ? data.errors : [],
+      };
+    } catch (e: any) {
+      return { total: records.length, importedCount: 0, updatedCount: 0, errors: [e?.message || "فشل الاتصال بخدمة استيراد المستخدمين"] };
+    }
   };
 
   const canRemixAndShare = !!currentUser && currentUser.isActive && (isSystemOwnerUser(currentUser) || currentUser.role === "SUPER_ADMIN");
