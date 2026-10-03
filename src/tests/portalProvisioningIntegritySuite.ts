@@ -105,10 +105,14 @@ export async function runPortalProvisioningIntegritySuite() {
       createdDocPathsToClean.push({ collection: "tenants", docId: testTenant2Id });
     }
 
-    const callHandler = async (body: any, callerRole = "SYSTEM_OWNER", testOpts?: { simulateFirestoreFailure?: boolean }) => {
+    const callHandler = async (
+      body: any,
+      callerRole = "SYSTEM_OWNER",
+      dependencies: Parameters<typeof handleProvisionPortalUserInternal>[2] = {}
+    ) => {
       const req: any = { user: { role: callerRole }, body };
       const res = createMockResponse();
-      await handleProvisionPortalUserInternal(req, res, testOpts);
+      await handleProvisionPortalUserInternal(req, res, dependencies);
       return res;
     };
 
@@ -199,12 +203,12 @@ export async function runPortalProvisioningIntegritySuite() {
     if (res17.body?.user?.id) createdAuthUidsToClean.push(res17.body.user.id);
     report(17, "Client tenantId injection ignored for OWNER", res17.statusCode === 200 && res17.body?.user?.tenantId === undefined && res17.body?.user?.ownerId === testOwner2Id, `Status ${res17.statusCode}`);
 
-    // 18a. Verify HTTP request body simulateFirestoreFailure is ignored (production safety)
+    // 18a. Verify HTTP request body failureInjection is ignored (production safety)
     const prodHookEmail = `prod-hook-safety-${ts}@falcon-test.ae`;
-    const res18a = await callHandler({ portalRole: "OWNER", targetId: testOwner2Id, email: prodHookEmail, simulateFirestoreFailure: true });
+    const res18a = await callHandler({ portalRole: "OWNER", targetId: testOwner2Id, email: prodHookEmail, failureInjection: true });
     const pass18a = res18a.statusCode === 200 && res18a.body?.success === true;
     if (res18a.body?.user?.id) createdAuthUidsToClean.push(res18a.body.user.id);
-    report(18, "Production body simulateFirestoreFailure flag ignored (safety check)", pass18a, `Status ${res18a.statusCode}, success=${res18a.body?.success}`);
+    report(18, "Production body failureInjection flag ignored (safety check)", pass18a, `Status ${res18a.statusCode}, success=${res18a.body?.success}`);
 
     // 18b. Programmatic test option failure — verifies Auth compensation AND claim release
     const failTargetId = `test-ow-fail-${ts}`;
@@ -214,7 +218,11 @@ export async function runPortalProvisioningIntegritySuite() {
       createdDocPathsToClean.push({ collection: "owners", docId: failTargetId });
     }
 
-    const res18b = await callHandler({ portalRole: "OWNER", targetId: failTargetId, email: compEmail }, "SYSTEM_OWNER", { simulateFirestoreFailure: true });
+    const res18b = await callHandler(
+      { portalRole: "OWNER", targetId: failTargetId, email: compEmail },
+      "SYSTEM_OWNER",
+      { writeUserProfile: async () => { throw new Error("FIRESTORE_WRITE_FAILED"); } }
+    );
     let compAuthDeleted = false;
     let claimReleased = false;
     if (authAdmin && dbAdmin) {
