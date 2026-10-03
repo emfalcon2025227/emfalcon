@@ -59,7 +59,7 @@ function createMockResponse() {
 
 export async function runPortalProvisioningIntegritySuite() {
   console.log("\n==================================================");
-  console.log("REAL PORTAL PROVISIONING INTEGRITY & CONCURRENCY SUITE (25 MATRIX TESTS)");
+  console.log("REAL PORTAL PROVISIONING INTEGRITY & CONCURRENCY SUITE (27 MATRIX TESTS)");
   console.log("==================================================");
 
   let passed = 0;
@@ -105,10 +105,10 @@ export async function runPortalProvisioningIntegritySuite() {
       createdDocPathsToClean.push({ collection: "tenants", docId: testTenant2Id });
     }
 
-    const callHandler = async (body: any, callerRole = "SYSTEM_OWNER") => {
+    const callHandler = async (body: any, callerRole = "SYSTEM_OWNER", testOpts?: { simulateFirestoreFailure?: boolean }) => {
       const req: any = { user: { role: callerRole }, body };
       const res = createMockResponse();
-      await handleProvisionPortalUserInternal(req, res);
+      await handleProvisionPortalUserInternal(req, res, testOpts);
       return res;
     };
 
@@ -199,23 +199,51 @@ export async function runPortalProvisioningIntegritySuite() {
     if (res17.body?.user?.id) createdAuthUidsToClean.push(res17.body.user.id);
     report(17, "Client tenantId injection ignored for OWNER", res17.statusCode === 200 && res17.body?.user?.tenantId === undefined && res17.body?.user?.ownerId === testOwner2Id, `Status ${res17.statusCode}`);
 
-    // 18. Firestore failure after Auth creation — real compensation
+    // 18a. Verify HTTP request body simulateFirestoreFailure is ignored (production safety)
+    const prodHookEmail = `prod-hook-safety-${ts}@falcon-test.ae`;
+    const res18a = await callHandler({ portalRole: "OWNER", targetId: testOwner2Id, email: prodHookEmail, simulateFirestoreFailure: true });
+    const pass18a = res18a.statusCode === 200 && res18a.body?.success === true;
+    if (res18a.body?.user?.id) createdAuthUidsToClean.push(res18a.body.user.id);
+    report(18, "Production body simulateFirestoreFailure flag ignored (safety check)", pass18a, `Status ${res18a.statusCode}, success=${res18a.body?.success}`);
+
+    // 18b. Programmatic test option failure — verifies Auth compensation AND claim release
+    const failTargetId = `test-ow-fail-${ts}`;
     const compEmail = `comp-test-${ts}@falcon-test.ae`;
-    const res18 = await callHandler({ portalRole: "OWNER", targetId: testOwner2Id, email: compEmail, simulateFirestoreFailure: true });
+    if (dbAdmin) {
+      await dbAdmin.collection("owners").doc(failTargetId).set({ id: failTargetId, nameEn: "Fail Target Owner", isActive: true });
+      createdDocPathsToClean.push({ collection: "owners", docId: failTargetId });
+    }
+
+    const res18b = await callHandler({ portalRole: "OWNER", targetId: failTargetId, email: compEmail }, "SYSTEM_OWNER", { simulateFirestoreFailure: true });
     let compAuthDeleted = false;
-    if (authAdmin) {
+    let claimReleased = false;
+    if (authAdmin && dbAdmin) {
       try {
         await authAdmin.getUserByEmail(compEmail);
         compAuthDeleted = false;
       } catch (e: any) {
         if (e.code === "auth/user-not-found") compAuthDeleted = true;
       }
+      const claimSnap = await dbAdmin.collection("portal_claims").doc(`OWNER_${failTargetId}`).get();
+      claimReleased = !claimSnap.exists;
     } else {
       compAuthDeleted = true;
+      claimReleased = true;
     }
-    report(18, "Firestore failure after Auth creation — real compensation", res18.statusCode === 500 && compAuthDeleted, `Status ${res18.statusCode}, Auth deleted=${compAuthDeleted}`);
+    const pass18b = res18b.statusCode === 500 && compAuthDeleted && claimReleased;
+    report(19, "Programmatic test failure — performs real Auth compensation and newly created claim release", pass18b, `Status ${res18b.statusCode}, Auth deleted=${compAuthDeleted}, Claim released=${claimReleased}`);
 
-    // 19. Concurrent Owner provisioning
+    // 18c. Verify pre-existing claim is never deleted when a subsequent call fails
+    let preExistingClaimPreserved = false;
+    if (dbAdmin) {
+      const claimSnap = await dbAdmin.collection("portal_claims").doc(`OWNER_${testOwnerId}`).get();
+      preExistingClaimPreserved = claimSnap.exists;
+    } else {
+      preExistingClaimPreserved = true;
+    }
+    report(20, "Verify pre-existing claim is never deleted on failed subsequent requests", preExistingClaimPreserved, `Pre-existing claim doc OWNER_${testOwnerId} exists=${preExistingClaimPreserved}`);
+
+    // 21. Concurrent Owner provisioning
     const concOwnerTarget = `test-ow-conc-${ts}`;
     if (dbAdmin) {
       await dbAdmin.collection("owners").doc(concOwnerTarget).set({ id: concOwnerTarget, nameEn: "Conc Owner", isActive: true });
@@ -230,9 +258,9 @@ export async function runPortalProvisioningIntegritySuite() {
 
     const concOwnerSuccessCount = [concRes1, concRes2].filter(r => r.statusCode === 200).length;
     const concOwnerConflictCount = [concRes1, concRes2].filter(r => r.statusCode === 409).length;
-    report(19, "Concurrent Owner provisioning (1 succeeds, 1 returns 409)", concOwnerSuccessCount === 1 && concOwnerConflictCount === 1, `Success count: ${concOwnerSuccessCount}, Conflict count: ${concOwnerConflictCount}`);
+    report(21, "Concurrent Owner provisioning (1 succeeds, 1 returns 409)", concOwnerSuccessCount === 1 && concOwnerConflictCount === 1, `Success count: ${concOwnerSuccessCount}, Conflict count: ${concOwnerConflictCount}`);
 
-    // 20. Concurrent Tenant provisioning
+    // 22. Concurrent Tenant provisioning
     const concTenantTarget = `test-tnt-conc-${ts}`;
     if (dbAdmin) {
       await dbAdmin.collection("tenants").doc(concTenantTarget).set({ id: concTenantTarget, nameEn: "Conc Tenant", isActive: true });
@@ -247,9 +275,9 @@ export async function runPortalProvisioningIntegritySuite() {
 
     const concTntSuccessCount = [concTntRes1, concTntRes2].filter(r => r.statusCode === 200).length;
     const concTntConflictCount = [concTntRes1, concTntRes2].filter(r => r.statusCode === 409).length;
-    report(20, "Concurrent Tenant provisioning (1 succeeds, 1 returns 409)", concTntSuccessCount === 1 && concTntConflictCount === 1, `Success count: ${concTntSuccessCount}, Conflict count: ${concTntConflictCount}`);
+    report(22, "Concurrent Tenant provisioning (1 succeeds, 1 returns 409)", concTntSuccessCount === 1 && concTntConflictCount === 1, `Success count: ${concTntSuccessCount}, Conflict count: ${concTntConflictCount}`);
 
-    // 21. Verify no orphan Firebase Auth users
+    // 23. Verify no orphan Firebase Auth users
     let orphanFound = false;
     if (authAdmin && dbAdmin) {
       try {
@@ -257,31 +285,31 @@ export async function runPortalProvisioningIntegritySuite() {
         if (compCheck) orphanFound = true;
       } catch (_) {}
     }
-    report(21, "Verify no orphan Firebase Auth users", !orphanFound, "Compensation user completely removed from Auth");
+    report(23, "Verify no orphan Firebase Auth users", !orphanFound, "Compensation user completely removed from Auth");
 
-    // 22. Verify no duplicate Firestore user profiles
+    // 24. Verify no duplicate Firestore user profiles
     let duplicateUsersFound = false;
     if (dbAdmin) {
       const uSnap = await dbAdmin.collection("users").where("ownerId", "==", testOwnerId).get();
       if (uSnap.size > 1) duplicateUsersFound = true;
     }
-    report(22, "Verify no duplicate Firestore user profiles for same target", !duplicateUsersFound, "Only 1 authoritative user profile exists per target");
+    report(24, "Verify no duplicate Firestore user profiles for same target", !duplicateUsersFound, "Only 1 authoritative user profile exists per target");
 
-    // 23. Verify no duplicate target bindings
+    // 25. Verify no duplicate target bindings
     let duplicateBindingsFound = false;
     if (dbAdmin) {
       const cSnap = await dbAdmin.collection("portal_claims").where("targetId", "==", testOwnerId).get();
       if (cSnap.size > 1) duplicateBindingsFound = true;
     }
-    report(23, "Verify no duplicate target bindings in portal_claims", !duplicateBindingsFound, "Only 1 claim doc exists per target");
+    report(25, "Verify no duplicate target bindings in portal_claims", !duplicateBindingsFound, "Only 1 claim doc exists per target");
 
-    // 24. Verify same-account idempotency
-    const res24 = await callHandler({ portalRole: "OWNER", targetId: testOwnerId, email: testOwnerEmail });
-    report(24, "Verify same-account idempotency", res24.statusCode === 200 && res24.body?.isNew === false, `Status ${res24.statusCode}, isNew=false`);
+    // 26. Verify same-account idempotency
+    const res26 = await callHandler({ portalRole: "OWNER", targetId: testOwnerId, email: testOwnerEmail });
+    report(26, "Verify same-account idempotency", res26.statusCode === 200 && res26.body?.isNew === false, `Status ${res26.statusCode}, isNew=false`);
 
-    // 25. Verify different-target conflict
-    const res25 = await callHandler({ portalRole: "OWNER", targetId: testOwnerId, email: `diff-target-${ts}@falcon-test.ae` });
-    report(25, "Verify different-target conflict", res25.statusCode === 409 && res25.body?.error === "TARGET_ALREADY_PROVISIONED", `Status ${res25.statusCode}`);
+    // 27. Verify different-target conflict
+    const res27 = await callHandler({ portalRole: "OWNER", targetId: testOwnerId, email: `diff-target-${ts}@falcon-test.ae` });
+    report(27, "Verify different-target conflict", res27.statusCode === 409 && res27.body?.error === "TARGET_ALREADY_PROVISIONED", `Status ${res27.statusCode}`);
 
   } catch (globalErr: any) {
     console.error("[Suite Global Error]:", globalErr);
@@ -309,8 +337,8 @@ export async function runPortalProvisioningIntegritySuite() {
   }
 
   console.log(`\n==================================================`);
-  console.log(`PORTAL PROVISIONING SUITE SUMMARY: ${passed}/25 Passed, ${failed} Failed`);
+  console.log(`PORTAL PROVISIONING SUITE SUMMARY: ${passed}/27 Passed, ${failed} Failed`);
   console.log(`==================================================\n`);
 
-  return { total: 25, passed, failed };
+  return { total: 27, passed, failed };
 }
