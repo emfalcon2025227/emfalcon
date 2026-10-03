@@ -493,7 +493,7 @@ ${activationLink}
 \u0645\u0639 \u062A\u062D\u064A\u0627\u062A\u060C
 \u0634\u0631\u0643\u0629 \u0635\u0642\u0631 \u0627\u0644\u0625\u0645\u0627\u0631\u0627\u062A \u0644\u0644\u0639\u0642\u0627\u0631\u0627\u062A
 \u0627\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0625\u0644\u0643\u062A\u0631\u0648\u0646\u064A: ${emailConfig.fromEmail||"info@falcon-realestate.ae"}
-        `.trim();if(emailConfig.isLive&&emailConfig.transporter){const mailOptions={from:`"${emailConfig.senderName}" <${emailConfig.fromEmail}>`,to:cleanEmail,subject,text:messageBody};await emailConfig.transporter.sendMail(mailOptions)}}catch(emailErr){console.error("[Portal Provisioning Server] Email notification error:",emailErr)}}return res.json({success:true,user:updatedUser,isNew:isNewAuthUser,activationLink:activationLink||void 0,message:isNewAuthUser?"\u062A\u0645 \u0625\u0646\u0634\u0627\u0621 \u062D\u0633\u0627\u0628 \u0627\u0644\u0628\u0648\u0627\u0628\u0629 \u0648\u0625\u0631\u0633\u0627\u0644 \u0631\u0627\u0628\u0637 \u0627\u0644\u062A\u0641\u0639\u064A\u0644 \u0627\u0644\u0622\u0645\u0646 \u0628\u0646\u062C\u0627\u062D.":"\u062D\u0633\u0627\u0628 \u0627\u0644\u0628\u0648\u0627\u0628\u0629 \u0645\u0633\u062C\u0644 \u0645\u0633\u0628\u0642\u0627\u064B \u0648\u0645\u062D\u062F\u062B."})}catch(err){console.error("[Portal Provisioning Server] Provision error:",err);const errorMessage=err?.message||"Failed to provision portal user";const isPermissionError=errorMessage.includes("insufficient permission")||errorMessage.includes("PERMISSION_DENIED");return res.status(isPermissionError?403:500).json({success:false,error:isPermissionError?"\u062E\u0637\u0623 \u0641\u064A \u0635\u0644\u0627\u062D\u064A\u0627\u062A \u0627\u0644\u062E\u0627\u062F\u0645 (IAM Permission Denied): \u0644\u0627 \u064A\u0645\u0644\u0643 \u0627\u0644\u062E\u0627\u062F\u0645 \u0635\u0644\u0627\u062D\u064A\u0629 \u0643\u0627\u0641\u064A\u0629 \u0644\u0625\u0646\u0634\u0627\u0621 \u0645\u0633\u062A\u062E\u062F\u0645\u064A\u0646 \u0641\u064A Firebase Auth. \u064A\u0631\u062C\u0649 \u062A\u0648\u0641\u064A\u0631 FIREBASE_SERVICE_ACCOUNT_BASE64 \u0641\u064A \u0627\u0644\u0625\u0639\u062F\u0627\u062F\u0627\u062A.":errorMessage})}});app.post(["/api/auth/provision-staff-user", "/api/auth/provision-staff-user/"], authenticateFirebaseToken, requireAdmin, async (req, res) => {
+        `.trim();if(emailConfig.isLive&&emailConfig.transporter){const mailOptions={from:`"${emailConfig.senderName}" <${emailConfig.fromEmail}>`,to:cleanEmail,subject,text:messageBody};await emailConfig.transporter.sendMail(mailOptions)}}catch(emailErr){console.error("[Portal Provisioning Server] Email notification error:",emailErr)}}return res.json({success:true,user:updatedUser,isNew:isNewAuthUser,activationLink:activationLink||void 0,message:isNewAuthUser?"\u062A\u0645 \u0625\u0646\u0634\u0627\u0621 \u062D\u0633\u0627\u0628 \u0627\u0644\u0628\u0648\u0627\u0628\u0629 \u0648\u0625\u0631\u0633\u0627\u0644 \u0631\u0627\u0628\u0637 \u0627\u0644\u062A\u0641\u0639\u064A\u0644 \u0627\u0644\u0622\u0645\u0646 \u0628\u0646\u062C\u0627\u062D.":"\u062D\u0633\u0627\u0628 \u0627\u0644\u0628\u0648\u0627\u0628\u0629 \u0645\u0633\u062C\u0644 \u0645\u0633\u0628\u0642\u0627\u064B \u0648\u0645\u062D\u062F\u062B."})}catch(err){console.error("[Portal Provisioning Server] Provision error:",err);const errorMessage=err?.message||"Failed to provision portal user";const isPermissionError=errorMessage.includes("insufficient permission")||errorMessage.includes("PERMISSION_DENIED");return res.status(isPermissionError?403:500).json({success:false,error:isPermissionError?"\u062E\u0637\u0623 \u0641\u064A \u0635\u0644\u0627\u062D\u064A\u0627\u062A \u0627\u0644\u062E\u0627\u062F\u0645 (IAM Permission Denied): \u0644\u0627 \u064A\u0645\u0644\u0643 \u0627\u0644\u062E\u0627\u062F\u0645 \u0635\u0644\u0627\u062D\u064A\u0629 \u0643\u0627\u0641\u064A\u0629 \u0644\u0625\u0646\u0634\u0627\u0621 \u0645\u0633\u062A\u062E\u062F\u0645\u064A\u0646 \u0641\u064A Firebase Auth. \u064A\u0631\u062C\u0649 \u062A\u0648\u0641\u064A\u0631 FIREBASE_SERVICE_ACCOUNT_BASE64 \u0641\u064A \u0627\u0644\u0625\u0639\u062F\u0627\u062F\u0627\u062A.":errorMessage})}});app.post(["/api/auth/provision-staff-user", "/api/auth/provision-staff-user/"], authenticateFirebaseToken, requireUserManagementAdmin, async (req, res) => {
   try {
     const { username, email, password, nameAr, nameEn, role, phone, isActive } = req.body;
     if (!email || !email.includes("@")) {
@@ -592,7 +592,7 @@ ${activationLink}
   }
 });
 
-app.post("/api/auth/update-user-profile", authenticateFirebaseToken, requireUserManagementAdmin, async (req,res)=>{
+app.post("/api/auth/update-user-profile", authenticateFirebaseToken, async (req,res)=>{
   try{
     const {userId,patch}=req.body||{};
     if(!userId || !patch || typeof patch!=="object" || Array.isArray(patch)) return res.status(400).json({success:false,error:"VALIDATION_ERROR",message:"Invalid user update payload."});
@@ -604,13 +604,18 @@ app.post("/api/auth/update-user-profile", authenticateFirebaseToken, requireUser
     if(!snap.exists) return res.status(404).json({success:false,error:"NOT_FOUND",message:"User profile not found."});
     const current=snap.data()||{};
     const callerRole=req.user.role;
+    const isSelf=req.user.uid===String(userId);
+    const isUserManagementAdmin=["SYSTEM_OWNER","ADMIN","SUPER_ADMIN"].includes(callerRole);
+    if(!isSelf && !isUserManagementAdmin) return res.status(403).json({success:false,error:"USER_MANAGEMENT_ADMIN_REQUIRED",message:"User profile management is restricted to the account owner or authorized administrators."});
     if(current.role==="SYSTEM_OWNER" && callerRole!=="SYSTEM_OWNER") return res.status(403).json({success:false,error:"FORBIDDEN",message:"SYSTEM_OWNER profile is protected."});
     if(current.firebaseUid && current.firebaseUid!==String(userId)) return res.status(409).json({success:false,error:"IDENTITY_MISMATCH",message:"User profile is not keyed by its authoritative Firebase UID."});
 
     const forbidden=["id","role","firebaseUid","password","createdAt"];
     for(const key of forbidden){if(Object.prototype.hasOwnProperty.call(patch,key)) return res.status(400).json({success:false,error:"SENSITIVE_FIELD_REQUIRES_DEDICATED_PATH",field:key});}
     if(Object.prototype.hasOwnProperty.call(patch,"isActive") || Object.prototype.hasOwnProperty.call(patch,"disabled")) return res.status(400).json({success:false,error:"STATUS_REQUIRES_DEDICATED_PATH"});
-    const allowed=["username","email","nameAr","nameEn","phone","ownerId","tenantId","permissions","userPermissionOverrides","mustChangePassword","isFirstLoginCompleted","portalAccountStatus","employeeId","systemId"];
+    const allowed=isSelf
+      ? ["username","nameAr","nameEn","phone"]
+      : ["username","email","nameAr","nameEn","phone","ownerId","tenantId","permissions","userPermissionOverrides","mustChangePassword","isFirstLoginCompleted","portalAccountStatus","employeeId","systemId"];
     const cleanPatch:any={};
     for(const key of allowed){if(Object.prototype.hasOwnProperty.call(patch,key)) cleanPatch[key]=patch[key];}
     if(Object.keys(cleanPatch).length===0) return res.status(400).json({success:false,error:"NO_ALLOWED_FIELDS"});
