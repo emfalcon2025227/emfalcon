@@ -475,10 +475,14 @@ Legal & Recovery Department`;const fallbackClauses=[isAr?`\u0645\u0647\u0644\u06
 \u0645\u0639 \u062A\u062D\u064A\u0627\u062A\u060C
 \u0634\u0631\u0643\u0629 \u0635\u0642\u0631 \u0627\u0644\u0625\u0645\u0627\u0631\u0627\u062A \u0644\u0644\u0639\u0642\u0627\u0631\u0627\u062A
 \u0627\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0625\u0644\u0643\u062A\u0631\u0648\u0646\u064A \u0644\u0644\u0627\u062A\u0635\u0627\u0644: ${emailConfig.fromEmail}
-    `.trim();if(emailConfig.isLive&&emailConfig.transporter){const mailOptions={from:`"${emailConfig.senderName}" <${emailConfig.fromEmail}>`,to:recipient,subject,text:messageBody};await emailConfig.transporter.sendMail(mailOptions);console.log(`[Portal Provisioning] Live access email dispatched from ${emailConfig.fromEmail} to ${recipient}`);return res.json({success:true,status:"DISPATCHED",recipient,from:emailConfig.fromEmail})}else{console.log(`[Portal Provisioning] Simulated email dispatched from ${emailConfig.fromEmail} to ${recipient} (Waiting for Gmail App Password)`);return res.json({success:false,status:"FAILED",error:"SMTP_NOT_CONFIGURED",reason:"SMTP email is not configured in the environment."})}}catch(err){console.error("[Portal Provisioning] Email dispatch error:",err);return res.status(500).json({success:false,error:err?.message||"Failed to dispatch portal access email"})}});app.post(["/api/auth/sync-email","/api/auth/sync-email/"],authenticateFirebaseToken,requireStaff,async(req,res)=>{try{const{targetId,role,newEmail}=req.body;if(!targetId||!role||!newEmail||!newEmail.includes("@")){return res.status(400).json({success:false,error:"\u0628\u064A\u0627\u0646\u0627\u062A \u063A\u064A\u0631 \u0635\u0627\u0644\u062D\u0629"})}const cleanEmail=newEmail.trim().toLowerCase();const dbAdmin=getFirestoreAdmin();const authAdmin=getAdminAuthClient();if(!dbAdmin||!authAdmin){return res.status(500).json({success:false,error:"\u0641\u0634\u0644 \u062A\u0647\u064A\u0626\u0629 \u0646\u0638\u0627\u0645 \u0627\u0644\u062A\u062D\u0642\u0642 \u0627\u0644\u0645\u0631\u0643\u0632\u064A \u0639\u0644\u0649 \u0627\u0644\u062E\u0627\u062F\u0645 \u0627\u0644\u0645\u0631\u0643\u0632\u064A. \u064A\u0631\u062C\u0649 \u0645\u0631\u0627\u062C\u0639\u0629 \u0625\u0639\u062F\u0627\u062F\u0627\u062A Firebase Admin SDK."})}const usersCol=dbAdmin.collection("users");const userQuery=await usersCol.where(role==="OWNER"?"ownerId":"tenantId","==",targetId).limit(1).get();if(userQuery.empty){return res.json({success:true,message:"No portal account provisioned yet."})}const userDoc=userQuery.docs[0];const userData=userDoc.data();if(userData.email===cleanEmail){return res.json({success:true,message:"Email is already up to date."})}try{const existingAuth=await authAdmin.getUserByEmail(cleanEmail);if(existingAuth&&existingAuth.uid!==userData.firebaseUid){return res.status(400).json({success:false,error:"\u0627\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0625\u0644\u0643\u062A\u0631\u0648\u0646\u064A \u0627\u0644\u062C\u062F\u064A\u062F \u0645\u0633\u062A\u062E\u062F\u0645 \u0628\u0627\u0644\u0641\u0639\u0644 \u0641\u064A \u062D\u0633\u0627\u0628 \u0622\u062E\u0631"})}}catch(e){if(e.code!=="auth/user-not-found"){throw e}}const emailQuery=await usersCol.where("email","==",cleanEmail).limit(1).get();if(!emailQuery.empty&&emailQuery.docs[0].id!==userDoc.id){return res.status(400).json({success:false,error:"\u0627\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0625\u0644\u0643\u062A\u0631\u0648\u0646\u064A \u0627\u0644\u062C\u062F\u064A\u062F \u0645\u0633\u062A\u062E\u062F\u0645 \u0641\u064A \u062D\u0633\u0627\u0628 \u0628\u0648\u0627\u0628\u0629 \u0622\u062E\u0631"})}if(userData.firebaseUid){await authAdmin.updateUser(userData.firebaseUid,{email:cleanEmail})}await userDoc.ref.update({email:cleanEmail,username:cleanEmail,updatedAt:new Date().toISOString()});return res.json({success:true})}catch(error){console.error("[Sync Email Error]",error);return res.status(500).json({success:false,error:error.message})}});export async function handleProvisionPortalUserInternal(
+    `.trim();if(emailConfig.isLive&&emailConfig.transporter){const mailOptions={from:`"${emailConfig.senderName}" <${emailConfig.fromEmail}>`,to:recipient,subject,text:messageBody};await emailConfig.transporter.sendMail(mailOptions);console.log(`[Portal Provisioning] Live access email dispatched from ${emailConfig.fromEmail} to ${recipient}`);return res.json({success:true,status:"DISPATCHED",recipient,from:emailConfig.fromEmail})}else{console.log(`[Portal Provisioning] Simulated email dispatched from ${emailConfig.fromEmail} to ${recipient} (Waiting for Gmail App Password)`);return res.json({success:false,status:"FAILED",error:"SMTP_NOT_CONFIGURED",reason:"SMTP email is not configured in the environment."})}}catch(err){console.error("[Portal Provisioning] Email dispatch error:",err);return res.status(500).json({success:false,error:err?.message||"Failed to dispatch portal access email"})}});app.post(["/api/auth/sync-email","/api/auth/sync-email/"],authenticateFirebaseToken,requireStaff,async(req,res)=>{try{const{targetId,role,newEmail}=req.body;if(!targetId||!role||!newEmail||!newEmail.includes("@")){return res.status(400).json({success:false,error:"\u0628\u064A\u0627\u0646\u0627\u062A \u063A\u064A\u0631 \u0635\u0627\u0644\u062D\u0629"})}const cleanEmail=newEmail.trim().toLowerCase();const dbAdmin=getFirestoreAdmin();const authAdmin=getAdminAuthClient();if(!dbAdmin||!authAdmin){return res.status(500).json({success:false,error:"\u0641\u0634\u0644 \u062A\u0647\u064A\u0626\u0629 \u0646\u0638\u0627\u0645 \u0627\u0644\u062A\u062D\u0642\u0642 \u0627\u0644\u0645\u0631\u0643\u0632\u064A \u0639\u0644\u0649 \u0627\u0644\u062E\u0627\u062F\u0645 \u0627\u0644\u0645\u0631\u0643\u0632\u064A. \u064A\u0631\u062C\u0649 \u0645\u0631\u0627\u062C\u0639\u0629 \u0625\u0639\u062F\u0627\u062F\u0627\u062A Firebase Admin SDK."})}const usersCol=dbAdmin.collection("users");const userQuery=await usersCol.where(role==="OWNER"?"ownerId":"tenantId","==",targetId).limit(1).get();if(userQuery.empty){return res.json({success:true,message:"No portal account provisioned yet."})}const userDoc=userQuery.docs[0];const userData=userDoc.data();if(userData.email===cleanEmail){return res.json({success:true,message:"Email is already up to date."})}try{const existingAuth=await authAdmin.getUserByEmail(cleanEmail);if(existingAuth&&existingAuth.uid!==userData.firebaseUid){return res.status(400).json({success:false,error:"\u0627\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0625\u0644\u0643\u062A\u0631\u0648\u0646\u064A \u0627\u0644\u062C\u062F\u064A\u062F \u0645\u0633\u062A\u062E\u062F\u0645 \u0628\u0627\u0644\u0641\u0639\u0644 \u0641\u064A \u062D\u0633\u0627\u0628 \u0622\u062E\u0631"})}}catch(e){if(e.code!=="auth/user-not-found"){throw e}}const emailQuery=await usersCol.where("email","==",cleanEmail).limit(1).get();if(!emailQuery.empty&&emailQuery.docs[0].id!==userDoc.id){return res.status(400).json({success:false,error:"\u0627\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0625\u0644\u0643\u062A\u0631\u0648\u0646\u064A \u0627\u0644\u062C\u062F\u064A\u062F \u0645\u0633\u062A\u062E\u062F\u0645 \u0641\u064A \u062D\u0633\u0627\u0628 \u0628\u0648\u0627\u0628\u0629 \u0622\u062E\u0631"})}if(userData.firebaseUid){await authAdmin.updateUser(userData.firebaseUid,{email:cleanEmail})}await userDoc.ref.update({email:cleanEmail,username:cleanEmail,updatedAt:new Date().toISOString()});return res.json({success:true})}catch(error){console.error("[Sync Email Error]",error);return res.status(500).json({success:false,error:error.message})}});export interface PortalProvisioningDependencies {
+  writeUserProfile?: (dbAdmin: any, uid: string, profile: UserProfile) => Promise<void>;
+}
+
+export async function handleProvisionPortalUserInternal(
   req: any,
   res: any,
-  testOptions?: { simulateFirestoreFailure?: boolean }
+  dependencies: PortalProvisioningDependencies = {}
 ) {
   let isNewClaim = false;
   let isNewAuthUser = false;
@@ -650,10 +654,11 @@ Legal & Recovery Department`;const fallbackClauses=[isAr?`\u0645\u0647\u0644\u06
       delete (updatedUser as any).password;
 
       // 5. Write Profile Document
-      if (testOptions?.simulateFirestoreFailure) {
-        throw new Error("SIMULATED_FIRESTORE_FAILURE");
+      if (dependencies.writeUserProfile) {
+        await dependencies.writeUserProfile(dbAdmin, uid, updatedUser);
+      } else {
+        await dbAdmin.collection("users").doc(uid).set(updatedUser, { merge: true });
       }
-      await dbAdmin.collection("users").doc(uid).set(updatedUser, { merge: true });
 
       // 6. Reset Link & Email
       let activationLink = "";
@@ -734,11 +739,12 @@ ${activationLink}
         }
       }
 
-      const isSimulated = innerErr?.message === "SIMULATED_FIRESTORE_FAILURE";
       return res.status(500).json({
         success: false,
-        error: isSimulated ? "FIRESTORE_WRITE_FAILED" : "PROVISION_ERROR",
-        message: isSimulated ? "Failed to persist user profile to database." : (innerErr?.message || "Failed to provision portal user")
+        error: innerErr?.message === "FIRESTORE_WRITE_FAILED" ? "FIRESTORE_WRITE_FAILED" : "PROVISION_ERROR",
+        message: innerErr?.message === "FIRESTORE_WRITE_FAILED"
+          ? "Failed to persist user profile to database."
+          : (innerErr?.message || "Failed to provision portal user")
       });
     }
   } catch (err: any) {
