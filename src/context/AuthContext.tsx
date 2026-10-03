@@ -1196,8 +1196,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     reason?: string;
     expiresAt?: string | null;
   }): { success: boolean; error?: string } => {
-    if (!currentUser || !isSystemOwnerUser(currentUser)) {
-      return { success: false, error: "فقط مالك النظام SYSTEM_OWNER مصرح له بإدارة الاستثناءات والصلاحيات" };
+    if (!currentUser || (!isSystemOwnerUser(currentUser) && currentUser.role !== "ADMIN" && currentUser.role !== "SUPER_ADMIN")) {
+      return { success: false, error: "فقط مالك النظام أو المشرف العام مصرح له بإدارة الاستثناءات والصلاحيات" };
     }
     const targetUser = users.find((u) => u.id === overrideData.userId);
     if (!targetUser) return { success: false, error: "المستخدم المحدد غير موجود" };
@@ -1235,8 +1235,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const revokeUserPermissionOverride = (overrideId: string): { success: boolean; error?: string } => {
-    if (!currentUser || !isSystemOwnerUser(currentUser)) {
-      return { success: false, error: "فقط مالك النظام SYSTEM_OWNER مصرح له بإلغاء استثناءات الصلاحيات" };
+    if (!currentUser || (!isSystemOwnerUser(currentUser) && currentUser.role !== "ADMIN" && currentUser.role !== "SUPER_ADMIN")) {
+      return { success: false, error: "فقط مالك النظام أو المشرف العام مصرح له بإلغاء استثناءات الصلاحيات" };
     }
     setUserPermissionOverrides((prev) =>
       prev.map((o) => (o.id === overrideId ? { ...o, status: "REVOKED" } : o))
@@ -1250,11 +1250,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const createUser = async (userData: Omit<User, "id" | "createdAt" | "password"> & { password?: string }): Promise<{ success: boolean; user?: User; error?: string }> => {
     if (userData.role === "SYSTEM_OWNER") {
-      return { success: false, error: "لا يمكن إنشاء حساب SYSTEM_OWNER آخر. يوجد مالك نظام واحد فقط مقتصر على m_hamed@msn.com" };
+      return { success: false, error: "لا يمكن إنشاء حساب SYSTEM_OWNER آخر" };
     }
 
-    if (!currentUser || !isSystemOwnerUser(currentUser)) {
-      return { success: false, error: "فقط مالك النظام SYSTEM_OWNER مصرح له بإنشاء حسابات مستخدمين جديدة" };
+    if (!currentUser || (!isSystemOwnerUser(currentUser) && currentUser.role !== "ADMIN" && currentUser.role !== "SUPER_ADMIN")) {
+      return { success: false, error: "فقط مالك النظام أو المشرف العام مصرح له بإنشاء حسابات مستخدمين جديدة" };
     }
 
     if (!userData.password || userData.password.trim().length < 6) {
@@ -1300,22 +1300,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateUser = (userId: string, patch: Partial<User>): { success: boolean; error?: string } => {
+    if (!currentUser) {
+      return { success: false, error: "المستخدم غير مسجل الدخول" };
+    }
     const target = users.find((u) => u.id === userId);
     if (!target) return { success: false, error: "المستخدم غير موجود" };
 
+    const isCallerSystemOwner = isSystemOwnerUser(currentUser);
+    const isCallerAdmin = currentUser.role === "ADMIN" || currentUser.role === "SUPER_ADMIN";
+
     if (isSystemOwnerUser(target)) {
-      if (!currentUser || !isSystemOwnerUser(currentUser)) {
+      if (!isCallerSystemOwner) {
         return { success: false, error: "لا يمكن لأي مدير أو مستخدم آخر تعديل حساب مالك النظام SYSTEM_OWNER" };
-      }
-      if (patch.username && patch.username.toLowerCase() !== "mahmoud") {
-        return { success: false, error: "لا يمكن تغيير اسم المستخدم لمالك النظام الثابت (Mahmoud)" };
       }
       if (patch.role && patch.role !== "SYSTEM_OWNER") {
         return { success: false, error: "لا يمكن تخفيض دور أو رتبة مالك النظام SYSTEM_OWNER" };
-      }
-    } else {
-      if (!currentUser || !isSystemOwnerUser(currentUser)) {
-        return { success: false, error: "فقط مالك النظام SYSTEM_OWNER مصرح له بتعديل حسابات المستخدمين" };
       }
     }
 
@@ -1323,7 +1322,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: "لا يمكن ترقية أي مستخدم إلى SYSTEM_OWNER" };
     }
 
-    const updated = { ...target, ...patch };
+    // If caller is an ordinary user updating their own profile, filter out sensitive authorization fields
+    let safePatch: Partial<User> = { ...patch };
+    if (!isCallerSystemOwner && !isCallerAdmin) {
+      if (currentUser.id !== userId) {
+        return { success: false, error: "غير مصرح: لا يمكنك تعديل بيانات مستخدمين آخرين" };
+      }
+      delete safePatch.role;
+      delete safePatch.ownerId;
+      delete safePatch.tenantId;
+      delete safePatch.permissions;
+      delete safePatch.userPermissionOverrides;
+      delete safePatch.isActive;
+      delete (safePatch as any).disabled;
+      delete safePatch.firebaseUid;
+      delete (safePatch as any).employeeId;
+      delete safePatch.portalAccountStatus;
+      delete (safePatch as any).isSystemOwner;
+      delete safePatch.systemId;
+    }
+
+    const updated = { ...target, ...safePatch };
     setUsers((prev) =>
       prev.map((u) => {
         if (u.id === userId) {
@@ -1336,10 +1355,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     );
     // Persist to Firestore
-    setDoc(doc(db, "users", userId), sanitizeForFirestore(patch), { merge: true }).catch((e) => {
+    setDoc(doc(db, "users", userId), sanitizeForFirestore(safePatch), { merge: true }).catch((e) => {
       console.warn("[AuthContext] Firestore update user error:", e.message);
     });
-    if (updated.email) {
+    if (updated.email && (isCallerSystemOwner || isCallerAdmin)) {
       setDoc(doc(db, "users_by_email", updated.email.trim().toLowerCase()), {
         id: updated.id,
         email: updated.email,
@@ -1353,15 +1372,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateUserStatus = (userId: string, isActive: boolean): { success: boolean; error?: string } => {
+    if (!currentUser || (!isSystemOwnerUser(currentUser) && currentUser.role !== "ADMIN" && currentUser.role !== "SUPER_ADMIN")) {
+      return { success: false, error: "فقط مالك النظام أو المشرف العام مصرح له بتغيير حالة حسابات المستخدمين" };
+    }
     const target = users.find((u) => u.id === userId);
     if (!target) return { success: false, error: "المستخدم غير موجود" };
 
     if (isSystemOwnerUser(target)) {
       return { success: false, error: "حساب مالك النظام SYSTEM_OWNER محمي نهائياً ولا يمكن تعطيله" };
-    }
-
-    if (!currentUser || !isSystemOwnerUser(currentUser)) {
-      return { success: false, error: "فقط مالك النظام SYSTEM_OWNER مصرح له بتغيير حالة حسابات المستخدمين" };
     }
 
     setUsers((prev) =>
@@ -1390,6 +1408,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateUserRole = (userId: string, newRole: UserRole): { success: boolean; error?: string } => {
+    if (!currentUser || (!isSystemOwnerUser(currentUser) && currentUser.role !== "ADMIN" && currentUser.role !== "SUPER_ADMIN")) {
+      return { success: false, error: "فقط مالك النظام أو المشرف العام مصرح له بتعديل أدوار المستخدمين" };
+    }
     const target = users.find((u) => u.id === userId);
     if (!target) return { success: false, error: "المستخدم غير موجود" };
 
@@ -1401,8 +1422,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: "لا يمكن تعيين دور SYSTEM_OWNER لأي مستخدم آخر" };
     }
 
-    if (!currentUser || !isSystemOwnerUser(currentUser)) {
-      return { success: false, error: "فقط مالك النظام SYSTEM_OWNER مصرح له بتعديل أدوار المستخدمين" };
+    if (!VALID_ERP_ROLES.includes(newRole)) {
+      return { success: false, error: "الدور المحدد غير معتمد في النظام" };
     }
 
     setUsers((prev) =>
