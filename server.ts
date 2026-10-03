@@ -569,16 +569,29 @@ ${activationLink}
       firebaseUid: uid
     };
 
-    await usersCol.doc(uid).set(newUserDoc, { merge: true });
+    try {
+      await usersCol.doc(uid).set(newUserDoc, { merge: true });
 
-    await dbAdmin.collection("users_by_email").doc(cleanEmail).set({
-      id: uid,
-      firebaseUid: uid,
-      email: cleanEmail,
-      username: cleanUsername,
-      role: newUserDoc.role,
-      isActive: newUserDoc.isActive
-    }, { merge: true });
+      await dbAdmin.collection("users_by_email").doc(cleanEmail).set({
+        id: uid,
+        firebaseUid: uid,
+        email: cleanEmail,
+        username: cleanUsername,
+        role: newUserDoc.role,
+        isActive: newUserDoc.isActive
+      }, { merge: true });
+    } catch (firestoreErr: any) {
+      console.error("[Provision Staff User] Firestore profile creation failed:", firestoreErr?.message || firestoreErr);
+      if (isNewAuthUser) {
+        try {
+          await authAdmin.deleteUser(uid);
+          console.log(`[Provision Staff User] Rolled back newly created Firebase Auth account for UID ${uid}`);
+        } catch (rollbackErr: any) {
+          console.error(`[CRITICAL INCONSISTENCY] Failed to rollback Firebase Auth user ${uid}:`, rollbackErr?.message || rollbackErr);
+        }
+      }
+      return res.status(500).json({ success: false, error: "FIRESTORE_PROVISIONING_FAILED", message: "Failed to persist user profile to database." });
+    }
 
     return res.json({
       success: true,
@@ -655,10 +668,31 @@ app.post("/api/auth/update-user-status", authenticateFirebaseToken, requireUserM
     if(!snap.exists) return res.status(404).json({success:false,error:"NOT_FOUND"});
     const current=snap.data()||{};
     if(current.role==="SYSTEM_OWNER") return res.status(403).json({success:false,error:"SYSTEM_OWNER_PROTECTED"});
-    await authAdmin.updateUser(String(userId),{disabled:!isActive});
-    await ref.set({isActive,disabled:!isActive,updatedAt:new Date().toISOString()},{merge:true});
+
+    const previousIsActive = current.isActive !== false;
+
+    try {
+      await authAdmin.updateUser(String(userId), { disabled: !isActive });
+    } catch (authErr: any) {
+      console.error("[User Status Update] Auth status update failed:", authErr?.message || authErr);
+      return res.status(500).json({ success: false, error: "AUTH_UPDATE_FAILED", message: authErr?.message || "Failed to update authentication state." });
+    }
+
+    try {
+      await ref.set({isActive,disabled:!isActive,updatedAt:new Date().toISOString()},{merge:true});
+      if(current.email) await dbAdmin.collection("users_by_email").doc(String(current.email).trim().toLowerCase()).set({id:String(userId),firebaseUid:String(userId),email:current.email,username:current.username||"",role:current.role||"GUEST",isActive},{merge:true});
+    } catch (firestoreErr: any) {
+      console.error("[User Status Update] Firestore write failed after Auth update. Attempting rollback...", firestoreErr?.message || firestoreErr);
+      try {
+        await authAdmin.updateUser(String(userId), { disabled: !previousIsActive });
+        console.log(`[User Status Update] Successfully rolled back Auth state for UID ${userId}`);
+      } catch (rollbackErr: any) {
+        console.error(`[CRITICAL INCONSISTENCY] Failed to rollback Auth state for UID ${userId}:`, rollbackErr?.message || rollbackErr);
+      }
+      return res.status(500).json({ success: false, error: "FIRESTORE_UPDATE_FAILED", message: "Database status update failed. Auth status was rolled back." });
+    }
+
     const updated=(await ref.get()).data()||{};
-    if(updated.email) await dbAdmin.collection("users_by_email").doc(String(updated.email).trim().toLowerCase()).set({id:String(userId),firebaseUid:String(userId),email:updated.email,username:updated.username||"",role:updated.role||"GUEST",isActive},{merge:true});
     return res.json({success:true,user:{...updated,id:String(userId),firebaseUid:String(userId)}});
   }catch(err:any){console.error("[User Status Update] Error:",err);return res.status(500).json({success:false,error:err?.message||"Failed to update user status."})}
 });
@@ -694,9 +728,29 @@ app.post("/api/auth/delete-user", authenticateFirebaseToken, requireUserManageme
     const current=snap.data()||{};
     if(current.role==="SYSTEM_OWNER") return res.status(403).json({success:false,error:"SYSTEM_OWNER_PROTECTED"});
     if(current.firebaseUid && current.firebaseUid!==String(userId)) return res.status(409).json({success:false,error:"IDENTITY_MISMATCH"});
-    try{await authAdmin.deleteUser(String(userId))}catch(e:any){if(e?.code!=="auth/user-not-found") throw e}
-    if(current.email) await dbAdmin.collection("users_by_email").doc(String(current.email).trim().toLowerCase()).delete().catch(()=>{});
-    await ref.delete();
+    
+    try {
+      await authAdmin.deleteUser(String(userId));
+    } catch(e:any) {
+      if(e?.code !== "auth/user-not-found") {
+        console.error("[User Delete] Auth deletion failed:", e?.message || e);
+        return res.status(500).json({ success: false, error: "AUTH_DELETE_FAILED", message: e?.message || "Failed to delete user from authentication service." });
+      }
+    }
+
+    try {
+      if(current.email) await dbAdmin.collection("users_by_email").doc(String(current.email).trim().toLowerCase()).delete().catch(()=>{});
+      await ref.delete();
+    } catch(firestoreErr: any) {
+      console.error(`[CRITICAL INCONSISTENCY] User ${userId} was deleted from Auth, but Firestore cleanup failed:`, firestoreErr?.message || firestoreErr);
+      return res.status(500).json({
+        success: false,
+        error: "FIRESTORE_CLEANUP_FAILED",
+        message: "User was deleted from Auth, but database cleanup failed.",
+        details: firestoreErr?.message || String(firestoreErr)
+      });
+    }
+
     return res.json({success:true});
   }catch(err:any){console.error("[User Delete] Error:",err);return res.status(500).json({success:false,error:err?.message||"Failed to delete user."})}
 });

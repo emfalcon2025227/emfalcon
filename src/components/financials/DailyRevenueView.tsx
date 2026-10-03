@@ -106,7 +106,7 @@ export const DailyRevenueView: React.FC = () => {
         const q = searchQuery.toLowerCase();
         const lease = leases.find(l => l.id === c.leaseId);
         return (
-          c.businessKey.toLowerCase().includes(q) ||
+          (c.businessKey || c.id || "").toLowerCase().includes(q) ||
           (lease?.leaseNumber || "").toLowerCase().includes(q) ||
           (c.notes || "").toLowerCase().includes(q)
         );
@@ -369,7 +369,7 @@ export const DailyRevenueView: React.FC = () => {
                   return (
                     <tr key={rev.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition">
                       <td className="py-4 px-4">
-                        <div className="font-mono font-bold text-slate-900 dark:text-white uppercase">{rev.businessKey.split(':').pop()}</div>
+                        <div className="font-mono font-bold text-slate-900 dark:text-white uppercase">{(rev.businessKey || rev.id || "").split(':').pop()}</div>
                         <div className="text-[10px] text-slate-400 flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
                           {rev.dueDate}
