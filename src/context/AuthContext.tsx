@@ -1067,36 +1067,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     const targetUser = users.find((u) => u.id === overrideData.userId);
     if (!targetUser) return { success: false, error: "المستخدم المحدد غير موجود" };
-
-    if (isSystemOwnerUser(targetUser)) {
-      return { success: false, error: "حساب مالك النظام SYSTEM_OWNER يمتلك كافة الصلاحيات الشاملة ولا يتأثر بالاستثناءات" };
-    }
-
+    if (isSystemOwnerUser(targetUser)) return { success: false, error: "حساب مالك النظام SYSTEM_OWNER يمتلك كافة الصلاحيات الشاملة ولا يتأثر بالاستثناءات" };
     const def = getPermissionDefinition(overrideData.permissionId);
     if (def?.adminOnly && targetUser.role !== "SUPER_ADMIN" && targetUser.role !== "MANAGER" && overrideData.effect === "GRANT") {
       return { success: false, error: "الصلاحية محددة كـ Admin-Only ولا يمكن تفويضها للموظفين العاديين عبر الاستثناءات" };
     }
 
-    const newOverride: UserPermissionOverride = {
-      id: "ovr-" + Date.now() + "-" + Date.now() % 10000,
-      userId: overrideData.userId,
-      permissionId: overrideData.permissionId,
-      effect: overrideData.effect,
-      reason: overrideData.reason || "",
-      createdBy: currentUser.id,
-      createdAt: new Date().toISOString(),
-      expiresAt: overrideData.expiresAt || null,
-      status: "ACTIVE",
-    };
+    void authenticatedFetch("/api/auth/user-permission-override", {
+      method: "POST",
+      body: JSON.stringify(overrideData),
+    }).then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success || !data.override) throw new Error(data.error || data.message || "فشل حفظ استثناء الصلاحية");
+      setUserPermissionOverrides((prev) => [
+        data.override,
+        ...prev.filter((o) => !(o.userId === data.override.userId && o.permissionId === data.override.permissionId && o.status === "ACTIVE"))
+      ]);
+    }).catch((e) => console.warn("[AuthContext] Permission override server write rejected:", e?.message || e));
 
-    setUserPermissionOverrides((prev) => [
-      newOverride,
-      ...prev.filter((o) => !(o.userId === overrideData.userId && o.permissionId === overrideData.permissionId && o.status === "ACTIVE"))
-    ]);
-    // Persist to Firestore
-    setDoc(doc(db, "userPermissionOverrides", newOverride.id), sanitizeForFirestore(newOverride), { merge: true }).catch((e) => {
-      console.warn("[AuthContext] Firestore override set error:", e.message);
-    });
     return { success: true };
   };
 
@@ -1104,13 +1092,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!currentUser || (!isSystemOwnerUser(currentUser) && currentUser.role !== "ADMIN" && currentUser.role !== "SUPER_ADMIN")) {
       return { success: false, error: "فقط مالك النظام أو المشرف العام مصرح له بإلغاء استثناءات الصلاحيات" };
     }
-    setUserPermissionOverrides((prev) =>
-      prev.map((o) => (o.id === overrideId ? { ...o, status: "REVOKED" } : o))
-    );
-    // Persist status update to Firestore
-    setDoc(doc(db, "userPermissionOverrides", overrideId), { status: "REVOKED" }, { merge: true }).catch((e) => {
-      console.warn("[AuthContext] Firestore override revoke error:", e.message);
-    });
+    void authenticatedFetch("/api/auth/revoke-user-permission-override", {
+      method: "POST",
+      body: JSON.stringify({ overrideId }),
+    }).then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) throw new Error(data.error || data.message || "فشل إلغاء الاستثناء");
+      setUserPermissionOverrides((prev) => prev.map((o) => o.id === overrideId ? { ...o, status: "REVOKED" } : o));
+    }).catch((e) => console.warn("[AuthContext] Permission override revoke rejected:", e?.message || e));
+
     return { success: true };
   };
 
@@ -1297,8 +1287,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return u;
           })
         );
-        // Persist only non-sensitive metadata update (no passwords stored in Firestore!)
-        await setDoc(doc(db, "users", userId), { updatedAt: new Date().toISOString() }, { merge: true });
         return { success: true, password: rawPass };
       } else {
         return { success: false, error: data.error || data.message || "فشل تحديث كلمة المرور في نظام المصادقة" };
@@ -1335,8 +1323,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUsers((prev) =>
           prev.map((u) => (u.id === currentUser.id ? updatedUser : u))
         );
-        // Persist profile updates to Firestore
-        await setDoc(doc(db, "users", currentUser.id), sanitizeForFirestore(updatedUser), { merge: true });
       }
       return { success: true };
     } catch (e: any) {
