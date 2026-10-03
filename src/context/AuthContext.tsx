@@ -387,22 +387,6 @@ export const ROLE_PERMISSIONS: Record<UserRole, (Permission | string)[]> = {
   ]
 };
 
-export const INITIAL_SYSTEM_OWNER: User = {
-  id: "usr-01",
-  username: "Mahmoud",
-  email: "m_hamed@msn.com",
-  nameEn: "Mahmoud Mohamed Mahmoud Hamed",
-  nameAr: "محمود محمد محمود حامد",
-  role: "SYSTEM_OWNER",
-  phone: "+971501234567",
-  isActive: true,
-  createdAt: "2024-01-01T08:00:00Z",
-  lastLogin: new Date().toISOString(),
-  mustChangePassword: false,
-  isFirstLoginCompleted: true,
-  portalAccountStatus: "ACTIVE",
-};
-
 export function sha256(ascii: string): string {
   function rightRotate(value: number, amount: number) {
     return (value >>> amount) | (value << (32 - amount));
@@ -633,27 +617,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [users, setUsers] = useState<User[]>(() => {
-    const saved = null;
-    let loadedUsers: User[] = [INITIAL_SYSTEM_OWNER];
-    if (saved) {
-      try {
-        loadedUsers = JSON.parse(saved);
-      } catch (e) {
-        loadedUsers = [INITIAL_SYSTEM_OWNER];
-      }
-    }
-    // Filter out obsolete test accounts
-    loadedUsers = loadedUsers.filter(u => u.id !== "usr-02" && u.id !== "usr-tenant" && u.id !== "usr-mahmoud-tenant");
-    
-    // Ensure initial system owner bootstrap template is present if no SYSTEM_OWNER exists
-    const hasSystemOwner = loadedUsers.some(u => isSystemOwnerUser(u));
-    if (!hasSystemOwner) {
-      loadedUsers = [INITIAL_SYSTEM_OWNER, ...loadedUsers];
-    }
-
-    return loadedUsers;
-  });
+  const [users, setUsers] = useState<User[]>([]);
 
   // Keep live ref to users so async callbacks always access the freshest list
   const usersRef = React.useRef(users);
@@ -730,84 +694,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               lastLogin: new Date().toISOString()
             };
 
-            // Update only non-sensitive lastLogin metadata
-            setDoc(userDocRef, { lastLogin: authoritativeProfile.lastLogin }, { merge: true }).catch(() => {});
             return authoritativeProfile;
           }
         }
       } catch (err: any) {
         console.warn("[AuthContext] Direct users/{fUid} lookup notice:", err?.message);
-      }
-
-      // 2. Lookup existing profile in users collection if keyed by custom ID
-      let match: User | null = null;
-
-      // Query by firebaseUid field in users collection
-      if (!match) {
-        try {
-          const qUid = query(collection(db, "users"), where("firebaseUid", "==", fUid));
-          const snapUid = await getDocs(qUid);
-          if (!snapUid.empty) {
-            const d = snapUid.docs[0].data() as User;
-            match = { ...d, id: snapUid.docs[0].id, firebaseUid: fUid };
-          }
-        } catch (err: any) {
-          console.warn("[AuthContext] firebaseUid query notice:", err?.message);
-        }
-      }
-
-      // Read-only lookup via users_by_email mapping table to locate custom user document ID
-      if (!match && fEmail) {
-        try {
-          const emailDoc = await getDoc(doc(db, "users_by_email", fEmail));
-          if (emailDoc.exists()) {
-            const emailData = emailDoc.data();
-            const targetId = emailData.id;
-            if (targetId) {
-              try {
-                const targetDoc = await getDoc(doc(db, "users", targetId));
-                if (targetDoc.exists()) {
-                  const targetData = targetDoc.data() as User;
-                  match = { ...targetData, id: targetId, firebaseUid: fUid };
-                }
-              } catch (targetErr: any) {
-                console.warn("[AuthContext] Target user doc lookup notice:", targetErr?.message);
-              }
-            }
-          }
-        } catch (err: any) {
-          console.warn("[AuthContext] users_by_email lookup notice:", err?.message);
-        }
-      }
-
-      // Fallback query by email in Firestore users collection
-      if (!match && fEmail) {
-        try {
-          const qEmail = query(collection(db, "users"), where("email", "==", fEmail));
-          const snapEmail = await getDocs(qEmail);
-          if (!snapEmail.empty) {
-            const d = snapEmail.docs[0].data() as User;
-            match = { ...d, id: snapEmail.docs[0].id, firebaseUid: fUid };
-          }
-        } catch (err: any) {
-          console.warn("[AuthContext] users query by email notice:", err?.message);
-        }
-      }
-
-      // If match found in Firestore, validate and return authoritative profile
-      if (match) {
-        // Enforce explicit valid ERP role allowlist
-        if (!VALID_ERP_ROLES.includes(match.role)) {
-          console.warn("[AuthContext] User profile has invalid or unsupported role:", match.role);
-          return null;
-        }
-
-        return {
-          ...match,
-          id: match.id || fUid,
-          firebaseUid: fUid,
-          lastLogin: new Date().toISOString()
-        };
       }
 
       // If no authoritative profile found in Firestore, do NOT manufacture one from seed data. Fail closed to null.
@@ -900,15 +791,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     // Ensure initial system owner bootstrap template is present if no SYSTEM_OWNER exists
-    setUsers((prev) => {
-      let updated = prev.filter(u => u.id !== "usr-02" && u.id !== "usr-tenant" && u.id !== "usr-mahmoud-tenant");
-      const hasSystemOwner = updated.some(u => isSystemOwnerUser(u));
-      if (!hasSystemOwner) {
-        updated = [INITIAL_SYSTEM_OWNER, ...updated];
-      }
-      return updated;
-    });
-
     // Firestore real-time listener for users (only when authenticated)
     if (!firebaseUser) {
       return;
@@ -921,17 +803,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           remoteUsers.push(docSnap.data() as User);
         });
         if (remoteUsers.length > 0) {
-          const hasMahmoudRemote = remoteUsers.some(u => isSystemOwnerUser(u));
-          let finalRemote = remoteUsers;
-          if (!hasMahmoudRemote) {
-            finalRemote = [INITIAL_SYSTEM_OWNER, ...remoteUsers];
-          } else {
-            finalRemote = finalRemote.map(u => isSystemOwnerUser(u) ? {
-              ...u,
-              isActive: true,
-              role: "SYSTEM_OWNER",
-            } : u);
-          }
+          const finalRemote = remoteUsers;
           setUsers(finalRemote);
 
           // If current user is logged in, refresh their record if changed
@@ -1032,12 +904,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.warn("[Auth] Firestore username lookup warning:", queryErr);
         }
       }
-    }
-
-    // Direct fallback for SYSTEM_OWNER approved aliases
-    if (!targetEmail && (clean === "mahmoud" || clean === "admin" || clean === "owner")) {
-      targetEmail = "m_hamed@msn.com";
-      candidateUser = users.find(u => u.email === "m_hamed@msn.com") || INITIAL_SYSTEM_OWNER;
     }
 
     if (!targetEmail) {
