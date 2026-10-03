@@ -237,7 +237,7 @@ export const DailyRevenueView: React.FC = () => {
       collectMethod,
       collectRef,
       collectNotes,
-      crypto.randomUUID().split("-")[0]
+      (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36)).split("-")[0]
     );
 
     if (res.success) {
@@ -369,7 +369,7 @@ export const DailyRevenueView: React.FC = () => {
                   return (
                     <tr key={rev.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition">
                       <td className="py-4 px-4">
-                        <div className="font-mono font-bold text-slate-900 dark:text-white uppercase">{(rev.businessKey || rev.id || "").split(':').pop()}</div>
+                        <div className="font-mono font-bold text-slate-900 dark:text-white uppercase">{String(rev.businessKey || rev.id || "").split(':').pop()}</div>
                         <div className="text-[10px] text-slate-400 flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
                           {rev.dueDate}
