@@ -9,6 +9,7 @@ import { runPhase56DepositDelayAlertTests } from "./src/utils/phase56DepositDela
 import { runPhase57ForensicTests } from "./src/utils/phase57DocumentIntelligenceForensicTests";
 import { main as runPhase1cLiveTests } from "./src/tests/runPhase1cLiveTests";
 import { runLeaseRenewalAdminFeeIntegritySuite } from "./src/tests/leaseRenewalAdminFeeIntegritySuite";
+import { runPortalProvisioningIntegritySuite } from "./src/tests/portalProvisioningIntegritySuite";
 import { initializeApp as initAdminApp, getApps as getAdminApps, cert as adminCert, applicationDefault } from "firebase-admin/app";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { signInWithEmailAndPassword } from "firebase/auth";
@@ -159,6 +160,11 @@ async function runIntegrity() {
     console.warn("[Test Suite] Central Auth client authentication failed (falling back to unauthenticated Secure Bypass Gate mode):", authErr?.message || authErr);
   }
   try {
+    const provisioningReport = await runPortalProvisioningIntegritySuite();
+    if (provisioningReport.failed > 0) {
+      console.error("\n[FAIL] PORTAL PROVISIONING INTEGRITY SUITE FAILED!");
+      process.exit(1);
+    }
     const renewalReport = await runLeaseRenewalAdminFeeIntegritySuite();
     if (renewalReport.failed > 0) {
       console.error("\n[FAIL] LEASE RENEWAL / ADMIN FEE INTEGRITY TESTS FAILED!");
