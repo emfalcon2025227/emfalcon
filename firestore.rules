@@ -72,14 +72,16 @@ service cloud.firestore {
       allow create: if (
         isSystemOwner() ||
         (isAdminOrSystemOwner() && request.resource.data.role != "SYSTEM_OWNER") ||
-        (isStaff() && request.resource.data.role != "SYSTEM_OWNER" && request.resource.data.role != "ADMIN" && request.resource.data.role != "SUPER_ADMIN") ||
         (isSignedIn() && request.auth.uid == userId && (
           (!('role' in request.resource.data) || request.resource.data.role == "GUEST") &&
           !('ownerId' in request.resource.data) &&
           !('tenantId' in request.resource.data) &&
           !('permissions' in request.resource.data) &&
+          !('userPermissionOverrides' in request.resource.data) &&
           !('isSystemOwner' in request.resource.data) &&
-          !('employeeId' in request.resource.data)
+          !('employeeId' in request.resource.data) &&
+          !('firebaseUid' in request.resource.data) &&
+          !('portalAccountStatus' in request.resource.data)
         ))
       );
 
