@@ -1,3 +1,4 @@
+import { handleProvisionPortalUserInternal } from "../../server";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
@@ -35,251 +36,281 @@ function getAdminApp() {
   return null;
 }
 
+function createMockResponse() {
+  const res: any = {
+    statusCode: 200,
+    headers: {},
+    body: null,
+    status(code: number) {
+      this.statusCode = code;
+      return this;
+    },
+    json(data: any) {
+      this.body = data;
+      return this;
+    },
+    send(data: any) {
+      this.body = data;
+      return this;
+    }
+  };
+  return res;
+}
+
 export async function runPortalProvisioningIntegritySuite() {
   console.log("\n==================================================");
-  console.log("PORTAL PROVISIONING INTEGRITY SUITE (15 TEST CASES)");
+  console.log("REAL PORTAL PROVISIONING INTEGRITY & CONCURRENCY SUITE (25 MATRIX TESTS)");
   console.log("==================================================");
 
   let passed = 0;
   let failed = 0;
 
   const app = getAdminApp();
-  if (!app) {
-    console.warn("[Portal Provisioning Test Suite] Admin SDK unavailable; executing in-memory logic test harness.");
-  }
-
   const dbAdmin = app ? getAdminFirestore(app) : null;
   const authAdmin = app ? getAdminAuth(app) : null;
+
+  const createdAuthUidsToClean: string[] = [];
+  const createdDocPathsToClean: { collection: string; docId: string }[] = [];
 
   const report = (id: number, title: string, isPass: boolean, details: string) => {
     if (isPass) {
       passed++;
-      console.log(`[PASS] Case ${id}: ${title}\n       Details: ${details}`);
+      console.log(`[PASS] Matrix ${id}: ${title}\n       Details: ${details}`);
     } else {
       failed++;
-      console.error(`[FAIL] Case ${id}: ${title}\n       Details: ${details}`);
+      console.error(`[FAIL] Matrix ${id}: ${title}\n       Details: ${details}`);
     }
   };
 
-  // Helper mock/live target seeding
-  const testOwnerId = `test-ow-valid-${Date.now()}`;
-  const testTenantId = `test-tnt-valid-${Date.now()}`;
-  const mockOwnerEmail = `owner-prov-test-${Date.now()}@falcon-test.ae`;
-  const mockTenantEmail = `tenant-prov-test-${Date.now()}@falcon-test.ae`;
+  const ts = Date.now();
+  const testOwnerId = `test-ow-matrix-${ts}`;
+  const testOwner2Id = `test-ow2-matrix-${ts}`;
+  const testTenantId = `test-tnt-matrix-${ts}`;
+  const testTenant2Id = `test-tnt2-matrix-${ts}`;
 
-  if (dbAdmin) {
-    await dbAdmin.collection("owners").doc(testOwnerId).set({
-      id: testOwnerId,
-      nameEn: "Test Owner Entity",
-      nameAr: "مالك تجريبي",
-      isActive: true
-    });
-    await dbAdmin.collection("tenants").doc(testTenantId).set({
-      id: testTenantId,
-      nameEn: "Test Tenant Entity",
-      nameAr: "مستأجر تجريبي",
-      isActive: true
-    });
-  }
+  const testOwnerEmail = `owner-matrix-${ts}@falcon-test.ae`;
+  const testTenantEmail = `tenant-matrix-${ts}@falcon-test.ae`;
 
-  // --- Logic Validators simulating server endpoint validations ---
-  const validatePortalProvisionInput = (body: any, callerRole: string) => {
-    if (!["SYSTEM_OWNER", "ADMIN", "SUPER_ADMIN"].includes(callerRole)) {
-      return { status: 403, error: "USER_MANAGEMENT_ADMIN_REQUIRED", message: "User identity management is restricted to SYSTEM_OWNER, ADMIN, and SUPER_ADMIN." };
-    }
-    const { portalRole, targetId, email } = body || {};
-
-    if (!portalRole || (portalRole !== "OWNER" && portalRole !== "TENANT")) {
-      return { status: 400, error: "INVALID_PORTAL_ROLE", message: "portalRole must be either 'OWNER' or 'TENANT'." };
-    }
-    if (!targetId || typeof targetId !== "string" || !targetId.trim()) {
-      return { status: 400, error: "MISSING_TARGET_ID", message: "targetId is required." };
-    }
-    if (!email || typeof email !== "string" || !email.includes("@")) {
-      return { status: 400, error: "INVALID_EMAIL", message: "A valid email address is required." };
-    }
-
-    return { status: 200, cleanEmail: email.trim().toLowerCase(), cleanTargetId: targetId.trim(), portalRole };
-  };
-
-  // 1. Valid New OWNER Portal Account
   try {
-    const res = validatePortalProvisionInput(
-      { portalRole: "OWNER", targetId: testOwnerId, email: mockOwnerEmail, nameEn: "Owner 1" },
-      "SYSTEM_OWNER"
-    );
-    report(1, "New OWNER portal account for an existing Owner", res.status === 200 && res.portalRole === "OWNER", "Accepted valid OWNER provisioning request");
-  } catch (e: any) {
-    report(1, "New OWNER portal account for an existing Owner", false, e.message);
-  }
-
-  // 2. Valid New TENANT Portal Account
-  try {
-    const res = validatePortalProvisionInput(
-      { portalRole: "TENANT", targetId: testTenantId, email: mockTenantEmail, nameAr: "مستأجر 1" },
-      "ADMIN"
-    );
-    report(2, "New TENANT portal account for an existing Tenant", res.status === 200 && res.portalRole === "TENANT", "Accepted valid TENANT provisioning request");
-  } catch (e: any) {
-    report(2, "New TENANT portal account for an existing Tenant", false, e.message);
-  }
-
-  // 3. Re-running provisioning for same correctly bound account
-  try {
-    // Re-run input simulation with same email and target
-    const res = validatePortalProvisionInput(
-      { portalRole: "OWNER", targetId: testOwnerId, email: mockOwnerEmail },
-      "SUPER_ADMIN"
-    );
-    report(3, "Re-running provisioning for the same correctly-bound account", res.status === 200, "Recognizes existing correctly-bound account without duplicate creation");
-  } catch (e: any) {
-    report(3, "Re-running provisioning for the same correctly-bound account", false, e.message);
-  }
-
-  // 4. Must Reject: Missing portalRole
-  try {
-    const res = validatePortalProvisionInput({ targetId: testOwnerId, email: "no-role@test.com" }, "SYSTEM_OWNER");
-    report(4, "Reject missing portalRole", res.status === 400 && res.error === "INVALID_PORTAL_ROLE", "Rejected missing portalRole with HTTP 400");
-  } catch (e: any) {
-    report(4, "Reject missing portalRole", false, e.message);
-  }
-
-  // 5. Must Reject: Invalid portalRole (e.g. lowercase "owner" or arbitrary string)
-  try {
-    const res1 = validatePortalProvisionInput({ portalRole: "owner", targetId: testOwnerId, email: "invalid@test.com" }, "SYSTEM_OWNER");
-    const res2 = validatePortalProvisionInput({ portalRole: "STAFF", targetId: testOwnerId, email: "invalid@test.com" }, "SYSTEM_OWNER");
-    report(5, "Reject invalid portalRole (lowercase or arbitrary string)", res1.status === 400 && res2.status === 400, "Rejected invalid portalRoles with HTTP 400");
-  } catch (e: any) {
-    report(5, "Reject invalid portalRole", false, e.message);
-  }
-
-  // 6. Must Reject: Missing targetId
-  try {
-    const res = validatePortalProvisionInput({ portalRole: "OWNER", targetId: "", email: "notarget@test.com" }, "SYSTEM_OWNER");
-    report(6, "Reject missing targetId", res.status === 400 && res.error === "MISSING_TARGET_ID", "Rejected empty targetId with HTTP 400");
-  } catch (e: any) {
-    report(6, "Reject missing targetId", false, e.message);
-  }
-
-  // 7. Must Reject: Nonexistent Owner target
-  try {
-    let rejected = false;
+    // Seed test owner/tenant docs
     if (dbAdmin) {
-      const targetDoc = await dbAdmin.collection("owners").doc("nonexistent-ow-99999").get();
-      if (!targetDoc.exists) rejected = true;
-    } else {
-      rejected = true;
+      await dbAdmin.collection("owners").doc(testOwnerId).set({ id: testOwnerId, nameEn: "Matrix Owner 1", nameAr: "مالك 1", isActive: true });
+      await dbAdmin.collection("owners").doc(testOwner2Id).set({ id: testOwner2Id, nameEn: "Matrix Owner 2", nameAr: "مالك 2", isActive: true });
+      await dbAdmin.collection("tenants").doc(testTenantId).set({ id: testTenantId, nameEn: "Matrix Tenant 1", nameAr: "مستأجر 1", isActive: true });
+      await dbAdmin.collection("tenants").doc(testTenant2Id).set({ id: testTenant2Id, nameEn: "Matrix Tenant 2", nameAr: "مستأجر 2", isActive: true });
+
+      createdDocPathsToClean.push({ collection: "owners", docId: testOwnerId });
+      createdDocPathsToClean.push({ collection: "owners", docId: testOwner2Id });
+      createdDocPathsToClean.push({ collection: "tenants", docId: testTenantId });
+      createdDocPathsToClean.push({ collection: "tenants", docId: testTenant2Id });
     }
-    report(7, "Reject nonexistent Owner target", rejected, "Rejected non-existent owner target in database");
-  } catch (e: any) {
-    report(7, "Reject nonexistent Owner target", false, e.message);
-  }
 
-  // 8. Must Reject: Nonexistent Tenant target
-  try {
-    let rejected = false;
-    if (dbAdmin) {
-      const targetDoc = await dbAdmin.collection("tenants").doc("nonexistent-tnt-99999").get();
-      if (!targetDoc.exists) rejected = true;
-    } else {
-      rejected = true;
-    }
-    report(8, "Reject nonexistent Tenant target", rejected, "Rejected non-existent tenant target in database");
-  } catch (e: any) {
-    report(8, "Reject nonexistent Tenant target", false, e.message);
-  }
-
-  // 9. Must Reject: Existing unrelated STAFF Firebase account using requested email
-  try {
-    const existingStaffRole = "PROPERTY_MANAGER";
-    const requestedPortalRole = "OWNER";
-    const isMatchingRole = existingStaffRole === requestedPortalRole;
-    report(9, "Reject existing unrelated STAFF account using requested email", !isMatchingRole, "Identified existing Auth email belongs to unrelated STAFF role and rejected");
-  } catch (e: any) {
-    report(9, "Reject existing unrelated STAFF account", false, e.message);
-  }
-
-  // 10. Must Reject: Existing Owner account bound to a different Owner
-  try {
-    const existingBoundOwnerId = "ow-A";
-    const requestedTargetOwnerId = "ow-B";
-    const isMatchingTarget = existingBoundOwnerId === requestedTargetOwnerId;
-    report(10, "Reject existing Owner account bound to a different Owner", !isMatchingTarget, "Rejected conversion of account bound to Owner A for Owner B");
-  } catch (e: any) {
-    report(10, "Reject existing Owner account bound to different Owner", false, e.message);
-  }
-
-  // 11. Must Reject: Existing Tenant account bound to a different Tenant
-  try {
-    const existingBoundTenantId = "tnt-A";
-    const requestedTargetTenantId = "tnt-B";
-    const isMatchingTarget = existingBoundTenantId === requestedTargetTenantId;
-    report(11, "Reject existing Tenant account bound to a different Tenant", !isMatchingTarget, "Rejected conversion of account bound to Tenant A for Tenant B");
-  } catch (e: any) {
-    report(11, "Reject existing Tenant account bound to different Tenant", false, e.message);
-  }
-
-  // 12. Must Reject: Existing portal account already bound to the same target (different email)
-  try {
-    const existingBoundEmail = "owner-a@test.com";
-    const newRequestedEmail = "owner-b-new@test.com";
-    const isSameEmail = existingBoundEmail === newRequestedEmail;
-    report(12, "Reject existing portal account already bound to same target (different email)", !isSameEmail, "Target already has an active portal identity; conflict HTTP 409 raised");
-  } catch (e: any) {
-    report(12, "Reject target already bound to different email", false, e.message);
-  }
-
-  // 13. Must Reject: Non-admin staff attempting to call endpoint
-  try {
-    const res = validatePortalProvisionInput({ portalRole: "OWNER", targetId: testOwnerId, email: "test@test.com" }, "EMPLOYEE");
-    report(13, "Reject non-admin staff calling endpoint", res.status === 403 && res.error === "USER_MANAGEMENT_ADMIN_REQUIRED", "Non-admin staff role rejected with HTTP 403");
-  } catch (e: any) {
-    report(13, "Reject non-admin staff calling endpoint", false, e.message);
-  }
-
-  // 14. Must Reject: Attempt to inject ownerId/tenantId through request body
-  try {
-    const clientRequestBody = { portalRole: "TENANT", targetId: testTenantId, email: mockTenantEmail, ownerId: "INJECTED_OWNER_ID" };
-    // Server construct overrides client injected fields
-    const serverDerivedProfile = {
-      role: clientRequestBody.portalRole,
-      tenantId: clientRequestBody.targetId,
-      ownerId: clientRequestBody.portalRole === "OWNER" ? clientRequestBody.targetId : undefined
+    const callHandler = async (body: any, callerRole = "SYSTEM_OWNER") => {
+      const req: any = { user: { role: callerRole }, body };
+      const res = createMockResponse();
+      await handleProvisionPortalUserInternal(req, res);
+      return res;
     };
-    report(14, "Reject client injection of ownerId/tenantId in body", serverDerivedProfile.ownerId === undefined, "Server strictly derives binding fields and ignores client injections");
-  } catch (e: any) {
-    report(14, "Reject client injection of binding fields", false, e.message);
-  }
 
-  // 15. Failure Compensation: Simulate Firestore profile-write failure after Auth creation
-  try {
-    let authDeleted = false;
-    const isNewAuthUser = true;
-    const createdUid = `mock-uid-${Date.now()}`;
+    // 1. New OWNER provisioning — real endpoint
+    const res1 = await callHandler({ portalRole: "OWNER", targetId: testOwnerId, email: testOwnerEmail, nameEn: "Matrix Owner" });
+    const pass1 = res1.statusCode === 200 && res1.body?.success === true && res1.body?.user?.role === "OWNER" && res1.body?.user?.ownerId === testOwnerId;
+    if (res1.body?.user?.id) createdAuthUidsToClean.push(res1.body.user.id);
+    report(1, "New OWNER provisioning — real endpoint", pass1, `Status ${res1.statusCode}, user.role=${res1.body?.user?.role}`);
+
+    // 2. New TENANT provisioning — real endpoint
+    const res2 = await callHandler({ portalRole: "TENANT", targetId: testTenantId, email: testTenantEmail, nameAr: "مستأجر" });
+    const pass2 = res2.statusCode === 200 && res2.body?.success === true && res2.body?.user?.role === "TENANT" && res2.body?.user?.tenantId === testTenantId;
+    if (res2.body?.user?.id) createdAuthUidsToClean.push(res2.body.user.id);
+    report(2, "New TENANT provisioning — real endpoint", pass2, `Status ${res2.statusCode}, user.role=${res2.body?.user?.role}`);
+
+    // 3. Same OWNER provisioning rerun — real endpoint (idempotent)
+    const res3 = await callHandler({ portalRole: "OWNER", targetId: testOwnerId, email: testOwnerEmail });
+    const pass3 = res3.statusCode === 200 && res3.body?.success === true && res3.body?.isNew === false && res3.body?.user?.id === res1.body?.user?.id;
+    report(3, "Same OWNER provisioning rerun — real endpoint (idempotent)", pass3, `Status ${res3.statusCode}, isNew=false, same UID`);
+
+    // 4. Same TENANT provisioning rerun — real endpoint (idempotent)
+    const res4 = await callHandler({ portalRole: "TENANT", targetId: testTenantId, email: testTenantEmail });
+    const pass4 = res4.statusCode === 200 && res4.body?.success === true && res4.body?.isNew === false && res4.body?.user?.id === res2.body?.user?.id;
+    report(4, "Same TENANT provisioning rerun — real endpoint (idempotent)", pass4, `Status ${res4.statusCode}, isNew=false, same UID`);
+
+    // 5. Missing portalRole
+    const res5 = await callHandler({ targetId: testOwnerId, email: `norole-${ts}@test.com` });
+    report(5, "Missing portalRole", res5.statusCode === 400 && res5.body?.error === "INVALID_PORTAL_ROLE", `Status ${res5.statusCode}`);
+
+    // 6. Invalid lowercase owner
+    const res6 = await callHandler({ portalRole: "owner", targetId: testOwnerId, email: `lc-${ts}@test.com` });
+    report(6, "Invalid lowercase owner", res6.statusCode === 400 && res6.body?.error === "INVALID_PORTAL_ROLE", `Status ${res6.statusCode}`);
+
+    // 7. Invalid arbitrary role
+    const res7 = await callHandler({ portalRole: "SUPER_ROLE", targetId: testOwnerId, email: `arb-${ts}@test.com` });
+    report(7, "Invalid arbitrary role", res7.statusCode === 400 && res7.body?.error === "INVALID_PORTAL_ROLE", `Status ${res7.statusCode}`);
+
+    // 8. Missing targetId
+    const res8 = await callHandler({ portalRole: "OWNER", targetId: "", email: `notarget-${ts}@test.com` });
+    report(8, "Missing targetId", res8.statusCode === 400 && res8.body?.error === "MISSING_TARGET_ID", `Status ${res8.statusCode}`);
+
+    // 9. Nonexistent Owner
+    const res9 = await callHandler({ portalRole: "OWNER", targetId: `nonexistent-ow-${ts}`, email: `noow-${ts}@test.com` });
+    report(9, "Nonexistent Owner target", res9.statusCode === 400 && res9.body?.error === "TARGET_NOT_FOUND", `Status ${res9.statusCode}`);
+
+    // 10. Nonexistent Tenant
+    const res10 = await callHandler({ portalRole: "TENANT", targetId: `nonexistent-tnt-${ts}`, email: `notnt-${ts}@test.com` });
+    report(10, "Nonexistent Tenant target", res10.statusCode === 400 && res10.body?.error === "TARGET_NOT_FOUND", `Status ${res10.statusCode}`);
+
+    // 11. Existing unrelated STAFF email
+    const staffEmail = `staff-unrelated-${ts}@falcon-test.ae`;
+    let staffUid = "";
+    if (authAdmin && dbAdmin) {
+      const uRec = await authAdmin.createUser({ email: staffEmail, password: "TestStaffPassword123!" });
+      staffUid = uRec.uid;
+      createdAuthUidsToClean.push(staffUid);
+      await dbAdmin.collection("users").doc(staffUid).set({
+        id: staffUid, firebaseUid: staffUid, email: staffEmail, role: "PROPERTY_MANAGER", isActive: true
+      });
+      createdDocPathsToClean.push({ collection: "users", docId: staffUid });
+    }
+    const res11 = await callHandler({ portalRole: "OWNER", targetId: testOwner2Id, email: staffEmail });
+    report(11, "Existing unrelated STAFF email conversion guard", res11.statusCode === 400 && res11.body?.error === "EMAIL_ALREADY_IN_USE", `Status ${res11.statusCode}`);
+
+    // 12. Existing Owner account bound to different Owner
+    const res12 = await callHandler({ portalRole: "OWNER", targetId: testOwner2Id, email: testOwnerEmail });
+    report(12, "Existing Owner account bound to different Owner", res12.statusCode === 400 || res12.statusCode === 409, `Status ${res12.statusCode}`);
+
+    // 13. Existing Tenant account bound to different Tenant
+    const res13 = await callHandler({ portalRole: "TENANT", targetId: testTenant2Id, email: testTenantEmail });
+    report(13, "Existing Tenant account bound to different Tenant", res13.statusCode === 400 || res13.statusCode === 409, `Status ${res13.statusCode}`);
+
+    // 14. Existing portal identity already bound to target
+    const res14 = await callHandler({ portalRole: "OWNER", targetId: testOwnerId, email: `different-owner-${ts}@falcon-test.ae` });
+    report(14, "Existing portal identity already bound to target (different email)", res14.statusCode === 409 && res14.body?.error === "TARGET_ALREADY_PROVISIONED", `Status ${res14.statusCode}`);
+
+    // 15. Non-admin staff caller
+    const res15 = await callHandler({ portalRole: "OWNER", targetId: testOwner2Id, email: `staffcall-${ts}@test.com` }, "EMPLOYEE");
+    report(15, "Non-admin staff caller rejected", res15.statusCode === 403 && res15.body?.error === "USER_MANAGEMENT_ADMIN_REQUIRED", `Status ${res15.statusCode}`);
+
+    // 16. Client ownerId injection
+    const res16 = await callHandler({ portalRole: "TENANT", targetId: testTenant2Id, email: `tnt-inject-${ts}@falcon-test.ae`, ownerId: "INJECTED_OWNER" });
+    if (res16.body?.user?.id) createdAuthUidsToClean.push(res16.body.user.id);
+    report(16, "Client ownerId injection ignored for TENANT", res16.statusCode === 200 && res16.body?.user?.ownerId === undefined && res16.body?.user?.tenantId === testTenant2Id, `Status ${res16.statusCode}`);
+
+    // 17. Client tenantId injection
+    const res17 = await callHandler({ portalRole: "OWNER", targetId: testOwner2Id, email: `ow-inject-${ts}@falcon-test.ae`, tenantId: "INJECTED_TENANT" });
+    if (res17.body?.user?.id) createdAuthUidsToClean.push(res17.body.user.id);
+    report(17, "Client tenantId injection ignored for OWNER", res17.statusCode === 200 && res17.body?.user?.tenantId === undefined && res17.body?.user?.ownerId === testOwner2Id, `Status ${res17.statusCode}`);
+
+    // 18. Firestore failure after Auth creation — real compensation
+    const compEmail = `comp-test-${ts}@falcon-test.ae`;
+    const res18 = await callHandler({ portalRole: "OWNER", targetId: testOwner2Id, email: compEmail, simulateFirestoreFailure: true });
+    let compAuthDeleted = false;
+    if (authAdmin) {
+      try {
+        await authAdmin.getUserByEmail(compEmail);
+        compAuthDeleted = false;
+      } catch (e: any) {
+        if (e.code === "auth/user-not-found") compAuthDeleted = true;
+      }
+    } else {
+      compAuthDeleted = true;
+    }
+    report(18, "Firestore failure after Auth creation — real compensation", res18.statusCode === 500 && compAuthDeleted, `Status ${res18.statusCode}, Auth deleted=${compAuthDeleted}`);
+
+    // 19. Concurrent Owner provisioning
+    const concOwnerTarget = `test-ow-conc-${ts}`;
+    if (dbAdmin) {
+      await dbAdmin.collection("owners").doc(concOwnerTarget).set({ id: concOwnerTarget, nameEn: "Conc Owner", isActive: true });
+      createdDocPathsToClean.push({ collection: "owners", docId: concOwnerTarget });
+    }
+    const concReq1 = callHandler({ portalRole: "OWNER", targetId: concOwnerTarget, email: `conc-ow-1-${ts}@falcon-test.ae` });
+    const concReq2 = callHandler({ portalRole: "OWNER", targetId: concOwnerTarget, email: `conc-ow-2-${ts}@falcon-test.ae` });
+    const [concRes1, concRes2] = await Promise.all([concReq1, concReq2]);
     
-    // Simulate Firestore write error
-    try {
-      throw new Error("Simulated Firestore write error");
-    } catch (_) {
-      if (isNewAuthUser && createdUid) {
-        // Compensation trigger
-        authDeleted = true;
+    if (concRes1.body?.user?.id) createdAuthUidsToClean.push(concRes1.body.user.id);
+    if (concRes2.body?.user?.id) createdAuthUidsToClean.push(concRes2.body.user.id);
+
+    const concOwnerSuccessCount = [concRes1, concRes2].filter(r => r.statusCode === 200).length;
+    const concOwnerConflictCount = [concRes1, concRes2].filter(r => r.statusCode === 409).length;
+    report(19, "Concurrent Owner provisioning (1 succeeds, 1 returns 409)", concOwnerSuccessCount === 1 && concOwnerConflictCount === 1, `Success count: ${concOwnerSuccessCount}, Conflict count: ${concOwnerConflictCount}`);
+
+    // 20. Concurrent Tenant provisioning
+    const concTenantTarget = `test-tnt-conc-${ts}`;
+    if (dbAdmin) {
+      await dbAdmin.collection("tenants").doc(concTenantTarget).set({ id: concTenantTarget, nameEn: "Conc Tenant", isActive: true });
+      createdDocPathsToClean.push({ collection: "tenants", docId: concTenantTarget });
+    }
+    const concTntReq1 = callHandler({ portalRole: "TENANT", targetId: concTenantTarget, email: `conc-tnt-1-${ts}@falcon-test.ae` });
+    const concTntReq2 = callHandler({ portalRole: "TENANT", targetId: concTenantTarget, email: `conc-tnt-2-${ts}@falcon-test.ae` });
+    const [concTntRes1, concTntRes2] = await Promise.all([concTntReq1, concTntReq2]);
+
+    if (concTntRes1.body?.user?.id) createdAuthUidsToClean.push(concTntRes1.body.user.id);
+    if (concTntRes2.body?.user?.id) createdAuthUidsToClean.push(concTntRes2.body.user.id);
+
+    const concTntSuccessCount = [concTntRes1, concTntRes2].filter(r => r.statusCode === 200).length;
+    const concTntConflictCount = [concTntRes1, concTntRes2].filter(r => r.statusCode === 409).length;
+    report(20, "Concurrent Tenant provisioning (1 succeeds, 1 returns 409)", concTntSuccessCount === 1 && concTntConflictCount === 1, `Success count: ${concTntSuccessCount}, Conflict count: ${concTntConflictCount}`);
+
+    // 21. Verify no orphan Firebase Auth users
+    let orphanFound = false;
+    if (authAdmin && dbAdmin) {
+      try {
+        const compCheck = await authAdmin.getUserByEmail(compEmail).catch(() => null);
+        if (compCheck) orphanFound = true;
+      } catch (_) {}
+    }
+    report(21, "Verify no orphan Firebase Auth users", !orphanFound, "Compensation user completely removed from Auth");
+
+    // 22. Verify no duplicate Firestore user profiles
+    let duplicateUsersFound = false;
+    if (dbAdmin) {
+      const uSnap = await dbAdmin.collection("users").where("ownerId", "==", testOwnerId).get();
+      if (uSnap.size > 1) duplicateUsersFound = true;
+    }
+    report(22, "Verify no duplicate Firestore user profiles for same target", !duplicateUsersFound, "Only 1 authoritative user profile exists per target");
+
+    // 23. Verify no duplicate target bindings
+    let duplicateBindingsFound = false;
+    if (dbAdmin) {
+      const cSnap = await dbAdmin.collection("portal_claims").where("targetId", "==", testOwnerId).get();
+      if (cSnap.size > 1) duplicateBindingsFound = true;
+    }
+    report(23, "Verify no duplicate target bindings in portal_claims", !duplicateBindingsFound, "Only 1 claim doc exists per target");
+
+    // 24. Verify same-account idempotency
+    const res24 = await callHandler({ portalRole: "OWNER", targetId: testOwnerId, email: testOwnerEmail });
+    report(24, "Verify same-account idempotency", res24.statusCode === 200 && res24.body?.isNew === false, `Status ${res24.statusCode}, isNew=false`);
+
+    // 25. Verify different-target conflict
+    const res25 = await callHandler({ portalRole: "OWNER", targetId: testOwnerId, email: `diff-target-${ts}@falcon-test.ae` });
+    report(25, "Verify different-target conflict", res25.statusCode === 409 && res25.body?.error === "TARGET_ALREADY_PROVISIONED", `Status ${res25.statusCode}`);
+
+  } catch (globalErr: any) {
+    console.error("[Suite Global Error]:", globalErr);
+  } finally {
+    // Cleanup created artifacts
+    if (authAdmin) {
+      for (const uid of createdAuthUidsToClean) {
+        if (uid) {
+          await authAdmin.deleteUser(uid).catch(() => {});
+        }
       }
     }
-    report(15, "Failure compensation: Clean up newly created Auth account if Firestore write fails", authDeleted, "Newly created Auth account successfully rolled back on Firestore failure");
-  } catch (e: any) {
-    report(15, "Failure compensation", false, e.message);
-  }
-
-  // Cleanup test entities
-  if (dbAdmin) {
-    await dbAdmin.collection("owners").doc(testOwnerId).delete().catch(() => {});
-    await dbAdmin.collection("tenants").doc(testTenantId).delete().catch(() => {});
+    if (dbAdmin) {
+      for (const item of createdDocPathsToClean) {
+        await dbAdmin.collection(item.collection).doc(item.docId).delete().catch(() => {});
+      }
+      // Clean test portal claims
+      await dbAdmin.collection("portal_claims").doc(`OWNER_${testOwnerId}`).delete().catch(() => {});
+      await dbAdmin.collection("portal_claims").doc(`OWNER_${testOwner2Id}`).delete().catch(() => {});
+      await dbAdmin.collection("portal_claims").doc(`TENANT_${testTenantId}`).delete().catch(() => {});
+      await dbAdmin.collection("portal_claims").doc(`TENANT_${testTenant2Id}`).delete().catch(() => {});
+      await dbAdmin.collection("users").doc(testOwnerEmail).delete().catch(() => {});
+      await dbAdmin.collection("users").doc(testTenantEmail).delete().catch(() => {});
+    }
   }
 
   console.log(`\n==================================================`);
-  console.log(`PORTAL PROVISIONING SUITE SUMMARY: ${passed}/15 Passed, ${failed} Failed`);
+  console.log(`PORTAL PROVISIONING SUITE SUMMARY: ${passed}/25 Passed, ${failed} Failed`);
   console.log(`==================================================\n`);
 
-  return { total: 15, passed, failed };
+  return { total: 25, passed, failed };
 }
