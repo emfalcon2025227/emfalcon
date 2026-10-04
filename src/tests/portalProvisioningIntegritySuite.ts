@@ -72,6 +72,14 @@ export async function runPortalProvisioningIntegritySuite() {
   const createdAuthUidsToClean: string[] = [];
   const createdDocPathsToClean: { collection: string; docId: string }[] = [];
 
+  // Fail closed: this suite must never convert missing Admin credentials into PASS results.
+  // Real Auth + Firestore access is mandatory for every matrix case.
+  if (!app || !dbAdmin || !authAdmin) {
+    throw new Error(
+      "PORTAL_PROVISIONING_TEST_BLOCKED: valid Firebase Admin credentials with Auth and Firestore access are required."
+    );
+  }
+
   const report = (id: number, title: string, isPass: boolean, details: string) => {
     if (isPass) {
       passed++;
@@ -235,8 +243,9 @@ export async function runPortalProvisioningIntegritySuite() {
       const claimSnap = await dbAdmin.collection("portal_claims").doc(`OWNER_${failTargetId}`).get();
       claimReleased = !claimSnap.exists;
     } else {
-      compAuthDeleted = true;
-      claimReleased = true;
+      throw new Error(
+        "PORTAL_PROVISIONING_TEST_BLOCKED: real Auth/Firestore verification is unavailable."
+      );
     }
     const pass18b = res18b.statusCode === 500 && compAuthDeleted && claimReleased;
     report(19, "Programmatic test failure — performs real Auth compensation and newly created claim release", pass18b, `Status ${res18b.statusCode}, Auth deleted=${compAuthDeleted}, Claim released=${claimReleased}`);
