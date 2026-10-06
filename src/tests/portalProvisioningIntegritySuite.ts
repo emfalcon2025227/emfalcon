@@ -10,30 +10,32 @@ const firebaseAppletConfig = JSON.parse(
 );
 
 function getAdminApp() {
+  // This integrity suite is write-capable. It is intentionally restricted to an
+  // isolated Firebase Emulator environment and must never reuse a production app.
+  const testProjectId = process.env.PORTAL_PROVISIONING_TEST_PROJECT_ID?.trim();
+  const authEmulatorHost = process.env.FIREBASE_AUTH_EMULATOR_HOST?.trim();
+  const firestoreEmulatorHost = process.env.FIRESTORE_EMULATOR_HOST?.trim();
+
+  if (
+    !testProjectId ||
+    testProjectId === firebaseAppletConfig.projectId ||
+    !authEmulatorHost ||
+    !firestoreEmulatorHost
+  ) {
+    return null;
+  }
+
   const existingApps = getApps();
-  if (existingApps.length > 0) {
-    return existingApps[0];
+  const matchingApp = existingApps.find((candidate) => candidate.options.projectId === testProjectId);
+  if (matchingApp) {
+    return matchingApp;
   }
-  const rawAccount = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 || process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (rawAccount) {
-    try {
-      const trimmed = rawAccount.trim();
-      let serviceAccount: any = null;
-      if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-        serviceAccount = JSON.parse(trimmed);
-      } else {
-        const decoded = Buffer.from(trimmed, "base64").toString("utf8").trim();
-        serviceAccount = JSON.parse(decoded);
-      }
-      if (serviceAccount && typeof serviceAccount === "object") {
-        return initializeApp({
-          credential: cert(serviceAccount),
-          projectId: serviceAccount.project_id || firebaseAppletConfig.projectId
-        });
-      }
-    } catch (_) {}
+
+  try {
+    return initializeApp({ projectId: testProjectId });
+  } catch (_) {
+    return null;
   }
-  return null;
 }
 
 function createMockResponse() {
@@ -72,11 +74,24 @@ export async function runPortalProvisioningIntegritySuite() {
   const createdAuthUidsToClean: string[] = [];
   const createdDocPathsToClean: { collection: string; docId: string }[] = [];
 
-  // Fail closed: this suite must never convert missing Admin credentials into PASS results.
-  // Real Auth + Firestore access is mandatory for every matrix case.
-  if (!app || !dbAdmin || !authAdmin) {
+  // Fail closed: this suite is write-capable and may only run against an isolated
+  // Firebase Emulator project. Production credentials/projects are never accepted.
+  const testProjectId = process.env.PORTAL_PROVISIONING_TEST_PROJECT_ID?.trim();
+  const authEmulatorHost = process.env.FIREBASE_AUTH_EMULATOR_HOST?.trim();
+  const firestoreEmulatorHost = process.env.FIRESTORE_EMULATOR_HOST?.trim();
+
+  if (
+    !testProjectId ||
+    testProjectId === firebaseAppletConfig.projectId ||
+    !authEmulatorHost ||
+    !firestoreEmulatorHost ||
+    !app ||
+    !dbAdmin ||
+    !authAdmin ||
+    app.options.projectId !== testProjectId
+  ) {
     throw new Error(
-      "PORTAL_PROVISIONING_TEST_BLOCKED: valid Firebase Admin credentials with Auth and Firestore access are required."
+      "PORTAL_PROVISIONING_TEST_BLOCKED: this write-capable suite requires an isolated Firebase Auth + Firestore Emulator environment with a non-production project ID."
     );
   }
 
