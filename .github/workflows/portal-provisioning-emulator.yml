@@ -1,0 +1,35 @@
+name: Portal Provisioning Emulator Integrity
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/tests/portalProvisioningIntegritySuite.ts"
+      - "package.json"
+      - "server.ts"
+
+jobs:
+  portal-provisioning:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Portal Provisioning Suite in Firebase Emulators
+        run: |
+          npx --yes firebase-tools@latest emulators:exec \
+            --project portal-provisioning-test \
+            --only auth,firestore \
+            "npm run test:portal-provisioning"
