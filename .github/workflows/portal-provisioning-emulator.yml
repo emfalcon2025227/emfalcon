@@ -9,6 +9,7 @@ on:
       - "src/tests/portalProvisioningIntegritySuite.ts"
       - "package.json"
       - "server.ts"
+      - ".github/workflows/portal-provisioning-emulator.yml"
 
 jobs:
   portal-provisioning:
