@@ -209,7 +209,10 @@ export async function runContractProductionWorkflowIntegritySuite() {
       ]);
     });
 
-    const getApi = () => {\n      if (!dataApi) throw new Error("DataContext API is not ready.");\n      return dataApi;\n    };
+    const getApi = () => {
+      if (!dataApi) throw new Error("DataContext API is not ready.");
+      return dataApi;
+    };
     const ownerId = "test-owner";
     const tenantId = "test-tenant";
     const propertyId = "test-property";
