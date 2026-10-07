@@ -8,7 +8,8 @@
     "build": "vite build",
     "start": "node server.ts",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "test:portal-provisioning": "PORTAL_PROVISIONING_TEST_PROJECT_ID=portal-provisioning-test FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 tsx -e \"import('./src/tests/portalProvisioningIntegritySuite.ts').then(async ({runPortalProvisioningIntegritySuite}) => { const result = await runPortalProvisioningIntegritySuite(); if (result.passed !== result.total || result.failed !== 0) process.exit(1); })\""
+    "test:portal-provisioning": "PORTAL_PROVISIONING_TEST_PROJECT_ID=portal-provisioning-test FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 tsx -e \"import('./src/tests/portalProvisioningIntegritySuite.ts').then(async ({runPortalProvisioningIntegritySuite}) => { const result = await runPortalProvisioningIntegritySuite(); if (result.passed !== result.total || result.failed !== 0) process.exit(1); })\"",
+    "test:contract-integrity": "CONTRACT_INTEGRITY_TEST_PROJECT_ID=contract-integrity-test FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 tsx -e \"import('./src/tests/leaseRenewalAdminFeeIntegritySuite.ts').then(async ({runLeaseRenewalAdminFeeIntegritySuite}) => { const result = await runLeaseRenewalAdminFeeIntegritySuite(); if (result.passed !== 18 || result.failed !== 0) process.exit(1); })\""
   },
   "dependencies": {
     "@google/genai": "latest",
