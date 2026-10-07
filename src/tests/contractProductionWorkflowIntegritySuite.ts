@@ -8,8 +8,8 @@
 
 import React, { useEffect } from "react";
 import { act, create } from "react-test-renderer";
-import { connectAuthEmulator, connectFirestoreEmulator, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { connectAuthEmulator, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { connectFirestoreEmulator, doc, getDoc } from "firebase/firestore";
 import { initializeApp as initializeAdminApp, deleteApp as deleteAdminApp } from "firebase-admin/app";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
@@ -18,7 +18,7 @@ import { LanguageProvider } from "../context/LanguageContext";
 import { AuthProvider } from "../context/AuthContext";
 import { auth, db } from "../lib/firebase";
 import firebaseConfig from "../../firebase-applet-config.json";
-import type { Lease, LeaseRenewalRecord } from "../types";
+import type { Lease } from "../types";
 
 const TEST_PROJECT_ID = process.env.CONTRACT_INTEGRITY_TEST_PROJECT_ID?.trim();
 const AUTH_EMULATOR_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST?.trim();
