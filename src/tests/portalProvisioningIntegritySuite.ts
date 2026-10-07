@@ -112,6 +112,7 @@ export async function runPortalProvisioningIntegritySuite() {
   const ts = Date.now();
   const testOwnerId = `test-ow-matrix-${ts}`;
   const testOwner2Id = `test-ow2-matrix-${ts}`;
+  const testOwner3Id = `test-ow3-matrix-${ts}`;
   const testTenantId = `test-tnt-matrix-${ts}`;
   const testTenant2Id = `test-tnt2-matrix-${ts}`;
 
@@ -123,11 +124,13 @@ export async function runPortalProvisioningIntegritySuite() {
     if (dbAdmin) {
       await dbAdmin.collection("owners").doc(testOwnerId).set({ id: testOwnerId, nameEn: "Matrix Owner 1", nameAr: "مالك 1", isActive: true });
       await dbAdmin.collection("owners").doc(testOwner2Id).set({ id: testOwner2Id, nameEn: "Matrix Owner 2", nameAr: "مالك 2", isActive: true });
+      await dbAdmin.collection("owners").doc(testOwner3Id).set({ id: testOwner3Id, nameEn: "Matrix Owner 3", nameAr: "مالك 3", isActive: true });
       await dbAdmin.collection("tenants").doc(testTenantId).set({ id: testTenantId, nameEn: "Matrix Tenant 1", nameAr: "مستأجر 1", isActive: true });
       await dbAdmin.collection("tenants").doc(testTenant2Id).set({ id: testTenant2Id, nameEn: "Matrix Tenant 2", nameAr: "مستأجر 2", isActive: true });
 
       createdDocPathsToClean.push({ collection: "owners", docId: testOwnerId });
       createdDocPathsToClean.push({ collection: "owners", docId: testOwner2Id });
+      createdDocPathsToClean.push({ collection: "owners", docId: testOwner3Id });
       createdDocPathsToClean.push({ collection: "tenants", docId: testTenantId });
       createdDocPathsToClean.push({ collection: "tenants", docId: testTenant2Id });
     }
@@ -232,7 +235,7 @@ export async function runPortalProvisioningIntegritySuite() {
 
     // 18a. Verify HTTP request body failureInjection is ignored (production safety)
     const prodHookEmail = `prod-hook-safety-${ts}@falcon-test.ae`;
-    const res18a = await callHandler({ portalRole: "OWNER", targetId: testOwner2Id, email: prodHookEmail, failureInjection: true });
+    const res18a = await callHandler({ portalRole: "OWNER", targetId: testOwner3Id, email: prodHookEmail, failureInjection: true });
     const pass18a = res18a.statusCode === 200 && res18a.body?.success === true;
     if (res18a.body?.user?.id) createdAuthUidsToClean.push(res18a.body.user.id);
     report(18, "Production body failureInjection flag ignored (safety check)", pass18a, `Status ${res18a.statusCode}, success=${res18a.body?.success}`);
@@ -365,6 +368,7 @@ export async function runPortalProvisioningIntegritySuite() {
       // Clean test portal claims
       await dbAdmin.collection("portal_claims").doc(`OWNER_${testOwnerId}`).delete().catch(() => {});
       await dbAdmin.collection("portal_claims").doc(`OWNER_${testOwner2Id}`).delete().catch(() => {});
+      await dbAdmin.collection("portal_claims").doc(`OWNER_${testOwner3Id}`).delete().catch(() => {});
       await dbAdmin.collection("portal_claims").doc(`TENANT_${testTenantId}`).delete().catch(() => {});
       await dbAdmin.collection("portal_claims").doc(`TENANT_${testTenant2Id}`).delete().catch(() => {});
       await dbAdmin.collection("users").doc(testOwnerEmail).delete().catch(() => {});
