@@ -183,7 +183,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
       const api = useData();
       dataApi = api;
       useEffect(() => {
-        if (api.isDataLoaded && resolveApi) {
+        if (resolveApi) {
           resolveApi(api);
           resolveApi = null;
         }
