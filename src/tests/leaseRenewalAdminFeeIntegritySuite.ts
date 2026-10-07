@@ -97,6 +97,22 @@ export interface TestReport {
 export async function runLeaseRenewalAdminFeeIntegritySuite(): Promise<TestReport> {
   const report: TestReport = { passed: 0, failed: 0, results: [] };
 
+  // This suite performs destructive/write-capable Firestore operations. It must
+  // never execute against the production Firebase project.
+  const testProjectId = process.env.CONTRACT_INTEGRITY_TEST_PROJECT_ID?.trim();
+  const firestoreEmulatorHost = process.env.FIRESTORE_EMULATOR_HOST?.trim();
+  const configuredProjectId = (db as any)?.app?.options?.projectId;
+
+  if (
+    !testProjectId ||
+    !firestoreEmulatorHost ||
+    testProjectId === configuredProjectId
+  ) {
+    throw new Error(
+      "CONTRACT_INTEGRITY_TEST_BLOCKED: this write-capable suite requires an isolated Firestore Emulator project with a non-production project ID."
+    );
+  }
+
   const record = (testNumber: number, letter: string, name: string, passed: boolean, details: string) => {
     if (passed) {
       report.passed++;
