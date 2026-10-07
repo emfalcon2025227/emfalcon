@@ -27,6 +27,7 @@ import {
   Printer,
   ChevronDown,
   ChevronRight,
+  Search,
 } from "lucide-react";
 import { useCloudConnectivity } from "../../context/CloudConnectivityContext";
 
@@ -55,6 +56,145 @@ interface NavItemConfig {
   sectionHeaderKey?: string;
 }
 
+function normalizeSearchText(text: string): string {
+  if (!text) return "";
+  return text
+    .toLowerCase()
+    .replace(/[\u064B-\u065F]/g, "") // remove arabic diacritics
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/[^\w\s\u0600-\u06FF]/g, " ")
+    .trim();
+}
+
+const sectionMetadata: Record<string, { ar: string; en: string }> = {
+  navFinancialsHeader: { ar: "الحسابات المالية", en: "Financial Accounts" },
+  navCoreOperations: { ar: "العمليات الرئيسية", en: "Core Operations" },
+  navMasterData: { ar: "البيانات الأساسية", en: "Master Data" },
+  electronicArchive: { ar: "الأرشيف الإلكتروني الآمن", en: "Secure Electronic Archive" },
+  reportExecutiveSummary: { ar: "مركز التحكم - Admin Center", en: "Admin Center" },
+};
+
+const navItemKeywords: Partial<Record<NavView, { ar: string[]; en: string[] }>> = {
+  DASHBOARD: {
+    ar: ["الرئيسية", "لوحة التحكم", "مؤشرات", "إحصائيات", "نظرة عامة"],
+    en: ["home", "dashboard", "kpi", "overview", "metrics", "stats"],
+  },
+  TENANT_PORTAL: {
+    ar: ["بوابة المستأجر", "مستأجر", "عقد", "دفعات", "خدمات"],
+    en: ["tenant portal", "tenant", "rent", "payments"],
+  },
+  OWNER_PORTAL: {
+    ar: ["بوابة المالك", "مالك", "استثمار", "عوائد", "محفظة"],
+    en: ["owner portal", "owner", "investor", "returns", "portfolio"],
+  },
+  FINANCIALS: {
+    ar: ["حسابات", "محاسبة", "قيود", "دفتر الأستاذ", "ميزان المراجعة", "ضريبة", "تسوية بنكية", "إقفال مالي", "عكس العمليات", "مالية"],
+    en: ["financials", "accounting", "ledger", "journal entries", "trial balance", "vat", "bank reconciliation", "closing", "reversals"],
+  },
+  CHEQUE_OPERATIONS: {
+    ar: ["شيكات", "عمليات الشيكات", "شيك مرتجع", "شيك مستحق", "شيك آجل", "إيداع", "تحصيل الشيكات"],
+    en: ["cheques", "checks", "bounced cheques", "due cheques", "pdc", "deposit", "ledger"],
+  },
+  COLLECTIONS_CENTER: {
+    ar: ["مركز التحصيل", "تحصيل", "سندات", "إيصالات", "سداد", "دفعات", "كاش", "تحويل بنكي"],
+    en: ["collections center", "collections", "receipts", "payments", "cash", "bank transfer"],
+  },
+  PRINT_CENTER: {
+    ar: ["طباعة", "مركز طباعة السندات", "سند قبض", "سند صرف", "إيصال استلام", "فواتير"],
+    en: ["print center", "vouchers", "receipt vouchers", "payment vouchers", "printing", "bonds"],
+  },
+  LEASES: {
+    ar: ["عقود", "عقود الإيجار", "إيجار", "مستأجرين", "تأجير", "عقد موثق"],
+    en: ["leases", "contracts", "tenancy contract", "agreements", "rental"],
+  },
+  RENEW_LEASE: {
+    ar: ["تجديد العقود", "تجديد", "تمديد عقد", "رسوم تجديد", "عقد مجدد"],
+    en: ["renew lease", "renewal", "lease renewal", "extension", "admin fee", "renew contract"],
+  },
+  CASES: {
+    ar: ["قضايا", "القضايا الإيجارية", "محكمة", "نزاعات", "دعوى قضائية", "تنفيذ"],
+    en: ["cases", "rental cases", "legal", "court disputes", "lawsuit", "enforcement"],
+  },
+  HEARINGS: {
+    ar: ["جلسات", "جلسات التقاضي", "جلسة محكمة", "مواعيد الجلسات", "قاضي"],
+    en: ["hearings", "court hearings", "sessions", "court calendar", "hearing dates"],
+  },
+  MAINTENANCE: {
+    ar: ["صيانة", "إدارة الصيانة", "بلاغات أعطال", "أوامر عمل", "فني", "إصلاحات"],
+    en: ["maintenance", "repairs", "tickets", "work orders", "technician", "emergency"],
+  },
+  OWNERS: {
+    ar: ["ملاك", "الملاك", "مالك عقار", "مستثمر", "أصحاب العقارات"],
+    en: ["owners", "property owners", "landlords", "investors"],
+  },
+  PROPERTIES: {
+    ar: ["عقارات", "المباني", "أبراج", "بنايات", "مشاريع عقارية"],
+    en: ["properties", "buildings", "towers", "compounds", "real estate"],
+  },
+  PROPERTY_REVIEW: {
+    ar: ["مراجعة المحفظة", "تقييم العقارات", "محفظة عقارية", "أصول"],
+    en: ["property review", "portfolio review", "assets", "property inspection"],
+  },
+  UNITS: {
+    ar: ["وحدات", "الوحدات العقارية", "شقق", "مكاتب", "محلات", "معارض"],
+    en: ["units", "apartments", "offices", "shops", "flats", "warehouses"],
+  },
+  TENANTS: {
+    ar: ["مستأجرين", "المستأجرين", "بيانات المستأجر", "عملاء"],
+    en: ["tenants", "occupants", "residents", "renters"],
+  },
+  COMMUNICATION_CENTER: {
+    ar: ["اتصالات", "مركز الاتصال", "واتساب", "رسائل نصية", "sms", "بريد"],
+    en: ["communication", "whatsapp hub", "messages", "sms", "dispatch"],
+  },
+  ARCHIVE: {
+    ar: ["أرشيف", "الأرشيف الإلكتروني", "مستندات", "وثائق", "ملفات pdf", "مرفقات"],
+    en: ["archive", "secure archive", "documents", "files", "pdf storage", "records"],
+  },
+  AUDIT_LOGS: {
+    ar: ["تدقيق", "سجل التدقيق", "رقابة", "تتبع العمليات", "أمان", "سجل الحركات"],
+    en: ["audit logs", "audit trail", "compliance", "activity history", "security logs"],
+  },
+  DATA_RECOVERY: {
+    ar: ["استعادة البيانات", "تراجع", "نسخ احتياطي", "سلة المحذوفات", "إلغاء الحذف"],
+    en: ["data recovery", "undo center", "restore", "backup", "recycle bin", "rollback"],
+  },
+  NOTIFICATIONS: {
+    ar: ["إشعارات", "تنبيهات", "تذكير واتساب", "تذكيرات الشيكات", "رسائل تلقائية"],
+    en: ["notifications", "alerts", "reminders", "whatsapp alerts", "automated messages"],
+  },
+  OPERATIONAL_CONTROL: {
+    ar: ["رقابة تشغيلية", "مركز الرقابة", "إحصائيات الإدارة", "مؤشرات الأداء"],
+    en: ["operational control", "operations monitor", "executive oversight", "kpi center"],
+  },
+  PROPERTY_OPERATIONS: {
+    ar: ["عمليات العقارات", "شاغر", "نسبة الإشغال", "وحدات شاغرة", "حركة الإشغال"],
+    en: ["property operations", "occupancy", "vacancy rate", "vacant units"],
+  },
+  DOCUMENT_CONTROL: {
+    ar: ["رقابة المستندات", "صلاحية العقود", "وثائق منتهية", "مطابقة قانونية"],
+    en: ["document control", "expiry tracking", "compliance verification", "document validity"],
+  },
+  TASK_CENTER: {
+    ar: ["مهام", "مركز المهام", "متابعات", "قائمة المهام", "تكليفات"],
+    en: ["task center", "tasks", "todo list", "follow ups", "assignments"],
+  },
+  REPORTS: {
+    ar: ["تقارير", "التقارير التحليلية", "تقرير مالي", "تصدير excel", "كشوفات"],
+    en: ["reports", "analytical reports", "financial reporting", "export", "statements"],
+  },
+  SETTINGS: {
+    ar: ["إعدادات", "اعدادات النظام", "تهيئة", "خيارات", "معايير المخاطر"],
+    en: ["settings", "system configuration", "kpis", "preferences", "risk parameters"],
+  },
+  ADMIN_CENTER: {
+    ar: ["مركز التحكم الإداري", "إدارة المستخدمين", "صلاحيات", "أدوار", "تحكم"],
+    en: ["admin center", "rbac", "user management", "security administration", "permissions"],
+  },
+};
+
 export const Sidebar: React.FC<SidebarProps> = ({
   currentView,
   onSelectView,
@@ -66,6 +206,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
   console.log("Sidebar: currentUser =", currentUser, "loginMode =", loginMode);
   const { cheques, cases, notifications, units, leases, maintenanceRequests } = useData();
   const cloudState = useCloudConnectivity();
+
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Global quick-focus shortcut: '/' or 'Ctrl+K' / 'Cmd+K'
+  React.useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement as HTMLElement | null;
+      const isInput =
+        activeEl &&
+        (activeEl.tagName === "INPUT" ||
+          activeEl.tagName === "TEXTAREA" ||
+          activeEl.isContentEditable);
+
+      if (
+        (e.key === "/" || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k")) &&
+        !isInput
+      ) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, []);
 
   const [expandedSections, setExpandedSections] = React.useState<Record<string, boolean>>({
     navFinancialsHeader: false,
@@ -334,6 +501,91 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return item.id !== "TENANT_PORTAL" && item.id !== "OWNER_PORTAL" && item.id !== "PROPERTY_REVIEW";
   });
 
+  // Associate each permitted item with its parent section key
+  const permittedItemsWithSection = React.useMemo(() => {
+    let currentSectionKey: string | undefined = undefined;
+    return navItems
+      .filter((item) => !item.requiredPermission || hasPermission(item.requiredPermission))
+      .map((item) => {
+        if (item.sectionHeaderKey) {
+          currentSectionKey = item.sectionHeaderKey;
+        }
+        return {
+          ...item,
+          parentSectionKey: currentSectionKey,
+        };
+      });
+  }, [navItems, hasPermission]);
+
+  const normalizedQuery = normalizeSearchText(searchQuery);
+
+  const filteredItems = React.useMemo(() => {
+    if (!normalizedQuery) {
+      return permittedItemsWithSection;
+    }
+
+    return permittedItemsWithSection.filter((item) => {
+      // 1. Localized label
+      const localizedLabel = typeof item.labelKey === "string" ? t(item.labelKey as any) : "";
+      if (normalizeSearchText(localizedLabel).includes(normalizedQuery)) {
+        return true;
+      }
+
+      // 2. Direct string value fallback
+      if (
+        typeof item.labelKey === "string" &&
+        normalizeSearchText(item.labelKey).includes(normalizedQuery)
+      ) {
+        return true;
+      }
+
+      // 3. View identifier (e.g. LEASES, CHEQUE_OPERATIONS, RENEW_LEASE)
+      if (item.id.toLowerCase().replace(/_/g, " ").includes(normalizedQuery)) {
+        return true;
+      }
+
+      // 4. Parent section title
+      if (item.parentSectionKey) {
+        const sectionTitle = t(item.parentSectionKey as any);
+        if (normalizeSearchText(sectionTitle).includes(normalizedQuery)) {
+          return true;
+        }
+        const sectionMeta = sectionMetadata[item.parentSectionKey];
+        if (
+          sectionMeta &&
+          (normalizeSearchText(sectionMeta.ar).includes(normalizedQuery) ||
+            normalizeSearchText(sectionMeta.en).includes(normalizedQuery))
+        ) {
+          return true;
+        }
+      }
+
+      // 5. Keyword synonyms
+      const keywords = navItemKeywords[item.id];
+      if (keywords) {
+        if (keywords.ar.some((k) => normalizeSearchText(k).includes(normalizedQuery))) {
+          return true;
+        }
+        if (keywords.en.some((k) => normalizeSearchText(k).includes(normalizedQuery))) {
+          return true;
+        }
+      }
+
+      return false;
+    });
+  }, [permittedItemsWithSection, normalizedQuery, t]);
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape") {
+      setSearchQuery("");
+      searchInputRef.current?.blur();
+    } else if (e.key === "Enter" && filteredItems.length > 0) {
+      e.preventDefault();
+      onSelectView(filteredItems[0].id);
+      onClose();
+    }
+  };
+
   return (
     <>
       {/* Backdrop for mobile */}
@@ -354,123 +606,286 @@ export const Sidebar: React.FC<SidebarProps> = ({
             : "-translate-x-full rtl:translate-x-full lg:translate-x-0 lg:rtl:translate-x-0"
         }`}
       >
-        {/* Mobile Close Button */}
-        <div className="p-3 border-b border-slate-100 flex justify-end lg:hidden shrink-0">
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-            aria-label="Close navigation menu"
-          >
-            <X className="w-5 h-5" />
-          </button>
+        {/* Sidebar Header & Search Navigation Filter */}
+        <div className="p-3 border-b border-slate-100 flex flex-col gap-2 shrink-0 bg-white">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              {language === "ar" ? "قائمة التنقل" : "Navigation"}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={onClose}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer lg:hidden"
+                aria-label={language === "ar" ? "إغلاق القائمة" : "Close navigation menu"}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Search Input Box */}
+          <div className="relative flex items-center">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute start-2.5 pointer-events-none" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              placeholder={
+                language === "ar"
+                  ? "بحث في الشاشات والوحدات..."
+                  : "Search views & modules..."
+              }
+              className="w-full bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 focus:border-amber-500 rounded-lg ps-8 pe-12 py-1.5 text-xs text-slate-800 placeholder-slate-400 transition-colors focus:outline-none focus:ring-1 focus:ring-amber-500/30"
+              aria-label={
+                language === "ar"
+                  ? "البحث في القوائم والشاشات"
+                  : "Search navigation views"
+              }
+            />
+            {searchQuery ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  searchInputRef.current?.focus();
+                }}
+                className="absolute end-2 p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 transition-colors cursor-pointer"
+                aria-label={language === "ar" ? "مسح البحث" : "Clear search"}
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono text-slate-400 bg-slate-100 rounded border border-slate-200 absolute end-2 pointer-events-none">
+                /
+              </kbd>
+            )}
+          </div>
         </div>
 
         {/* Navigation Links */}
         <div className="flex-1 min-h-0 overflow-y-auto px-3.5 py-4 space-y-1.5 scrollbar-thin">
-          {navItems.map((item, index) => {
-            if (item.requiredPermission && !hasPermission(item.requiredPermission)) {
-              return null;
-            }
+          {normalizedQuery ? (
+            // FILTERED NAVIGATION MODE
+            <>
+              <div className="px-1.5 py-1 text-[11px] text-slate-500 flex items-center justify-between font-medium border-b border-slate-100 pb-2 mb-2">
+                <span>
+                  {language === "ar"
+                    ? `${filteredItems.length} شاشة مطابقة`
+                    : `${filteredItems.length} matching view${filteredItems.length === 1 ? "" : "s"}`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="text-amber-600 hover:text-amber-700 hover:underline cursor-pointer text-[11px] font-semibold"
+                >
+                  {language === "ar" ? "إلغاء التصفية" : "Reset filter"}
+                </button>
+              </div>
 
-            const isActive = currentView === item.id;
-            const currentSectionKey = item.sectionHeaderKey;
-            
-            // Find if this item belongs to a collapsed section
-            // We need to look back at the items to find which section we are currently in
-            let itemSection: string | undefined = undefined;
-            for (let i = index; i >= 0; i--) {
-              if (navItems[i].sectionHeaderKey) {
-                itemSection = navItems[i].sectionHeaderKey;
-                break;
-              }
-            }
-
-            const isCollapsed = itemSection ? !expandedSections[itemSection] : false;
-
-            return (
-              <React.Fragment key={item.id}>
-                {item.sectionHeaderKey && (() => {
-                  const sectionBadge = getSectionBadge(item.sectionHeaderKey);
-                  const isExpanded = Boolean(expandedSections[item.sectionHeaderKey]);
-                  return (
-                    <button
-                      type="button"
-                      onClick={() => toggleSection(item.sectionHeaderKey!)}
-                      className="w-full flex items-center justify-between mt-3 mb-1 px-3 py-2 bg-slate-100/90 hover:bg-slate-200/80 rounded-lg group cursor-pointer transition-colors"
-                      aria-expanded={isExpanded}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <p className="text-xs font-bold uppercase tracking-wider text-slate-800 group-hover:text-slate-950 transition-colors truncate">
-                          {t(item.sectionHeaderKey as any)}
-                        </p>
-                        {!isExpanded && sectionBadge && sectionBadge.count > 0 && (
-                          <span
-                            className={`px-1.5 py-0.5 text-[10px] font-black rounded-full shrink-0 ${
-                              sectionBadge.variant === "danger"
-                                ? "bg-rose-100 text-rose-700"
-                                : sectionBadge.variant === "warning"
-                                ? "bg-amber-100 text-amber-800"
-                                : "bg-blue-100 text-blue-800"
-                            }`}
-                          >
-                            {sectionBadge.count}
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-slate-500 group-hover:text-slate-800 transition-colors shrink-0 ms-1">
-                        {isExpanded ? (
-                          <ChevronDown className="w-3.5 h-3.5" />
-                        ) : (
-                          <ChevronRight className="w-3.5 h-3.5 rtl:rotate-180" />
-                        )}
-                      </span>
-                    </button>
-                  );
-                })()}
-
-                {(!itemSection || !isCollapsed) && (
+              {filteredItems.length === 0 ? (
+                <div className="py-8 px-3 text-center flex flex-col items-center">
+                  <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-2">
+                    <Search className="w-4 h-4" />
+                  </div>
+                  <p className="text-xs font-semibold text-slate-700 mb-1">
+                    {language === "ar" ? "لا توجد شاشات مطابقة" : "No matching views"}
+                  </p>
+                  <p className="text-[11px] text-slate-500 mb-3 max-w-[200px] leading-relaxed">
+                    {language === "ar"
+                      ? `لم نتمكن من العثور على أي شاشة تطابق "${searchQuery}"`
+                      : `No navigation views match "${searchQuery}"`}
+                  </p>
                   <button
-                    id={`nav-link-${(item.id || "").toLowerCase().replace(/_/g, "-")}`}
                     type="button"
-                    onClick={() => {
-                      onSelectView(item.id);
-                      onClose();
-                    }}
-                    className={`w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-150 text-start group cursor-pointer ${
-                      isActive
-                        ? "bg-slate-900 text-white shadow-xs font-bold"
-                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                    }`}
+                    onClick={() => setSearchQuery("")}
+                    className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-xs font-medium transition-colors cursor-pointer"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span
-                        className={`shrink-0 transition-colors ${
-                          isActive ? "text-amber-400" : "text-slate-400 group-hover:text-slate-600"
-                        }`}
-                      >
-                        {item.icon}
-                      </span>
-                      <span className="truncate">{t(item.labelKey)}</span>
-                    </div>
-
-                    {item.badgeCount !== undefined && item.badgeCount > 0 && (
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
-                          isActive
-                            ? "bg-amber-400 text-slate-950"
-                            : item.badgeVariant === "danger"
-                            ? "bg-rose-100 text-rose-700 font-bold"
-                            : "bg-amber-100 text-amber-800 font-bold"
-                        }`}
-                      >
-                        {item.badgeCount}
-                      </span>
-                    )}
+                    {language === "ar" ? "عرض جميع الشاشات" : "Show all views"}
                   </button>
-                )}
-              </React.Fragment>
-            );
-          })}
+                </div>
+              ) : (
+                (() => {
+                  let lastSectionKey: string | undefined = undefined;
+                  return filteredItems.map((item) => {
+                    const isActive = currentView === item.id;
+                    const isNewSection = item.parentSectionKey !== lastSectionKey;
+                    if (item.parentSectionKey) {
+                      lastSectionKey = item.parentSectionKey;
+                    }
+
+                    return (
+                      <React.Fragment key={item.id}>
+                        {isNewSection && item.parentSectionKey && (
+                          <div className="mt-3 mb-1 px-2.5 py-1 bg-slate-100/80 rounded-md flex items-center justify-between">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-700 truncate">
+                              {t(item.parentSectionKey as any)}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-medium">
+                              {language === "ar" ? "تطابق" : "Match"}
+                            </span>
+                          </div>
+                        )}
+
+                        <button
+                          id={`nav-link-${(item.id || "").toLowerCase().replace(/_/g, "-")}`}
+                          type="button"
+                          onClick={() => {
+                            onSelectView(item.id);
+                            onClose();
+                          }}
+                          className={`w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-150 text-start group cursor-pointer ${
+                            isActive
+                              ? "bg-slate-900 text-white shadow-xs font-bold"
+                              : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span
+                              className={`shrink-0 transition-colors ${
+                                isActive ? "text-amber-400" : "text-slate-400 group-hover:text-slate-600"
+                              }`}
+                            >
+                              {item.icon}
+                            </span>
+                            <div className="flex flex-col min-w-0">
+                              <span className="truncate">{t(item.labelKey)}</span>
+                              {item.parentSectionKey && (
+                                <span className="text-[10px] text-slate-400 font-normal truncate">
+                                  {t(item.parentSectionKey as any)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {item.badgeCount !== undefined && item.badgeCount > 0 && (
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
+                                isActive
+                                  ? "bg-amber-400 text-slate-950"
+                                  : item.badgeVariant === "danger"
+                                  ? "bg-rose-100 text-rose-700 font-bold"
+                                  : "bg-amber-100 text-amber-800 font-bold"
+                              }`}
+                            >
+                              {item.badgeCount}
+                            </span>
+                          )}
+                        </button>
+                      </React.Fragment>
+                    );
+                  });
+                })()
+              )}
+            </>
+          ) : (
+            // UNFILTERED (NORMAL ACCORDION) NAVIGATION MODE
+            navItems.map((item, index) => {
+              if (item.requiredPermission && !hasPermission(item.requiredPermission)) {
+                return null;
+              }
+
+              const isActive = currentView === item.id;
+              const currentSectionKey = item.sectionHeaderKey;
+              
+              // Find if this item belongs to a collapsed section
+              // We need to look back at the items to find which section we are currently in
+              let itemSection: string | undefined = undefined;
+              for (let i = index; i >= 0; i--) {
+                if (navItems[i].sectionHeaderKey) {
+                  itemSection = navItems[i].sectionHeaderKey;
+                  break;
+                }
+              }
+
+              const isCollapsed = itemSection ? !expandedSections[itemSection] : false;
+
+              return (
+                <React.Fragment key={item.id}>
+                  {item.sectionHeaderKey && (() => {
+                    const sectionBadge = getSectionBadge(item.sectionHeaderKey);
+                    const isExpanded = Boolean(expandedSections[item.sectionHeaderKey]);
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => toggleSection(item.sectionHeaderKey!)}
+                        className="w-full flex items-center justify-between mt-3 mb-1 px-3 py-2 bg-slate-100/90 hover:bg-slate-200/80 rounded-lg group cursor-pointer transition-colors"
+                        aria-expanded={isExpanded}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-800 group-hover:text-slate-950 transition-colors truncate">
+                            {t(item.sectionHeaderKey as any)}
+                          </p>
+                          {!isExpanded && sectionBadge && sectionBadge.count > 0 && (
+                            <span
+                              className={`px-1.5 py-0.5 text-[10px] font-black rounded-full shrink-0 ${
+                                sectionBadge.variant === "danger"
+                                  ? "bg-rose-100 text-rose-700"
+                                  : sectionBadge.variant === "warning"
+                                  ? "bg-amber-100 text-amber-800"
+                                  : "bg-blue-100 text-blue-800"
+                              }`}
+                            >
+                              {sectionBadge.count}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-slate-500 group-hover:text-slate-800 transition-colors shrink-0 ms-1">
+                          {isExpanded ? (
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          ) : (
+                            <ChevronRight className="w-3.5 h-3.5 rtl:rotate-180" />
+                          )}
+                        </span>
+                      </button>
+                    );
+                  })()}
+
+                  {(!itemSection || !isCollapsed) && (
+                    <button
+                      id={`nav-link-${(item.id || "").toLowerCase().replace(/_/g, "-")}`}
+                      type="button"
+                      onClick={() => {
+                        onSelectView(item.id);
+                        onClose();
+                      }}
+                      className={`w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-150 text-start group cursor-pointer ${
+                        isActive
+                          ? "bg-slate-900 text-white shadow-xs font-bold"
+                          : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span
+                          className={`shrink-0 transition-colors ${
+                            isActive ? "text-amber-400" : "text-slate-400 group-hover:text-slate-600"
+                          }`}
+                        >
+                          {item.icon}
+                        </span>
+                        <span className="truncate">{t(item.labelKey)}</span>
+                      </div>
+
+                      {item.badgeCount !== undefined && item.badgeCount > 0 && (
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
+                            isActive
+                              ? "bg-amber-400 text-slate-950"
+                              : item.badgeVariant === "danger"
+                              ? "bg-rose-100 text-rose-700 font-bold"
+                              : "bg-amber-100 text-amber-800 font-bold"
+                          }`}
+                        >
+                          {item.badgeCount}
+                        </span>
+                      )}
+                    </button>
+                  )}
+                </React.Fragment>
+              );
+            })
+          )}
         </div>
 
         <div className="p-4 border-t border-slate-200/60 shrink-0">
