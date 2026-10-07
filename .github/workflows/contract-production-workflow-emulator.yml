@@ -1,0 +1,48 @@
+name: Contract Production Workflow Integrity
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/tests/contractProductionWorkflowIntegritySuite.ts"
+      - "src/context/DataContext.tsx"
+      - "src/context/AuthContext.tsx"
+      - "src/lib/firebase.ts"
+      - "src/types.ts"
+      - "package.json"
+      - "package-lock.json"
+      - "firebase.json"
+      - "firestore.rules"
+      - ".github/workflows/contract-production-workflow-emulator.yml"
+
+jobs:
+  contract-production-workflows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Setup Java for Firebase Emulators
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run real production workflow suite in isolated emulators
+        run: >
+          npx --yes firebase-tools@latest emulators:exec
+          --project contract-workflow-test
+          --only auth,firestore
+          "npm run test:contract-workflows"
