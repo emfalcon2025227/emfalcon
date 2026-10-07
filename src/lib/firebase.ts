@@ -12,7 +12,7 @@ export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfi
 const isBrowser = typeof window !== "undefined";
 
 function initOrGetFirestore(): Firestore {
-  const databaseId = firebaseConfig.firestoreDatabaseId || "(default)";
+  const emulatorActive = typeof process !== "undefined" && Boolean(process.env.FIRESTORE_EMULATOR_HOST);\n  const databaseId = emulatorActive ? "(default)" : (firebaseConfig.firestoreDatabaseId || "(default)");
   try {
     return initializeFirestore(
       app,
