@@ -113,7 +113,9 @@ async function readCommissionDocs(adminDb: FirebaseFirestore.Firestore, leaseId:
 export async function runContractProductionWorkflowIntegritySuite() {
   installNodeBrowserShims();
 
-  const emulatorAuthUrl = `http://${AUTH_EMULATOR_HOST}`;\n  const [firestoreHost, firestorePortRaw] = FIRESTORE_EMULATOR_HOST.split(":");\n  const firestorePort = Number(firestorePortRaw || "8080");
+  const emulatorAuthUrl = `http://${AUTH_EMULATOR_HOST}`;
+  const [firestoreHost, firestorePortRaw] = FIRESTORE_EMULATOR_HOST.split(":");
+  const firestorePort = Number(firestorePortRaw || "8080");
   try {
     connectAuthEmulator(auth, emulatorAuthUrl, { disableWarnings: true });
   } catch (err: any) {
