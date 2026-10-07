@@ -95,7 +95,11 @@ export async function runPortalProvisioningIntegritySuite() {
     );
   }
 
-  // Import the production handler only after the isolated emulator Admin app exists.\n  // server.ts reuses the first Firebase Admin app; loading it earlier could bind the test handler to production/ADC.\n  ({ handleProvisionPortalUserInternal } = await import("../../server"));\n\n  const report = (id: number, title: string, isPass: boolean, details: string) => {
+  // Import the production handler only after the isolated emulator Admin app exists.
+  // server.ts reuses the first Firebase Admin app; loading it earlier could bind the test handler to production/ADC.
+  ({ handleProvisionPortalUserInternal } = await import("../../server"));
+
+  const report = (id: number, title: string, isPass: boolean, details: string) => {
     if (isPass) {
       passed++;
       console.log(`[PASS] Matrix ${id}: ${title}\n       Details: ${details}`);
