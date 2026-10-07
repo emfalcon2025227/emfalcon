@@ -63,6 +63,9 @@ function installNodeBrowserShims() {
   win.removeEventListener = win.removeEventListener || (() => {});
   win.dispatchEvent = win.dispatchEvent || (() => true);
   (globalThis as any).window = win;
+  (globalThis as any).localStorage = localStorage;
+  (globalThis as any).sessionStorage = localStorage;
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   (globalThis as any).alert = (globalThis as any).alert || (() => {});
 }
 
