@@ -9,7 +9,7 @@
 import React, { useEffect } from "react";
 import { act, create } from "react-test-renderer";
 import { connectAuthEmulator, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { connectFirestoreEmulator, doc, getDoc } from "firebase/firestore";
+import { connectFirestoreEmulator, doc, getDoc, setDoc } from "firebase/firestore";
 import { initializeApp as initializeAdminApp, deleteApp as deleteAdminApp } from "firebase-admin/app";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
@@ -91,9 +91,9 @@ function uniqueId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-async function seedUnit(adminDb: FirebaseFirestore.Firestore, id: string) {
+async function seedUnit(id: string) {
   createdUnitIds.push(id);
-  await adminDb.collection("units").doc(id).set({
+  await setDoc(doc(db, "units", id), {
     id,
     unitNumber: id,
     propertyId: "test-property",
@@ -104,12 +104,9 @@ async function seedUnit(adminDb: FirebaseFirestore.Firestore, id: string) {
   });
 }
 
-async function seedLease(
-  adminDb: FirebaseFirestore.Firestore,
-  lease: Lease
-) {
+async function seedLease(lease: Lease) {
   createdLeaseIds.push(lease.id);
-  await adminDb.collection("leases").doc(lease.id).set(lease);
+  await setDoc(doc(db, "leases", lease.id), lease);
 }
 
 async function readCommissionDocs(adminDb: FirebaseFirestore.Firestore, leaseId: string) {
@@ -226,7 +223,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
 
     // A — real new lease lifecycle: add -> submit -> approve.
     const unitA = uniqueId("unit-a");
-    await seedUnit(adminDb, unitA);
+    await seedUnit(unitA);
     const leaseAId = uniqueId("lease-a");
     const leaseA = getApi().addLease({
       leaseNumber: `TEST-A-${Date.now()}`,
@@ -263,7 +260,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
 
     // B — real concurrent approval of the same production workflow.
     const unitB = uniqueId("unit-b");
-    await seedUnit(adminDb, unitB);
+    await seedUnit(unitB);
     const leaseB = getApi().addLease({
       leaseNumber: `TEST-B-${Date.now()}`, ownerId, propertyId, unitId: unitB, tenantId,
       startDate: "2027-01-01", endDate: "2027-12-31", annualRent: 90000,
@@ -287,8 +284,8 @@ export async function runContractProductionWorkflowIntegritySuite() {
     // C — real renewal creation + approval workflow.
     const unitC = uniqueId("unit-c");
     const leaseCId = uniqueId("lease-c");
-    await seedUnit(adminDb, unitC);
-    await seedLease(adminDb, {
+    await seedUnit(unitC);
+    await seedLease({
       id: leaseCId, leaseNumber: `TEST-C-${Date.now()}`, ownerId, propertyId, unitId: unitC, tenantId,
       startDate: "2026-01-01", endDate: "2026-12-31", annualRent: 100000, installmentsCount: 1,
       installments: [], securityDeposit: 5000, securityDepositHeld: 5000, contractStatus: "ACTIVE",
@@ -324,7 +321,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     // D — real concurrent renewal approval.
     const unitD = uniqueId("unit-d");
     const leaseDId = uniqueId("lease-d");
-    await seedUnit(adminDb, unitD);
+    await seedUnit(unitD);
     await seedLease(adminDb, {
       id: leaseDId, leaseNumber: `TEST-D-${Date.now()}`, ownerId, propertyId, unitId: unitD, tenantId,
       startDate: "2026-01-01", endDate: "2026-12-31", annualRent: 120000, installmentsCount: 1,
@@ -361,7 +358,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
 
     // E — real owner admin fee creation during lease approval.
     const unitE = uniqueId("unit-e");
-    await seedUnit(adminDb, unitE);
+    await seedUnit(unitE);
     const leaseE = getApi().addLease({
       leaseNumber: `TEST-E-${Date.now()}`, ownerId, propertyId, unitId: unitE, tenantId,
       startDate: "2027-01-01", endDate: "2027-12-31", annualRent: 100000, installmentsCount: 1,
@@ -389,7 +386,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
 
     // F — real tenant admin fee creation during lease approval.
     const unitF = uniqueId("unit-f");
-    await seedUnit(adminDb, unitF);
+    await seedUnit(unitF);
     const leaseF = getApi().addLease({
       leaseNumber: `TEST-F-${Date.now()}`, ownerId, propertyId, unitId: unitF, tenantId,
       startDate: "2027-01-01", endDate: "2027-12-31", annualRent: 100000, installmentsCount: 1,
