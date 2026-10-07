@@ -9,14 +9,14 @@
 import React, { useEffect } from "react";
 import { act, create } from "react-test-renderer";
 import { connectAuthEmulator, connectFirestoreEmulator, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { collection, deleteDoc, doc, getDoc, getDocs, query, where, setDoc } from "firebase/firestore";
-import { initializeApp as initializeAdminApp, deleteApp as deleteAdminApp, getApps as getAdminApps, cert } from "firebase-admin/app";
+import { doc, getDoc } from "firebase/firestore";
+import { initializeApp as initializeAdminApp, deleteApp as deleteAdminApp } from "firebase-admin/app";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
 import { DataProvider, useData, DataContextType } from "../context/DataContext";
 import { LanguageProvider } from "../context/LanguageContext";
 import { AuthProvider } from "../context/AuthContext";
-import { auth, db, app } from "../lib/firebase";
+import { auth, db } from "../lib/firebase";
 import firebaseConfig from "../../firebase-applet-config.json";
 import type { Lease, LeaseRenewalRecord } from "../types";
 
@@ -70,9 +70,9 @@ async function sleep(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function waitFor(condition: () => boolean, timeoutMs = 15000, intervalMs = 100) {
+async function waitFor(condition: () => boolean | Promise<boolean>, timeoutMs = 15000, intervalMs = 100) {
   const started = Date.now();
-  while (!condition()) {
+  while (!(await condition())) {
     if (Date.now() - started > timeoutMs) {
       throw new Error("Timed out waiting for production DataContext state.");
     }
@@ -207,7 +207,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
       ]);
     });
 
-    const api = dataApi!;
+    const getApi = () => {\n      if (!dataApi) throw new Error("DataContext API is not ready.");\n      return dataApi;\n    };
     const ownerId = "test-owner";
     const tenantId = "test-tenant";
     const propertyId = "test-property";
@@ -216,7 +216,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     const unitA = uniqueId("unit-a");
     await seedUnit(adminDb, unitA);
     const leaseAId = uniqueId("lease-a");
-    const leaseA = api.addLease({
+    const leaseA = getApi().addLease({
       leaseNumber: `TEST-A-${Date.now()}`,
       ownerId,
       propertyId,
@@ -237,10 +237,10 @@ export async function runContractProductionWorkflowIntegritySuite() {
       contractStatus: "ACTIVE",
     } as any);
     createdLeaseIds.push(leaseA.id);
-    await waitFor(() => api.leases.some((l) => l.id === leaseA.id));
-    const submitA = api.submitLeaseForApproval(leaseA.id);
+    await waitFor(() => getApi().leases.some((l) => l.id === leaseA.id));
+    const submitA = getApi().submitLeaseForApproval(leaseA.id);
     await waitFor(async () => (await getDoc(doc(db, "leases", leaseA.id))).data()?.contractStatus === "PENDING_APPROVAL" as any);
-    const approveA = await api.approveLease(leaseA.id, "Real production workflow test");
+    const approveA = await getApi().approveLease(leaseA.id, "Real production workflow test");
     const savedA = await getDoc(doc(db, "leases", leaseA.id));
     const unitSavedA = await getDoc(doc(db, "units", unitA));
     record(1, "A", "Real new lease approval workflow",
@@ -258,7 +258,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
       installmentsCount: 1, installments: [], securityDeposit: 4500, contractStatus: "ACTIVE",
     } as any);
     createdLeaseIds.push(leaseB.id);
-    await waitFor(() => api.leases.some((l) => l.id === leaseB.id));
+    await waitFor(() => getApi().leases.some((l) => l.id === leaseB.id));
     api.submitLeaseForApproval(leaseB.id);
     await waitFor(async () => (await getDoc(doc(db, "leases", leaseB.id))).data()?.contractStatus === "PENDING_APPROVAL" as any);
     const [b1, b2] = await Promise.all([
@@ -282,8 +282,8 @@ export async function runContractProductionWorkflowIntegritySuite() {
       installments: [], securityDeposit: 5000, securityDepositHeld: 5000, contractStatus: "ACTIVE",
       renewalSequence: 1, createdAt: new Date().toISOString(),
     });
-    await waitFor(() => dataApi!.leases.some((l) => l.id === leaseCId));
-    const renewalC = api.createLeaseRenewal({
+    await waitFor(() => getApi().leases.some((l) => l.id === leaseCId));
+    const renewalC = getApi().createLeaseRenewal({
       originalLeaseId: leaseCId, originalLeaseNumber: `TEST-C`,
       ownerId, propertyId, unitId: unitC, tenantId,
       currentAnnualRent: 100000, newAnnualRent: 110000, increaseAmount: 10000, increasePercentage: 10,
@@ -294,7 +294,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     if (!renewalC.success || !renewalC.renewal) throw new Error(`C createLeaseRenewal failed: ${renewalC.error}`);
     createdRenewalIds.push(renewalC.renewal.id);
     await waitFor(async () => (await getDoc(doc(db, "lease_renewals", renewalC.renewal!.id))).exists() as any);
-    const approveC = await api.approveLeaseRenewal(renewalC.renewal.id, "Real renewal workflow");
+    const approveC = await getApi().approveLeaseRenewal(renewalC.renewal.id, "Real renewal workflow");
     const savedRenC = await getDoc(doc(db, "lease_renewals", renewalC.renewal.id));
     const originalC = await getDoc(doc(db, "leases", leaseCId));
     const newLeaseCId = savedRenC.data()?.newLeaseId;
@@ -318,7 +318,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
       installments: [], securityDeposit: 6000, securityDepositHeld: 6000, contractStatus: "ACTIVE",
       renewalSequence: 1, createdAt: new Date().toISOString(),
     });
-    await waitFor(() => dataApi!.leases.some((l) => l.id === leaseDId));
+    await waitFor(() => getApi().leases.some((l) => l.id === leaseDId));
     const renewalD = api.createLeaseRenewal({
       originalLeaseId: leaseDId, originalLeaseNumber: `TEST-D`,
       ownerId, propertyId, unitId: unitD, tenantId,
@@ -358,7 +358,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
       },
     } as any);
     createdLeaseIds.push(leaseE.id);
-    await waitFor(() => dataApi!.leases.some((l) => l.id === leaseE.id));
+    await waitFor(() => getApi().leases.some((l) => l.id === leaseE.id));
     api.submitLeaseForApproval(leaseE.id);
     await waitFor(async () => (await getDoc(doc(db, "leases", leaseE.id))).data()?.contractStatus === "PENDING_APPROVAL" as any);
     const approveE = await api.approveLease(leaseE.id, "Owner fee production workflow");
@@ -386,7 +386,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
       },
     } as any);
     createdLeaseIds.push(leaseF.id);
-    await waitFor(() => dataApi!.leases.some((l) => l.id === leaseF.id));
+    await waitFor(() => getApi().leases.some((l) => l.id === leaseF.id));
     api.submitLeaseForApproval(leaseF.id);
     await waitFor(async () => (await getDoc(doc(db, "leases", leaseF.id))).data()?.contractStatus === "PENDING_APPROVAL" as any);
     const approveF = await api.approveLease(leaseF.id, "Tenant fee production workflow");
