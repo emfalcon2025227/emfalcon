@@ -229,6 +229,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
         annualRent,
         status: "VACANT",
       } as any);
+      await waitFor(() => getApi().units.some((u) => u.id === unit.id));
       const lease = getApi().addLease({
         leaseNumber: `TEST-${label}-${Date.now()}`,
         ownerId,
