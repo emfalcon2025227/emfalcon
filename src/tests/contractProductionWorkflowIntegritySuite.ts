@@ -66,6 +66,10 @@ function installNodeBrowserShims() {
   (globalThis as any).localStorage = localStorage;
   (globalThis as any).sessionStorage = localStorage;
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  (globalThis as any).document = (globalThis as any).document || {
+    documentElement: { dir: "", lang: "" },
+  };
+  win.crypto = win.crypto || (globalThis as any).crypto;
   (globalThis as any).alert = (globalThis as any).alert || (() => {});
 }
 
