@@ -106,6 +106,7 @@ export async function runLeaseRenewalAdminFeeIntegritySuite(): Promise<TestRepor
   if (
     !testProjectId ||
     !firestoreEmulatorHost ||
+    !configuredProjectId ||
     testProjectId === configuredProjectId
   ) {
     throw new Error(
