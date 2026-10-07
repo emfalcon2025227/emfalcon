@@ -759,7 +759,9 @@ ${activationLink}
   }
 }
 
-const handleProvisionPortalUser = (req: any, res: any) => handleProvisionPortalUserInternal(req, res);\n\napp.post(["/api/auth/provision-portal-user","/api/auth/provision-portal-user/"],authenticateFirebaseToken,handleProvisionPortalUser);app.post(["/api/auth/provision-staff-user", "/api/auth/provision-staff-user/"], authenticateFirebaseToken, requireUserManagementAdmin, async (req, res) => {
+const handleProvisionPortalUser = (req: any, res: any) => handleProvisionPortalUserInternal(req, res);
+
+app.post(["/api/auth/provision-portal-user","/api/auth/provision-portal-user/"], authenticateFirebaseToken, handleProvisionPortalUser);app.post(["/api/auth/provision-staff-user", "/api/auth/provision-staff-user/"], authenticateFirebaseToken, requireUserManagementAdmin, async (req, res) => {
   try {
     const { username, email, password, nameAr, nameEn, role, phone, isActive } = req.body;
     if (!email || !email.includes("@")) {
