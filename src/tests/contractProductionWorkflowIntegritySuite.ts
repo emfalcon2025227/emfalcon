@@ -294,7 +294,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
       installments: [], securityDeposit: 5000, securityDepositHeld: 5000, contractStatus: "ACTIVE",
       renewalSequence: 1, createdAt: new Date().toISOString(),
     });
-    await waitFor(() => getApi().leases.some((l) => l.id === leaseCId));
+    await waitFor(() => getApi().units.some((u) => u.id === unitC));\n    await waitFor(() => getApi().leases.some((l) => l.id === leaseCId));
     const renewalC = getApi().createLeaseRenewal({
       originalLeaseId: leaseCId, originalLeaseNumber: `TEST-C`,
       ownerId, propertyId, unitId: unitC, tenantId,
@@ -330,7 +330,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
       installments: [], securityDeposit: 6000, securityDepositHeld: 6000, contractStatus: "ACTIVE",
       renewalSequence: 1, createdAt: new Date().toISOString(),
     });
-    await waitFor(() => getApi().leases.some((l) => l.id === leaseDId));
+    await waitFor(() => getApi().units.some((u) => u.id === unitD));\n    await waitFor(() => getApi().leases.some((l) => l.id === leaseDId));
     const renewalD = api.createLeaseRenewal({
       originalLeaseId: leaseDId, originalLeaseNumber: `TEST-D`,
       ownerId, propertyId, unitId: unitD, tenantId,
