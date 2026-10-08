@@ -286,7 +286,8 @@ export async function runContractProductionWorkflowIntegritySuite() {
     createdLeaseIds.push(leaseA.id);
     await waitFor(() => getApi().leases.some((l) => l.id === leaseA.id));
     const submitA = getApi().submitLeaseForApproval(leaseA.id);
-    await waitFor(async () => (await getDoc(doc(db, "leases", leaseA.id))).data()?.contractStatus === "PENDING_APPROVAL" as any);
+    await waitFor(async () => (await getDoc(doc(db, "leases", leaseA.id))).data()?.contractStatus === "PENDING_APPROVAL");
+    await waitFor(() => getApi().leases.find((l) => l.id === leaseA.id)?.contractStatus === "PENDING_APPROVAL");
     const approveA = await getApi().approveLease(leaseA.id, "Real production workflow test");
     const savedA = await getDoc(doc(db, "leases", leaseA.id));
     const unitSavedA = await getDoc(doc(db, "units", unitA.id));
@@ -297,7 +298,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     );
 
     // B — real concurrent approval of the same production workflow.
-    const unitB = getApi().addUnit({ unitNumber: `TEST-B-UNIT-${Date.now()}`, propertyId, type: "1BR", annualRent: 90000, status: "VACANT" } as any).id;
+    const unitB = getApi().addUnit({ unitNumber: `TEST-B-UNIT-${Date.now()}`, propertyId, type: "1BR", annualRent: 90000, status: "VACANT" } as any);
     const leaseB = getApi().addLease({
       leaseNumber: `TEST-B-${Date.now()}`, ownerId, propertyId, unitId: unitB.id, tenantId,
       startDate: "2027-01-01", endDate: "2027-12-31", annualRent: 90000,
@@ -306,7 +307,8 @@ export async function runContractProductionWorkflowIntegritySuite() {
     createdLeaseIds.push(leaseB.id);
     await waitFor(() => getApi().leases.some((l) => l.id === leaseB.id));
     getApi().submitLeaseForApproval(leaseB.id);
-    await waitFor(async () => (await getDoc(doc(db, "leases", leaseB.id))).data()?.contractStatus === "PENDING_APPROVAL" as any);
+    await waitFor(async () => (await getDoc(doc(db, "leases", leaseB.id))).data()?.contractStatus === "PENDING_APPROVAL");
+    await waitFor(() => getApi().leases.find((l) => l.id === leaseB.id)?.contractStatus === "PENDING_APPROVAL");
     const [b1, b2] = await Promise.all([
       getApi().approveLease(leaseB.id, "Concurrent worker 1"),
       getApi().approveLease(leaseB.id, "Concurrent worker 2"),
@@ -375,7 +377,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
 
 
     // E — real owner admin fee creation during lease approval.
-    const unitE = getApi().addUnit({ unitNumber: `TEST-E-UNIT-${Date.now()}`, propertyId, type: "1BR", annualRent: 100000, status: "VACANT" } as any).id;
+    const unitE = getApi().addUnit({ unitNumber: `TEST-E-UNIT-${Date.now()}`, propertyId, type: "1BR", annualRent: 100000, status: "VACANT" } as any);
     const leaseE = getApi().addLease({
       leaseNumber: `TEST-E-${Date.now()}`, ownerId, propertyId, unitId: unitE.id, tenantId,
       startDate: "2027-01-01", endDate: "2027-12-31", annualRent: 100000, installmentsCount: 1,
@@ -388,7 +390,8 @@ export async function runContractProductionWorkflowIntegritySuite() {
     createdLeaseIds.push(leaseE.id);
     await waitFor(() => getApi().leases.some((l) => l.id === leaseE.id));
     getApi().submitLeaseForApproval(leaseE.id);
-    await waitFor(async () => (await getDoc(doc(db, "leases", leaseE.id))).data()?.contractStatus === "PENDING_APPROVAL" as any);
+    await waitFor(async () => (await getDoc(doc(db, "leases", leaseE.id))).data()?.contractStatus === "PENDING_APPROVAL");
+    await waitFor(() => getApi().leases.find((l) => l.id === leaseE.id)?.contractStatus === "PENDING_APPROVAL");
     const approveE = await getApi().approveLease(leaseE.id, "Owner fee production workflow");
     const ownerFees = await readCommissionDocs(adminDb, leaseE.id);
     const ownerFee = ownerFees.find((c: any) => c.partyType === "OWNER" && c.commissionType === "ADMIN_FEE");
@@ -402,7 +405,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     );
 
     // F — real tenant admin fee creation during lease approval.
-    const unitF = getApi().addUnit({ unitNumber: `TEST-F-UNIT-${Date.now()}`, propertyId, type: "1BR", annualRent: 100000, status: "VACANT" } as any).id;
+    const unitF = getApi().addUnit({ unitNumber: `TEST-F-UNIT-${Date.now()}`, propertyId, type: "1BR", annualRent: 100000, status: "VACANT" } as any);
     const leaseF = getApi().addLease({
       leaseNumber: `TEST-F-${Date.now()}`, ownerId, propertyId, unitId: unitF.id, tenantId,
       startDate: "2027-01-01", endDate: "2027-12-31", annualRent: 100000, installmentsCount: 1,
@@ -415,7 +418,8 @@ export async function runContractProductionWorkflowIntegritySuite() {
     createdLeaseIds.push(leaseF.id);
     await waitFor(() => getApi().leases.some((l) => l.id === leaseF.id));
     getApi().submitLeaseForApproval(leaseF.id);
-    await waitFor(async () => (await getDoc(doc(db, "leases", leaseF.id))).data()?.contractStatus === "PENDING_APPROVAL" as any);
+    await waitFor(async () => (await getDoc(doc(db, "leases", leaseF.id))).data()?.contractStatus === "PENDING_APPROVAL");
+    await waitFor(() => getApi().leases.find((l) => l.id === leaseF.id)?.contractStatus === "PENDING_APPROVAL");
     const approveF = await getApi().approveLease(leaseF.id, "Tenant fee production workflow");
     const tenantFees = await readCommissionDocs(adminDb, leaseF.id);
     const tenantFee = tenantFees.find((c: any) => c.partyType === "TENANT" && c.commissionType === "ADMIN_FEE");
