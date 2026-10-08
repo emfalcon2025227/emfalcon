@@ -213,6 +213,8 @@ export async function runContractProductionWorkflowIntegritySuite() {
       ]);
     });
 
+    const runWithAct = async (fn: () => any) => { let value: any; await act(async () => { value = await fn(); }); return value; };
+
     const getApi = () => {
       if (!dataApi) throw new Error("DataContext API is not ready.");
       return dataApi;
