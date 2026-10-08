@@ -255,6 +255,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
       const submit = getApi().submitLeaseForApproval(lease.id);
       if (!submit.success) throw new Error(`${label} submit failed: ${submit.error}`);
       await waitFor(async () => (await getDoc(doc(db, "leases", lease.id))).data()?.contractStatus === "PENDING_APPROVAL");
+      await waitFor(() => getApi().leases.find((l) => l.id === lease.id)?.contractStatus === "PENDING_APPROVAL");
       const approval = await getApi().approveLease(lease.id, `Real ${label} original lease approval`);
       if (!approval.success) throw new Error(`${label} approval failed: ${approval.error}`);
       return { unitId: unit.id, leaseId: lease.id, leaseNumber: lease.leaseNumber };
@@ -262,6 +263,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
 
     // A — real new lease lifecycle: add -> submit -> approve.
     const unitA = getApi().addUnit({ unitNumber: `TEST-A-UNIT-${Date.now()}`, propertyId, type: "1BR", annualRent: 80000, status: "VACANT" } as any);
+    await waitFor(() => getApi().units.some((u) => u.id === unitA.id));
     const leaseAId = uniqueId("lease-a");
     const leaseA = getApi().addLease({
       leaseNumber: `TEST-A-${Date.now()}`,
@@ -299,6 +301,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
 
     // B — real concurrent approval of the same production workflow.
     const unitB = getApi().addUnit({ unitNumber: `TEST-B-UNIT-${Date.now()}`, propertyId, type: "1BR", annualRent: 90000, status: "VACANT" } as any);
+    await waitFor(() => getApi().units.some((u) => u.id === unitB.id));
     const leaseB = getApi().addLease({
       leaseNumber: `TEST-B-${Date.now()}`, ownerId, propertyId, unitId: unitB.id, tenantId,
       startDate: "2027-01-01", endDate: "2027-12-31", annualRent: 90000,
