@@ -261,7 +261,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     };
 
     // A — real new lease lifecycle: add -> submit -> approve.
-    const unitA = getApi().addUnit({ unitNumber: `TEST-A-UNIT-${Date.now()}`, propertyId, type: "1BR", annualRent: 80000, status: "VACANT" } as any).id;
+    const unitA = getApi().addUnit({ unitNumber: `TEST-A-UNIT-${Date.now()}`, propertyId, type: "1BR", annualRent: 80000, status: "VACANT" } as any);
     const leaseAId = uniqueId("lease-a");
     const leaseA = getApi().addLease({
       leaseNumber: `TEST-A-${Date.now()}`,
