@@ -267,7 +267,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
       leaseNumber: `TEST-A-${Date.now()}`,
       ownerId,
       propertyId,
-      unitId: unitA,
+      unitId: unitA.id,
       tenantId,
       startDate: "2027-01-01",
       endDate: "2027-12-31",
@@ -289,7 +289,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     await waitFor(async () => (await getDoc(doc(db, "leases", leaseA.id))).data()?.contractStatus === "PENDING_APPROVAL" as any);
     const approveA = await getApi().approveLease(leaseA.id, "Real production workflow test");
     const savedA = await getDoc(doc(db, "leases", leaseA.id));
-    const unitSavedA = await getDoc(doc(db, "units", unitA));
+    const unitSavedA = await getDoc(doc(db, "units", unitA.id));
     record(1, "A", "Real new lease approval workflow",
       submitA.success && approveA.success && savedA.data()?.contractStatus === "ACTIVE" &&
       unitSavedA.data()?.status === "OCCUPIED" && unitSavedA.data()?.currentLeaseId === leaseA.id,
@@ -299,7 +299,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     // B — real concurrent approval of the same production workflow.
     const unitB = getApi().addUnit({ unitNumber: `TEST-B-UNIT-${Date.now()}`, propertyId, type: "1BR", annualRent: 90000, status: "VACANT" } as any).id;
     const leaseB = getApi().addLease({
-      leaseNumber: `TEST-B-${Date.now()}`, ownerId, propertyId, unitId: unitB, tenantId,
+      leaseNumber: `TEST-B-${Date.now()}`, ownerId, propertyId, unitId: unitB.id, tenantId,
       startDate: "2027-01-01", endDate: "2027-12-31", annualRent: 90000,
       installmentsCount: 1, installments: [], securityDeposit: 4500, contractStatus: "ACTIVE",
     } as any);
@@ -377,7 +377,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     // E — real owner admin fee creation during lease approval.
     const unitE = getApi().addUnit({ unitNumber: `TEST-E-UNIT-${Date.now()}`, propertyId, type: "1BR", annualRent: 100000, status: "VACANT" } as any).id;
     const leaseE = getApi().addLease({
-      leaseNumber: `TEST-E-${Date.now()}`, ownerId, propertyId, unitId: unitE, tenantId,
+      leaseNumber: `TEST-E-${Date.now()}`, ownerId, propertyId, unitId: unitE.id, tenantId,
       startDate: "2027-01-01", endDate: "2027-12-31", annualRent: 100000, installmentsCount: 1,
       installments: [], securityDeposit: 5000, contractStatus: "ACTIVE",
       stagedAdminFeesConfig: {
@@ -404,7 +404,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     // F — real tenant admin fee creation during lease approval.
     const unitF = getApi().addUnit({ unitNumber: `TEST-F-UNIT-${Date.now()}`, propertyId, type: "1BR", annualRent: 100000, status: "VACANT" } as any).id;
     const leaseF = getApi().addLease({
-      leaseNumber: `TEST-F-${Date.now()}`, ownerId, propertyId, unitId: unitF, tenantId,
+      leaseNumber: `TEST-F-${Date.now()}`, ownerId, propertyId, unitId: unitF.id, tenantId,
       startDate: "2027-01-01", endDate: "2027-12-31", annualRent: 100000, installmentsCount: 1,
       installments: [], securityDeposit: 5000, contractStatus: "ACTIVE",
       stagedAdminFeesConfig: {
