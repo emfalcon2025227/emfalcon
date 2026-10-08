@@ -289,10 +289,10 @@ export async function runContractProductionWorkflowIntegritySuite() {
     } as any);
     createdLeaseIds.push(leaseA.id);
     await waitFor(() => getApi().leases.some((l) => l.id === leaseA.id));
-    const submitA = getApi().submitLeaseForApproval(leaseA.id);
+    const submitA = await runWithAct(() => getApi().submitLeaseForApproval(leaseA.id));
     await waitFor(async () => (await getDoc(doc(db, "leases", leaseA.id))).data()?.contractStatus === "PENDING_APPROVAL");
     await waitFor(() => getApi().leases.find((l) => l.id === leaseA.id)?.contractStatus === "PENDING_APPROVAL");
-    const approveA = await getApi().approveLease(leaseA.id, "Real production workflow test");
+    const approveA = await runWithAct(() => getApi().approveLease(leaseA.id, "Real production workflow test"));
     const savedA = await getDoc(doc(db, "leases", leaseA.id));
     const unitSavedA = await getDoc(doc(db, "units", unitA.id));
     record(1, "A", "Real new lease approval workflow",
