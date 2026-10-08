@@ -217,9 +217,15 @@ export async function runContractProductionWorkflowIntegritySuite() {
       if (!dataApi) throw new Error("DataContext API is not ready.");
       return dataApi;
     };
-    const ownerId = "test-owner";
-    const tenantId = "test-tenant";
-    const propertyId = "test-property";
+    const owner = getApi().addOwner({ code: `TEST-OWNER-${Date.now()}`, nameAr: "مالك اختبار", nameEn: "Workflow Test Owner", phone: "0500000000", email: TEST_EMAIL } as any);
+    const tenant = getApi().addTenant({ code: `TEST-TENANT-${Date.now()}`, nameAr: "مستأجر اختبار", nameEn: "Workflow Test Tenant", type: "INDIVIDUAL", nationality: "AE", email: TEST_EMAIL, phone: "0500000001", status: "ACTIVE" });
+    const property = getApi().addProperty({ nameAr: "عقار اختبار", nameEn: "Workflow Test Property", code: `TEST-PROP-${Date.now()}`, ownerId: owner.id, status: "ACTIVE" } as any);
+    await waitFor(() => getApi().owners.some((x) => x.id === owner.id));
+    await waitFor(() => getApi().tenants.some((x) => x.id === tenant.id));
+    await waitFor(() => getApi().properties.some((x) => x.id === property.id));
+    const ownerId = owner.id;
+    const tenantId = tenant.id;
+    const propertyId = property.id;
 
     const createApprovedOriginalLease = async (label: string, annualRent: number, securityDeposit: number) => {
       const unit = getApi().addUnit({
