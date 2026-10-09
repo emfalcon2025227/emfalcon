@@ -254,6 +254,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
       } as any);
       createdLeaseIds.push(lease.id);
       await waitFor(() => getApi().leases.some((l) => l.id === lease.id));
+      await waitFor(async () => (await getDocFromServer(doc(db, "leases", lease.id))).data()?.contractStatus === "BINDING");
       const submit = await runWithAct(() => getApi().submitLeaseForApproval(lease.id));
       if (!submit.success) throw new Error(`${label} submit failed: ${submit.error}`);
       await waitFor(async () => (await getDocFromServer(doc(db, "leases", lease.id))).data()?.contractStatus === "PENDING_APPROVAL");
@@ -289,6 +290,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     } as any);
     createdLeaseIds.push(leaseA.id);
     await waitFor(() => getApi().leases.some((l) => l.id === leaseA.id));
+    await waitFor(async () => (await getDocFromServer(doc(db, "leases", leaseA.id))).data()?.contractStatus === "BINDING");
     const submitA = await runWithAct(() => getApi().submitLeaseForApproval(leaseA.id));
     await waitFor(async () => (await getDoc(doc(db, "leases", leaseA.id))).data()?.contractStatus === "PENDING_APPROVAL");
     await waitFor(() => getApi().leases.find((l) => l.id === leaseA.id)?.contractStatus === "PENDING_APPROVAL");
@@ -311,6 +313,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     } as any);
     createdLeaseIds.push(leaseB.id);
     await waitFor(() => getApi().leases.some((l) => l.id === leaseB.id));
+    await waitFor(async () => (await getDocFromServer(doc(db, "leases", leaseB.id))).data()?.contractStatus === "BINDING");
     await runWithAct(() => getApi().submitLeaseForApproval(leaseB.id));
     await waitFor(async () => (await getDoc(doc(db, "leases", leaseB.id))).data()?.contractStatus === "PENDING_APPROVAL");
     await waitFor(() => getApi().leases.find((l) => l.id === leaseB.id)?.contractStatus === "PENDING_APPROVAL");
@@ -395,6 +398,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     } as any);
     createdLeaseIds.push(leaseE.id);
     await waitFor(() => getApi().leases.some((l) => l.id === leaseE.id));
+    await waitFor(async () => (await getDocFromServer(doc(db, "leases", leaseE.id))).data()?.contractStatus === "BINDING");
     await runWithAct(() => getApi().submitLeaseForApproval(leaseE.id));
     await waitFor(async () => (await getDoc(doc(db, "leases", leaseE.id))).data()?.contractStatus === "PENDING_APPROVAL");
     await waitFor(() => getApi().leases.find((l) => l.id === leaseE.id)?.contractStatus === "PENDING_APPROVAL");
@@ -425,6 +429,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     } as any);
     createdLeaseIds.push(leaseF.id);
     await waitFor(() => getApi().leases.some((l) => l.id === leaseF.id));
+    await waitFor(async () => (await getDocFromServer(doc(db, "leases", leaseF.id))).data()?.contractStatus === "BINDING");
     await runWithAct(() => getApi().submitLeaseForApproval(leaseF.id));
     await waitFor(async () => (await getDoc(doc(db, "leases", leaseF.id))).data()?.contractStatus === "PENDING_APPROVAL");
     await waitFor(() => getApi().leases.find((l) => l.id === leaseF.id)?.contractStatus === "PENDING_APPROVAL");
