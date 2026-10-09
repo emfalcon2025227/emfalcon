@@ -197,8 +197,6 @@ export async function runContractProductionWorkflowIntegritySuite() {
 
     await signInWithEmailAndPassword(auth, TEST_EMAIL, TEST_PASSWORD);
 
-    const testPeriodId = "contract-workflow-open-period";
-
     let resolveApi: ((api: DataContextType) => void) | null = null;
     const apiReady = new Promise<DataContextType>((resolve) => { resolveApi = resolve; });
 
