@@ -244,6 +244,12 @@ export async function runContractProductionWorkflowIntegritySuite() {
       if (!dataApi) throw new Error("DataContext API is not ready.");
       return dataApi;
     };
+    // Do not begin any lease/renewal workflow until the real DataContext
+    // listener has loaded the authoritative chart of accounts from the emulator.
+    await waitFor(
+      () => getApi().chartOfAccounts.some((account) => account.id === "acc-2020"),
+      20000
+    );
     // Create an OPEN period through the context API so the production state
     // listener and the refund-journal workflow use the same authoritative data.
     const periodResult = getApi().addFinancialPeriod({
