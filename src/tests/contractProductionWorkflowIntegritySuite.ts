@@ -294,11 +294,11 @@ export async function runContractProductionWorkflowIntegritySuite() {
     await waitFor(() => getApi().leases.some((l) => l.id === leaseA.id));
     await waitFor(async () => (await getDocFromServer(doc(db, "leases", leaseA.id))).data()?.contractStatus === "BINDING");
     const submitA = await runWithAct(() => getApi().submitLeaseForApproval(leaseA.id));
-    await waitFor(async () => (await getDoc(doc(db, "leases", leaseA.id))).data()?.contractStatus === "PENDING_APPROVAL");
+    await waitFor(async () => (await getDocFromServer(doc(db, "leases", leaseA.id))).data()?.contractStatus === "PENDING_APPROVAL");
     await waitFor(() => getApi().leases.find((l) => l.id === leaseA.id)?.contractStatus === "PENDING_APPROVAL");
     const approveA = await runWithAct(() => getApi().approveLease(leaseA.id, "Real production workflow test"));
-    const savedA = await getDoc(doc(db, "leases", leaseA.id));
-    const unitSavedA = await getDoc(doc(db, "units", unitA.id));
+    const savedA = await getDocFromServer(doc(db, "leases", leaseA.id));
+    const unitSavedA = await getDocFromServer(doc(db, "units", unitA.id));
     record(1, "A", "Real new lease approval workflow",
       submitA.success && approveA.success && savedA.data()?.contractStatus === "ACTIVE" &&
       unitSavedA.data()?.status === "OCCUPIED" && unitSavedA.data()?.currentLeaseId === leaseA.id,
@@ -318,14 +318,14 @@ export async function runContractProductionWorkflowIntegritySuite() {
     await waitFor(() => getApi().leases.some((l) => l.id === leaseB.id));
     await waitFor(async () => (await getDocFromServer(doc(db, "leases", leaseB.id))).data()?.contractStatus === "BINDING");
     await runWithAct(() => getApi().submitLeaseForApproval(leaseB.id));
-    await waitFor(async () => (await getDoc(doc(db, "leases", leaseB.id))).data()?.contractStatus === "PENDING_APPROVAL");
+    await waitFor(async () => (await getDocFromServer(doc(db, "leases", leaseB.id))).data()?.contractStatus === "PENDING_APPROVAL");
     await waitFor(() => getApi().leases.find((l) => l.id === leaseB.id)?.contractStatus === "PENDING_APPROVAL");
     const [b1, b2] = await Promise.all([
       getApi().approveLease(leaseB.id, "Concurrent worker 1"),
       getApi().approveLease(leaseB.id, "Concurrent worker 2"),
     ]);
     const bSuccesses = [b1, b2].filter((r) => r.success).length;
-    const savedB = await getDoc(doc(db, "leases", leaseB.id));
+    const savedB = await getDocFromServer(doc(db, "leases", leaseB.id));
     record(2, "B", "Real concurrent lease approval has one winner",
       bSuccesses === 1 && savedB.data()?.contractStatus === "ACTIVE",
       `successes=${bSuccesses}, finalStatus=${savedB.data()?.contractStatus}`
@@ -343,12 +343,12 @@ export async function runContractProductionWorkflowIntegritySuite() {
     } as any);
     if (!renewalC.success || !renewalC.renewal) throw new Error(`C createLeaseRenewal failed: ${renewalC.error}`);
     createdRenewalIds.push(renewalC.renewal.id);
-    await waitFor(async () => (await getDoc(doc(db, "lease_renewals", renewalC.renewal!.id))).exists());
+    await waitFor(async () => (await getDocFromServer(doc(db, "lease_renewals", renewalC.renewal!.id))).exists());
     const approveC = await getApi().approveLeaseRenewal(renewalC.renewal.id, "Real renewal workflow");
-    const savedRenC = await getDoc(doc(db, "lease_renewals", renewalC.renewal.id));
-    const originalCSaved = await getDoc(doc(db, "leases", originalC.leaseId));
+    const savedRenC = await getDocFromServer(doc(db, "lease_renewals", renewalC.renewal.id));
+    const originalCSaved = await getDocFromServer(doc(db, "leases", originalC.leaseId));
     const newLeaseCId = savedRenC.data()?.newLeaseId;
-    const newLeaseC = newLeaseCId ? await getDoc(doc(db, "leases", newLeaseCId)) : null;
+    const newLeaseC = newLeaseCId ? await getDocFromServer(doc(db, "leases", newLeaseCId)) : null;
     if (newLeaseCId) createdLeaseIds.push(newLeaseCId);
     record(3, "C", "Real renewal creation and approval workflow",
       approveC.success && savedRenC.data()?.status === "APPROVED" &&
@@ -370,15 +370,15 @@ export async function runContractProductionWorkflowIntegritySuite() {
     } as any);
     if (!renewalD.success || !renewalD.renewal) throw new Error(`D createLeaseRenewal failed: ${renewalD.error}`);
     createdRenewalIds.push(renewalD.renewal.id);
-    await waitFor(async () => (await getDoc(doc(db, "lease_renewals", renewalD.renewal!.id))).exists());
+    await waitFor(async () => (await getDocFromServer(doc(db, "lease_renewals", renewalD.renewal!.id))).exists());
     const [d1, d2] = await Promise.all([
       getApi().approveLeaseRenewal(renewalD.renewal.id, "Concurrent renewal 1"),
       getApi().approveLeaseRenewal(renewalD.renewal.id, "Concurrent renewal 2"),
     ]);
     const dSuccesses = [d1, d2].filter((r) => r.success).length;
-    const savedRenD = await getDoc(doc(db, "lease_renewals", renewalD.renewal.id));
+    const savedRenD = await getDocFromServer(doc(db, "lease_renewals", renewalD.renewal.id));
     const newLeaseDId = savedRenD.data()?.newLeaseId;
-    const newLeaseD = newLeaseDId ? await getDoc(doc(db, "leases", newLeaseDId)) : null;
+    const newLeaseD = newLeaseDId ? await getDocFromServer(doc(db, "leases", newLeaseDId)) : null;
     if (newLeaseDId) createdLeaseIds.push(newLeaseDId);
     record(4, "D", "Real concurrent renewal approval has one winner",
       dSuccesses === 1 && savedRenD.data()?.status === "APPROVED" &&
@@ -404,7 +404,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     await waitFor(() => getApi().leases.some((l) => l.id === leaseE.id));
     await waitFor(async () => (await getDocFromServer(doc(db, "leases", leaseE.id))).data()?.contractStatus === "BINDING");
     await runWithAct(() => getApi().submitLeaseForApproval(leaseE.id));
-    await waitFor(async () => (await getDoc(doc(db, "leases", leaseE.id))).data()?.contractStatus === "PENDING_APPROVAL");
+    await waitFor(async () => (await getDocFromServer(doc(db, "leases", leaseE.id))).data()?.contractStatus === "PENDING_APPROVAL");
     await waitFor(() => getApi().leases.find((l) => l.id === leaseE.id)?.contractStatus === "PENDING_APPROVAL");
     await waitFor(() => getApi().leases.find((l) => l.id === leaseE.id)?.contractStatus === "PENDING_APPROVAL");
     const approveE = await getApi().approveLease(leaseE.id, "Owner fee production workflow");
@@ -436,7 +436,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     await waitFor(() => getApi().leases.some((l) => l.id === leaseF.id));
     await waitFor(async () => (await getDocFromServer(doc(db, "leases", leaseF.id))).data()?.contractStatus === "BINDING");
     await runWithAct(() => getApi().submitLeaseForApproval(leaseF.id));
-    await waitFor(async () => (await getDoc(doc(db, "leases", leaseF.id))).data()?.contractStatus === "PENDING_APPROVAL");
+    await waitFor(async () => (await getDocFromServer(doc(db, "leases", leaseF.id))).data()?.contractStatus === "PENDING_APPROVAL");
     await waitFor(() => getApi().leases.find((l) => l.id === leaseF.id)?.contractStatus === "PENDING_APPROVAL");
     await waitFor(() => getApi().leases.find((l) => l.id === leaseF.id)?.contractStatus === "PENDING_APPROVAL");
     const approveF = await getApi().approveLease(leaseF.id, "Tenant fee production workflow");
