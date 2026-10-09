@@ -368,7 +368,8 @@ export async function runContractProductionWorkflowIntegritySuite() {
     if (!renewalC.success || !renewalC.renewal) throw new Error(`C createLeaseRenewal failed: ${renewalC.error}`);
     createdRenewalIds.push(renewalC.renewal.id);
     await waitFor(async () => (await getDocFromServer(doc(db, "lease_renewals", renewalC.renewal!.id))).exists());
-    const approveC = await getApi().approveLeaseRenewal(renewalC.renewal.id, "Real renewal workflow");
+    await waitFor(() => getApi().leaseRenewals.some((r) => r.id === renewalC.renewal!.id && r.status === "PENDING_APPROVAL"));
+    const approveC = await runWithAct(() => getApi().approveLeaseRenewal(renewalC.renewal!.id, "Real renewal workflow"));
     const savedRenC = await getDocFromServer(doc(db, "lease_renewals", renewalC.renewal.id));
     const originalCSaved = await getDocFromServer(doc(db, "leases", originalC.leaseId));
     const newLeaseCId = savedRenC.data()?.newLeaseId;
@@ -397,10 +398,11 @@ export async function runContractProductionWorkflowIntegritySuite() {
     await waitFor(async () => (await getDocFromServer(doc(db, "lease_renewals", renewalD.renewal!.id))).exists());
     const renewalDId = renewalD.renewal.id;
     const renewalDExistsBeforeRace = (await getDocFromServer(doc(db, "lease_renewals", renewalDId))).exists();
-    const [d1, d2] = await Promise.all([
+    await waitFor(() => getApi().leaseRenewals.some((r) => r.id === renewalDId && r.status === "PENDING_APPROVAL"));
+    const [d1, d2] = await runWithAct(() => Promise.all([
       getApi().approveLeaseRenewal(renewalDId, "Concurrent renewal 1"),
       getApi().approveLeaseRenewal(renewalDId, "Concurrent renewal 2"),
-    ]);
+    ]));
     const dSuccesses = [d1, d2].filter((r) => r.success).length;
     const savedRenD = await getDocFromServer(doc(db, "lease_renewals", renewalD.renewal.id));
     const newLeaseDId = savedRenD.data()?.newLeaseId;
