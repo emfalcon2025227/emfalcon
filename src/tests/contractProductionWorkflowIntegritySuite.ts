@@ -9,7 +9,7 @@
 import React, { useEffect } from "react";
 import { act, create } from "react-test-renderer";
 import { connectAuthEmulator, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { connectFirestoreEmulator, doc, getDoc, setDoc } from "firebase/firestore";
+import { connectFirestoreEmulator, doc, getDoc, getDocFromServer } from "firebase/firestore";
 import { initializeApp as initializeAdminApp, deleteApp as deleteAdminApp } from "firebase-admin/app";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
@@ -109,7 +109,7 @@ async function seedLease(lease: Lease) {
   await setDoc(doc(db, "leases", lease.id), lease);
 }
 
-async function readCommissionDocs(adminDb: FirebaseFirestore.Firestore, leaseId: string) {
+async function readCommissionDocs(adminDb: FirebaseFirestore.Firestore, leaseId: string): Promise<Array<any>> {
   const snap = await adminDb.collection("commissions").where("leaseId", "==", leaseId).get();
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
@@ -188,8 +188,8 @@ export async function runContractProductionWorkflowIntegritySuite() {
       return null;
     };
 
-    renderer = await act(async () => {
-      return create(
+    await act(async () => {
+      renderer = create(
         React.createElement(
           LanguageProvider,
           null,
