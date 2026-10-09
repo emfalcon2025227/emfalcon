@@ -367,9 +367,11 @@ export async function runContractProductionWorkflowIntegritySuite() {
     } as any);
     if (!renewalC.success || !renewalC.renewal) throw new Error(`C createLeaseRenewal failed: ${renewalC.error}`);
     createdRenewalIds.push(renewalC.renewal.id);
-    await waitFor(async () => (await getDocFromServer(doc(db, "lease_renewals", renewalC.renewal!.id))).exists());
-    await waitFor(() => getApi().leaseRenewals.some((r) => r.id === renewalC.renewal!.id && r.status === "PENDING_APPROVAL"));
-    const approveC = await runWithAct(() => getApi().approveLeaseRenewal(renewalC.renewal!.id, "Real renewal workflow"));
+    const renewalCId = renewalC.renewal.id;
+    await waitFor(async () => (await getDocFromServer(doc(db, "lease_renewals", renewalCId))).exists());
+    await waitFor(() => getApi().leaseRenewals.some((r) => r.id === renewalCId && r.status === "PENDING_APPROVAL"));
+    const renewalCExistsBeforeApproval = (await getDocFromServer(doc(db, "lease_renewals", renewalCId))).exists();
+    const approveC = await runWithAct(() => getApi().approveLeaseRenewal(renewalCId, "Real renewal workflow"));
     const savedRenC = await getDocFromServer(doc(db, "lease_renewals", renewalC.renewal.id));
     const originalCSaved = await getDocFromServer(doc(db, "leases", originalC.leaseId));
     const newLeaseCId = savedRenC.data()?.newLeaseId;
@@ -380,7 +382,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
       originalCSaved.data()?.contractStatus === "RENEWED" &&
       newLeaseC?.data()?.contractStatus === "ACTIVE" &&
       newLeaseC?.data()?.renewalSequence === 2,
-      `approve=${approveC.success}, error=${approveC.error || "none"}, renewal=${savedRenC.data()?.status}, original=${originalCSaved.data()?.contractStatus}, new=${newLeaseC?.data()?.contractStatus}, sequence=${newLeaseC?.data()?.renewalSequence}`
+      `id=${renewalCId}, existsBeforeApproval=${renewalCExistsBeforeApproval}, approve=${approveC.success}, error=${approveC.error || "none"}, renewal=${savedRenC.data()?.status}, original=${originalCSaved.data()?.contractStatus}, new=${newLeaseC?.data()?.contractStatus}, sequence=${newLeaseC?.data()?.renewalSequence}`
     );
 
     // D — real concurrent renewal approval.
