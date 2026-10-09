@@ -19,6 +19,7 @@ import { AuthProvider } from "../context/AuthContext";
 import { auth, db } from "../lib/firebase";
 import firebaseConfig from "../../firebase-applet-config.json";
 import type { Lease } from "../types";
+import { INITIAL_CHART_OF_ACCOUNTS } from "../services/financialEngine";
 
 const TEST_PROJECT_ID = process.env.CONTRACT_INTEGRITY_TEST_PROJECT_ID?.trim();
 const AUTH_EMULATOR_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST?.trim();
