@@ -156,6 +156,13 @@ export async function runContractProductionWorkflowIntegritySuite() {
     if (!String(err?.message || err).toLowerCase().includes("already")) throw err;
   }
 
+  // Seed immutable reference/master data in the isolated emulator before
+  // mounting DataProvider. The production workflow validates journal account
+  // IDs against persisted chart_of_accounts documents, not only the UI fallback.
+  await Promise.all(INITIAL_CHART_OF_ACCOUNTS.map((account) =>
+    setDoc(doc(db, "chart_of_accounts", account.id), account, { merge: true })
+  ));
+
   const adminApp = initializeAdminApp(
     { projectId: TEST_PROJECT_ID },
     `contract-workflow-test-${Date.now()}`
