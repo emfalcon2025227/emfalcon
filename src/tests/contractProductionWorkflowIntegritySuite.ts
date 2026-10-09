@@ -256,7 +256,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
       await waitFor(() => getApi().leases.some((l) => l.id === lease.id));
       const submit = await runWithAct(() => getApi().submitLeaseForApproval(lease.id));
       if (!submit.success) throw new Error(`${label} submit failed: ${submit.error}`);
-      await waitFor(async () => (await getDoc(doc(db, "leases", lease.id))).data()?.contractStatus === "PENDING_APPROVAL");
+      await waitFor(async () => (await getDocFromServer(doc(db, "leases", lease.id))).data()?.contractStatus === "PENDING_APPROVAL");
       await waitFor(() => getApi().leases.find((l) => l.id === lease.id)?.contractStatus === "PENDING_APPROVAL");
       const approval = await getApi().approveLease(lease.id, `Real ${label} original lease approval`);
       if (!approval.success) throw new Error(`${label} approval failed: ${approval.error}`);
@@ -285,7 +285,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
         status: "PENDING",
       }],
       securityDeposit: 4000,
-      contractStatus: "ACTIVE",
+      contractStatus: "DRAFT",
     } as any);
     createdLeaseIds.push(leaseA.id);
     await waitFor(() => getApi().leases.some((l) => l.id === leaseA.id));
@@ -307,7 +307,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     const leaseB = getApi().addLease({
       leaseNumber: `TEST-B-${Date.now()}`, ownerId, propertyId, unitId: unitB.id, tenantId,
       startDate: "2027-01-01", endDate: "2027-12-31", annualRent: 90000,
-      installmentsCount: 1, installments: [], securityDeposit: 4500, contractStatus: "ACTIVE",
+      installmentsCount: 1, installments: [], securityDeposit: 4500, contractStatus: "DRAFT",
     } as any);
     createdLeaseIds.push(leaseB.id);
     await waitFor(() => getApi().leases.some((l) => l.id === leaseB.id));
@@ -387,7 +387,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     const leaseE = getApi().addLease({
       leaseNumber: `TEST-E-${Date.now()}`, ownerId, propertyId, unitId: unitE.id, tenantId,
       startDate: "2027-01-01", endDate: "2027-12-31", annualRent: 100000, installmentsCount: 1,
-      installments: [], securityDeposit: 5000, contractStatus: "ACTIVE",
+      installments: [], securityDeposit: 5000, contractStatus: "DRAFT",
       stagedAdminFeesConfig: {
         includeAdminFees: true, ownerFeeEnabled: true, ownerFeeBasis: "PERCENTAGE_OF_RENT",
         ownerFeeRate: 5, ownerFeeDueDate: "2027-01-01",
@@ -417,7 +417,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     const leaseF = getApi().addLease({
       leaseNumber: `TEST-F-${Date.now()}`, ownerId, propertyId, unitId: unitF.id, tenantId,
       startDate: "2027-01-01", endDate: "2027-12-31", annualRent: 100000, installmentsCount: 1,
-      installments: [], securityDeposit: 5000, contractStatus: "ACTIVE",
+      installments: [], securityDeposit: 5000, contractStatus: "DRAFT",
       stagedAdminFeesConfig: {
         includeAdminFees: true, tenantFeeEnabled: true, tenantFeeBasis: "PERCENTAGE_OF_RENT",
         tenantFeeRate: 5, tenantFeeDueDate: "2027-01-01",
