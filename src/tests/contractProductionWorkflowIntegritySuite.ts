@@ -9,7 +9,7 @@
 import React, { useEffect } from "react";
 import { act, create } from "react-test-renderer";
 import { connectAuthEmulator, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { connectFirestoreEmulator, doc, getDoc, getDocFromServer, setDoc } from "firebase/firestore";
+import { connectFirestoreEmulator, deleteDoc, doc, getDoc, getDocFromServer, setDoc } from "firebase/firestore";
 import { initializeApp as initializeAdminApp, deleteApp as deleteAdminApp } from "firebase-admin/app";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
@@ -123,15 +123,19 @@ async function seedLease(lease: Lease) {
   await setDoc(doc(db, "leases", lease.id), lease);
 }
 
-async function readCommissionDocs(adminDb: FirebaseFirestore.Firestore, leaseId: string): Promise<Array<any>> {
-  const leaseSnap = await adminDb.collection("leases").doc(leaseId).get();
+async function readCommissionDocs(leaseId: string): Promise<Array<any>> {
+  // Read through the same configured client Firestore database used by the
+  // production DataContext. The emulator does not reliably expose the
+  // configured named database through a separate Admin SDK instance.
+  const leaseSnap = await getDocFromServer(doc(db, "leases", leaseId));
   const leaseData = leaseSnap.data() as any;
   const year = new Date(leaseData?.startDate || "2027-01-01").getFullYear().toString();
   const sequence = Number(leaseData?.renewalSequence) || 1;
   const parties = ["OWNER", "TENANT"];
-  const refs = parties.map((partyType) => adminDb.collection("commissions").doc("com-" + leaseId + "-" + partyType + "-ADMIN_FEE-" + year + "-" + sequence));
-  const snaps = await Promise.all(refs.map((ref) => ref.get()));
-  return snaps.filter((snap) => snap.exists).map((snap) => ({ id: snap.id, ...snap.data() } as any));
+  const snaps = await Promise.all(parties.map((partyType) =>
+    getDocFromServer(doc(db, "commissions", "com-" + leaseId + "-" + partyType + "-ADMIN_FEE-" + year + "-" + sequence))
+  ));
+  return snaps.filter((snap) => snap.exists()).map((snap) => ({ id: snap.id, ...snap.data() } as any));
 }
 
 export async function runContractProductionWorkflowIntegritySuite() {
@@ -429,7 +433,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     await waitFor(() => getApi().leases.find((l) => l.id === leaseE.id)?.contractStatus === "PENDING_APPROVAL");
     const approveE = await getApi().approveLease(leaseE.id, "Owner fee production workflow");
     const savedLeaseE = (await getDocFromServer(doc(db, "leases", leaseE.id))).data();
-    const ownerFees = await readCommissionDocs(adminDb, leaseE.id);
+    const ownerFees = await readCommissionDocs(leaseE.id);
     const ownerFeeDocId = "com-" + leaseE.id + "-OWNER-ADMIN_FEE-2027-1";
     const ownerFeeClientDoc = await getDocFromServer(doc(db, "commissions", ownerFeeDocId));
     const ownerFeesInContext = getApi().commissions.filter((c: any) => c.leaseId === leaseE.id);
@@ -465,7 +469,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     await waitFor(() => getApi().leases.find((l) => l.id === leaseF.id)?.contractStatus === "PENDING_APPROVAL");
     const approveF = await getApi().approveLease(leaseF.id, "Tenant fee production workflow");
     const savedLeaseF = (await getDocFromServer(doc(db, "leases", leaseF.id))).data();
-    const tenantFees = await readCommissionDocs(adminDb, leaseF.id);
+    const tenantFees = await readCommissionDocs(leaseF.id);
     const tenantFeeDocId = "com-" + leaseF.id + "-TENANT-ADMIN_FEE-2027-1";
     const tenantFeeClientDoc = await getDocFromServer(doc(db, "commissions", tenantFeeDocId));
     const tenantFeesInContext = getApi().commissions.filter((c: any) => c.leaseId === leaseF.id);
@@ -483,6 +487,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     return { total: 6, passed, failed, results };
   } finally {
     renderer?.unmount();
+    for (const id of createdCommissionIds) await deleteDoc(doc(db, "commissions", id)).catch(() => {});
     await signOut(auth).catch(() => {});
     for (const id of createdCommissionIds) await adminDb.collection("commissions").doc(id).delete().catch(() => {});
     for (const id of createdRenewalIds) await adminDb.collection("lease_renewals").doc(id).delete().catch(() => {});
