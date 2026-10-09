@@ -433,8 +433,9 @@ export async function runContractProductionWorkflowIntegritySuite() {
     await waitFor(() => getApi().leases.find((l) => l.id === leaseE.id)?.contractStatus === "PENDING_APPROVAL");
     const approveE = await getApi().approveLease(leaseE.id, "Owner fee production workflow");
     const savedLeaseE = (await getDocFromServer(doc(db, "leases", leaseE.id))).data();
-    const ownerFees = await readCommissionDocs(leaseE.id);
     const ownerFeeDocId = "com-" + leaseE.id + "-OWNER-ADMIN_FEE-2027-1";
+    await waitFor(async () => (await getDocFromServer(doc(db, "commissions", ownerFeeDocId))).exists());
+    const ownerFees = await readCommissionDocs(leaseE.id);
     const ownerFeeClientDoc = await getDocFromServer(doc(db, "commissions", ownerFeeDocId));
     const ownerFeesInContext = getApi().commissions.filter((c: any) => c.leaseId === leaseE.id);
     const ownerFee = ownerFees.find((c: any) => c.partyType === "OWNER" && c.commissionType === "ADMIN_FEE");
@@ -469,8 +470,9 @@ export async function runContractProductionWorkflowIntegritySuite() {
     await waitFor(() => getApi().leases.find((l) => l.id === leaseF.id)?.contractStatus === "PENDING_APPROVAL");
     const approveF = await getApi().approveLease(leaseF.id, "Tenant fee production workflow");
     const savedLeaseF = (await getDocFromServer(doc(db, "leases", leaseF.id))).data();
-    const tenantFees = await readCommissionDocs(leaseF.id);
     const tenantFeeDocId = "com-" + leaseF.id + "-TENANT-ADMIN_FEE-2027-1";
+    await waitFor(async () => (await getDocFromServer(doc(db, "commissions", tenantFeeDocId))).exists());
+    const tenantFees = await readCommissionDocs(leaseF.id);
     const tenantFeeClientDoc = await getDocFromServer(doc(db, "commissions", tenantFeeDocId));
     const tenantFeesInContext = getApi().commissions.filter((c: any) => c.leaseId === leaseF.id);
     const tenantFee = tenantFees.find((c: any) => c.partyType === "TENANT" && c.commissionType === "ADMIN_FEE");
