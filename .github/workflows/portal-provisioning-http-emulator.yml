@@ -1,0 +1,44 @@
+name: Portal Provisioning HTTP Integration
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/tests/portalProvisioningHttpIntegritySuite.ts"
+      - "server.ts"
+      - "package.json"
+      - "package-lock.json"
+      - "firebase.json"
+      - ".github/workflows/portal-provisioning-http-emulator.yml"
+
+jobs:
+  portal-provisioning-http:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Java for Firebase Emulators
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run actual portal HTTP route in Firebase Emulators
+        run: >
+          npx --yes firebase-tools@latest emulators:exec
+          --project portal-provisioning-test
+          --only auth,firestore
+          "npm run test:portal-provisioning-http"
