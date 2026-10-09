@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - "src/tests/portalProvisioningIntegritySuite.ts"
+      - "src/tests/portalProvisioningHttpIntegritySuite.ts"
       - "package.json"
       - "package-lock.json"
       - "server.ts"
@@ -40,4 +41,4 @@ jobs:
           npx --yes firebase-tools@latest emulators:exec \
             --project portal-provisioning-test \
             --only auth,firestore \
-            "npm run test:portal-provisioning"
+            "npm run test:portal-provisioning && npm run test:portal-provisioning-http"
