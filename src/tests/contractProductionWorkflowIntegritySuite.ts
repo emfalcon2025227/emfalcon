@@ -629,7 +629,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     ]);
     if (ownerFeeJ?.exists()) createdCommissionIds.push(ownerFeeJId);
     if (tenantFeeJ?.exists()) createdCommissionIds.push(tenantFeeJId);
-    record(10, "J", "Real renewal creates Owner + Tenant admin fees",
+    record(7, "G", "Real renewal creates Owner + Tenant admin fees",
       approveJ.success && savedRenewalJ.data()?.status === "APPROVED" &&
       ownerFeeJ?.exists() === true && tenantFeeJ?.exists() === true &&
       ownerFeeJ?.data()?.totalCommissionAmount === 5000 &&
@@ -647,7 +647,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
       tenantFeeJId ? getDocFromServer(doc(db, "commissions", tenantFeeJId)) : Promise.resolve(null),
     ]);
     const newLeaseJCount = getApi().leases.filter((lease) => lease.id === newLeaseJId).length;
-    record(11, "K", "Real renewal replay is rejected without duplicate records",
+    record(8, "H", "Real renewal replay is rejected without duplicate records",
       !replayJ.success && renewalJAfterReplay.data()?.newLeaseId === newLeaseJId &&
       newLeaseJCount === 1 && ownerFeeJAfterReplay?.exists() === true &&
       tenantFeeJAfterReplay?.exists() === true,
@@ -675,7 +675,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     const newLeaseLId = savedRenewalL.data()?.newLeaseId;
     if (newLeaseLId) createdLeaseIds.push(newLeaseLId);
     const newLeaseL = newLeaseLId ? await getDocFromServer(doc(db, "leases", newLeaseLId)) : null;
-    record(12, "L", "Real consecutive renewal derives sequence 3",
+    record(9, "I", "Real consecutive renewal derives sequence 3",
       approveL.success && savedRenewalL.data()?.status === "APPROVED" &&
       newLeaseL?.data()?.contractStatus === "ACTIVE" &&
       newLeaseL?.data()?.renewalSequence === 3,
@@ -683,12 +683,12 @@ export async function runContractProductionWorkflowIntegritySuite() {
     );
 
     // M–O — real security-deposit carry-forward/refund workflows.
-    await runSecurityDepositRenewalScenario(13, "M", "equal deposit", 10000, 10000);
-    await runSecurityDepositRenewalScenario(14, "N", "higher deposit", 10000, 12000);
-    await runSecurityDepositRenewalScenario(15, "O", "lower deposit with refund journal", 10000, 8000);
+    await runSecurityDepositRenewalScenario(10, "J", "equal deposit", 10000, 10000);
+    await runSecurityDepositRenewalScenario(11, "K", "higher deposit", 10000, 12000);
+    await runSecurityDepositRenewalScenario(12, "L", "lower deposit with refund journal", 10000, 8000);
 
-    console.log(`CONTRACT PRODUCTION WORKFLOW A–O: ${passed}/15 PASSED, ${failed} FAILED`);
-    return { total: 15, passed, failed, results };
+    console.log(`CONTRACT PRODUCTION WORKFLOW A–L: ${passed}/12 PASSED, ${failed} FAILED`);
+    return { total: 12, passed, failed, results };
   } finally {
     renderer?.unmount();
     await deleteDoc(doc(db, "financial_periods", "contract-workflow-open-period")).catch(() => {});
