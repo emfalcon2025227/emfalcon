@@ -76,7 +76,7 @@ function installNodeBrowserShims() {
   const originalFetch = globalThis.fetch.bind(globalThis);
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-    if (url === "/api/notifications/dispatch-lease") {
+    if (url === "/api/notifications/dispatch-lease" || url === "/api/notifications/dispatch-tenant-welcome") {
       return Promise.resolve(new Response(JSON.stringify({ success: true, testStub: true }), {
         status: 200,
         headers: { "content-type": "application/json" },
@@ -197,18 +197,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
 
     await signInWithEmailAndPassword(auth, TEST_EMAIL, TEST_PASSWORD);
 
-    // Test fixture: an open current-period is required to exercise the real
-    // security-deposit refund journal path. This exists only in the emulator.
     const testPeriodId = "contract-workflow-open-period";
-    await setDoc(doc(db, "financial_periods", testPeriodId), {
-      id: testPeriodId,
-      name: "Contract Workflow Test Period",
-      startDate: "2026-01-01",
-      endDate: "2026-12-31",
-      status: "OPEN",
-      openedAt: new Date().toISOString(),
-      openedBy: "TEST",
-    });
 
     let resolveApi: ((api: DataContextType) => void) | null = null;
     const apiReady = new Promise<DataContextType>((resolve) => { resolveApi = resolve; });
@@ -256,6 +245,17 @@ export async function runContractProductionWorkflowIntegritySuite() {
       if (!dataApi) throw new Error("DataContext API is not ready.");
       return dataApi;
     };
+    // Create an OPEN period through the context API so the production state
+    // listener and the refund-journal workflow use the same authoritative data.
+    const periodResult = getApi().addFinancialPeriod({
+      name: "Contract Workflow Test Period",
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+    });
+    if (!periodResult.success) {
+      throw new Error(`Could not prepare isolated test financial period: ${periodResult.error || "unknown error"}`);
+    }
+    await waitFor(() => getApi().financialPeriods.some((p: any) => p.id === periodResult.period?.id && p.status === "OPEN"));
     const owner = getApi().addOwner({ code: `TEST-OWNER-${Date.now()}`, nameAr: "مالك اختبار", nameEn: "Workflow Test Owner", phone: "0500000000", email: TEST_EMAIL } as any);
     const tenant = getApi().addTenant({ code: `TEST-TENANT-${Date.now()}`, nameAr: "مستأجر اختبار", nameEn: "Workflow Test Tenant", type: "INDIVIDUAL", nationality: "AE", email: TEST_EMAIL, phone: "0500000001", status: "ACTIVE" });
     const property = getApi().addProperty({ nameAr: "عقار اختبار", nameEn: "Workflow Test Property", code: `TEST-PROP-${Date.now()}`, ownerId: owner.id, status: "ACTIVE" } as any);
@@ -587,7 +587,6 @@ export async function runContractProductionWorkflowIntegritySuite() {
     );
 
     // G–I — real renewal workflow carries forward a previously held deposit.
-    await waitFor(() => getApi().financialPeriods.some((p: any) => p.id === testPeriodId && p.status === "OPEN"));
     await waitFor(() => getApi().chartOfAccounts.length > 0);
     await runSecurityDepositRenewalScenario(7, "G", "equal deposit", 10000, 10000);
     await runSecurityDepositRenewalScenario(8, "H", "higher deposit", 10000, 12000);
