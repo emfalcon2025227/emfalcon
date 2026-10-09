@@ -238,6 +238,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
         status: "VACANT",
       } as any);
       await waitFor(() => getApi().units.some((u) => u.id === unit.id));
+      await waitFor(async () => (await getDocFromServer(doc(db, "units", unit.id))).exists());
       const lease = getApi().addLease({
         leaseNumber: `TEST-${label}-${Date.now()}`,
         ownerId,
@@ -267,6 +268,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     // A — real new lease lifecycle: add -> submit -> approve.
     const unitA = getApi().addUnit({ unitNumber: `TEST-A-UNIT-${Date.now()}`, propertyId, type: "1BR", annualRent: 80000, status: "VACANT" } as any);
     await waitFor(() => getApi().units.some((u) => u.id === unitA.id));
+    await waitFor(async () => (await getDocFromServer(doc(db, "units", unitA.id))).exists());
     const leaseAId = uniqueId("lease-a");
     const leaseA = getApi().addLease({
       leaseNumber: `TEST-A-${Date.now()}`,
@@ -306,6 +308,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     // B — real concurrent approval of the same production workflow.
     const unitB = getApi().addUnit({ unitNumber: `TEST-B-UNIT-${Date.now()}`, propertyId, type: "1BR", annualRent: 90000, status: "VACANT" } as any);
     await waitFor(() => getApi().units.some((u) => u.id === unitB.id));
+    await waitFor(async () => (await getDocFromServer(doc(db, "units", unitB.id))).exists());
     const leaseB = getApi().addLease({
       leaseNumber: `TEST-B-${Date.now()}`, ownerId, propertyId, unitId: unitB.id, tenantId,
       startDate: "2027-01-01", endDate: "2027-12-31", annualRent: 90000,
@@ -387,6 +390,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     // E — real owner admin fee creation during lease approval.
     const unitE = getApi().addUnit({ unitNumber: `TEST-E-UNIT-${Date.now()}`, propertyId, type: "1BR", annualRent: 100000, status: "VACANT" } as any);
     await waitFor(() => getApi().units.some((u) => u.id === unitE.id));
+    await waitFor(async () => (await getDocFromServer(doc(db, "units", unitE.id))).exists());
     const leaseE = getApi().addLease({
       leaseNumber: `TEST-E-${Date.now()}`, ownerId, propertyId, unitId: unitE.id, tenantId,
       startDate: "2027-01-01", endDate: "2027-12-31", annualRent: 100000, installmentsCount: 1,
@@ -418,6 +422,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     // F — real tenant admin fee creation during lease approval.
     const unitF = getApi().addUnit({ unitNumber: `TEST-F-UNIT-${Date.now()}`, propertyId, type: "1BR", annualRent: 100000, status: "VACANT" } as any);
     await waitFor(() => getApi().units.some((u) => u.id === unitF.id));
+    await waitFor(async () => (await getDocFromServer(doc(db, "units", unitF.id))).exists());
     const leaseF = getApi().addLease({
       leaseNumber: `TEST-F-${Date.now()}`, ownerId, propertyId, unitId: unitF.id, tenantId,
       startDate: "2027-01-01", endDate: "2027-12-31", annualRent: 100000, installmentsCount: 1,
