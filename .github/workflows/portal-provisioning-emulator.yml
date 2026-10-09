@@ -16,6 +16,7 @@ on:
 jobs:
   portal-provisioning:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout Repository
