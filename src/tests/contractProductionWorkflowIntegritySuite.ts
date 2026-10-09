@@ -354,7 +354,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
       if (!renewalResult.success || !renewalResult.renewal) {
         record(testNumber, letter, `Real security deposit renewal — ${label}`, false,
           `create renewal failed: ${renewalResult.error || "unknown error"}`);
-        return;
+        return null;
       }
       const renewalId = renewalResult.renewal.id;
       createdRenewalIds.push(renewalId);
@@ -394,6 +394,9 @@ export async function runContractProductionWorkflowIntegritySuite() {
 
       record(testNumber, letter, `Real security deposit renewal — ${label}`, passed,
         `approve=${approval.success}, originalHeld=${originalDeposit}, newDeposit=${newDeposit}, carried=${newLeaseSaved?.data()?.securityDepositHeld}, outstanding=${newLeaseSaved?.data()?.securityDepositOutstanding}, refundDue=${originalSettlement?.netRefundAmount || 0}, refundJournal=${refundJournalFound}, error=${approval.error || "none"}`);
+      const refundReference = `REF-SD-${original.leaseNumber}`;
+      const refundJournalEntry = getApi().journalEntries.find((entry: any) => entry.reference === refundReference);
+      return { renewalId, refundReference, refundDue, refundJournalEntry };
     };
 
     // A — real new lease lifecycle: add -> submit -> approve.
@@ -685,10 +688,76 @@ export async function runContractProductionWorkflowIntegritySuite() {
     // M–O — real security-deposit carry-forward/refund workflows.
     await runSecurityDepositRenewalScenario(10, "J", "equal deposit", 10000, 10000);
     await runSecurityDepositRenewalScenario(11, "K", "higher deposit", 10000, 12000);
-    await runSecurityDepositRenewalScenario(12, "L", "lower deposit with refund journal", 10000, 8000);
+    const depositRefundCase = await runSecurityDepositRenewalScenario(12, "L", "lower deposit with refund journal", 10000, 8000);
 
-    console.log(`CONTRACT PRODUCTION WORKFLOW A–L: ${passed}/12 PASSED, ${failed} FAILED`);
-    return { total: 12, passed, failed, results };
+    // M — VAT-inclusive Owner admin fee values from the actual production obligation.
+    record(13, "M", "Owner admin fee VAT/net split is exact",
+      ownerFee?.totalCommissionAmount === 5000 &&
+      ownerFee?.vatAmount === 238.1 &&
+      ownerFee?.netRevenueAmount === 4761.9 &&
+      ownerFee?.taxTreatment === "VAT_DEDUCTION",
+      `gross=${ownerFee?.totalCommissionAmount}, vat=${ownerFee?.vatAmount}, net=${ownerFee?.netRevenueAmount}, treatment=${ownerFee?.taxTreatment}`
+    );
+
+    // N — VAT-inclusive Tenant admin fee values from the actual production obligation.
+    record(14, "N", "Tenant admin fee VAT/net split is exact",
+      tenantFee?.totalCommissionAmount === 5000 &&
+      tenantFee?.vatAmount === 238.1 &&
+      tenantFee?.netRevenueAmount === 4761.9 &&
+      tenantFee?.taxTreatment === "VAT_DEDUCTION",
+      `gross=${tenantFee?.totalCommissionAmount}, vat=${tenantFee?.vatAmount}, net=${tenantFee?.netRevenueAmount}, treatment=${tenantFee?.taxTreatment}`
+    );
+
+    // O — replaying a completed lease approval must not duplicate fee obligations.
+    const [replayOwnerApproval, replayTenantApproval] = await runWithAct(() => Promise.all([
+      getApi().approveLease(leaseE.id, "Admin-fee idempotency replay"),
+      getApi().approveLease(leaseF.id, "Admin-fee idempotency replay"),
+    ]));
+    const [ownerFeesAfterReplay, tenantFeesAfterReplay] = await Promise.all([
+      readCommissionDocs(leaseE.id),
+      readCommissionDocs(leaseF.id),
+    ]);
+    record(15, "O", "Lease approval replay cannot duplicate Owner/Tenant fees",
+      !replayOwnerApproval.success && !replayTenantApproval.success &&
+      ownerFeesAfterReplay.length === 1 && tenantFeesAfterReplay.length === 1,
+      `ownerReplay=${replayOwnerApproval.success}, tenantReplay=${replayTenantApproval.success}, ownerFees=${ownerFeesAfterReplay.length}, tenantFees=${tenantFeesAfterReplay.length}`
+    );
+
+    // P — the real refund journal debits the security-deposit liability and credits cash/bank.
+    const refundJournal = depositRefundCase?.refundJournalEntry;
+    const liabilityLine = refundJournal?.lines?.find((line: any) => line.accountCode === "2020");
+    const assetLine = refundJournal?.lines?.find((line: any) => line.accountCode === "1010" || line.accountCode === "1020");
+    record(16, "P", "Security deposit refund posts to liability, not revenue",
+      !!refundJournal && !!liabilityLine && !!assetLine &&
+      liabilityLine.debit === 2000 && liabilityLine.credit === 0 &&
+      assetLine.debit === 0 && assetLine.credit === 2000 &&
+      !refundJournal.lines.some((line: any) => String(line.accountCode || "").startsWith("4")),
+      `reference=${refundJournal?.reference || "missing"}, liability=${liabilityLine?.accountCode}:${liabilityLine?.debit}/${liabilityLine?.credit}, asset=${assetLine?.accountCode}:${assetLine?.debit}/${assetLine?.credit}, revenueLine=${refundJournal?.lines?.some((line: any) => String(line.accountCode || "").startsWith("4"))}`
+    );
+
+    // Q — refund journal must remain exactly balanced at the expected AED amount.
+    record(17, "Q", "Security deposit refund journal is balanced for AED 2,000",
+      !!refundJournal && refundJournal.totalDebit === 2000 &&
+      refundJournal.totalCredit === 2000 &&
+      refundJournal.lines.reduce((sum: number, line: any) => sum + Number(line.debit || 0), 0) === 2000 &&
+      refundJournal.lines.reduce((sum: number, line: any) => sum + Number(line.credit || 0), 0) === 2000,
+      `totalDebit=${refundJournal?.totalDebit}, totalCredit=${refundJournal?.totalCredit}, lineDebits=${refundJournal?.lines?.reduce((sum: number, line: any) => sum + Number(line.debit || 0), 0)}, lineCredits=${refundJournal?.lines?.reduce((sum: number, line: any) => sum + Number(line.credit || 0), 0)}`
+    );
+
+    // R — retrying approval after settlement must not create another refund journal.
+    const replayRefund = depositRefundCase?.renewalId
+      ? await runWithAct(() => getApi().approveLeaseRenewal(depositRefundCase.renewalId, "Refund journal replay protection"))
+      : { success: true };
+    const refundJournalCountAfterReplay = depositRefundCase?.refundReference
+      ? getApi().journalEntries.filter((entry: any) => entry.reference === depositRefundCase.refundReference).length
+      : 0;
+    record(18, "R", "Security deposit refund replay does not duplicate journal",
+      replayRefund.success === false && refundJournalCountAfterReplay === 1,
+      `replaySuccess=${replayRefund.success}, journalCount=${refundJournalCountAfterReplay}`
+    );
+
+    console.log(`CONTRACT PRODUCTION WORKFLOW A–R: ${passed}/18 PASSED, ${failed} FAILED`);
+    return { total: 18, passed, failed, results };
   } finally {
     renderer?.unmount();
     await deleteDoc(doc(db, "financial_periods", "contract-workflow-open-period")).catch(() => {});
