@@ -9,7 +9,7 @@
 import React, { useEffect } from "react";
 import { act, create } from "react-test-renderer";
 import { connectAuthEmulator, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { connectFirestoreEmulator, doc, getDoc, getDocFromServer } from "firebase/firestore";
+import { connectFirestoreEmulator, doc, getDoc, getDocFromServer, setDoc } from "firebase/firestore";
 import { initializeApp as initializeAdminApp, deleteApp as deleteAdminApp } from "firebase-admin/app";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
