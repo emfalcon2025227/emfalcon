@@ -395,9 +395,11 @@ export async function runContractProductionWorkflowIntegritySuite() {
     if (!renewalD.success || !renewalD.renewal) throw new Error(`D createLeaseRenewal failed: ${renewalD.error}`);
     createdRenewalIds.push(renewalD.renewal.id);
     await waitFor(async () => (await getDocFromServer(doc(db, "lease_renewals", renewalD.renewal!.id))).exists());
+    const renewalDId = renewalD.renewal.id;
+    const renewalDExistsBeforeRace = (await getDocFromServer(doc(db, "lease_renewals", renewalDId))).exists();
     const [d1, d2] = await Promise.all([
-      getApi().approveLeaseRenewal(renewalD.renewal.id, "Concurrent renewal 1"),
-      getApi().approveLeaseRenewal(renewalD.renewal.id, "Concurrent renewal 2"),
+      getApi().approveLeaseRenewal(renewalDId, "Concurrent renewal 1"),
+      getApi().approveLeaseRenewal(renewalDId, "Concurrent renewal 2"),
     ]);
     const dSuccesses = [d1, d2].filter((r) => r.success).length;
     const savedRenD = await getDocFromServer(doc(db, "lease_renewals", renewalD.renewal.id));
@@ -407,7 +409,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     record(4, "D", "Real concurrent renewal approval has one winner",
       dSuccesses === 1 && savedRenD.data()?.status === "APPROVED" &&
       newLeaseD?.data()?.renewalSequence === 2,
-      `successes=${dSuccesses}, errors=${[d1.error, d2.error].filter(Boolean).join(" | ") || "none"}, renewal=${savedRenD.data()?.status}, sequence=${newLeaseD?.data()?.renewalSequence}`
+      `id=${renewalDId}, existsBeforeRace=${renewalDExistsBeforeRace}, successes=${dSuccesses}, errors=${[d1.error, d2.error].filter(Boolean).join(" | ") || "none"}, renewal=${savedRenD.data()?.status}, sequence=${newLeaseD?.data()?.renewalSequence}`
     );
 
 
