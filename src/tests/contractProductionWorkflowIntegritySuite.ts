@@ -70,6 +70,20 @@ function installNodeBrowserShims() {
     documentElement: { dir: "", lang: "" },
   };
   win.crypto = win.crypto || (globalThis as any).crypto;
+  // The lease workflow also attempts an external notification endpoint. Keep
+  // that unrelated HTTP side effect inside the test boundary; all Firestore
+  // writes and assertions still use the real production DataContext workflow.
+  const originalFetch = globalThis.fetch.bind(globalThis);
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (url === "/api/notifications/dispatch-lease") {
+      return Promise.resolve(new Response(JSON.stringify({ success: true, testStub: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }));
+    }
+    return originalFetch(input, init);
+  }) as typeof fetch;
   (globalThis as any).alert = (globalThis as any).alert || (() => {});
 }
 
@@ -142,7 +156,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     `contract-workflow-test-${Date.now()}`
   );
   const adminAuth = getAdminAuth(adminApp);
-  const adminDb = getAdminFirestore(adminApp);
+  const adminDb = getAdminFirestore(adminApp, firebaseConfig.firestoreDatabaseId);
 
   const results: Array<{ testNumber: number; letter: string; passed: boolean; details: string }> = [];
   let passed = 0;
