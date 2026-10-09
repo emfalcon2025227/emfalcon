@@ -379,7 +379,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
       originalCSaved.data()?.contractStatus === "RENEWED" &&
       newLeaseC?.data()?.contractStatus === "ACTIVE" &&
       newLeaseC?.data()?.renewalSequence === 2,
-      `approve=${approveC.success}, renewal=${savedRenC.data()?.status}, original=${originalCSaved.data()?.contractStatus}, new=${newLeaseC?.data()?.contractStatus}, sequence=${newLeaseC?.data()?.renewalSequence}`
+      `approve=${approveC.success}, error=${approveC.error || "none"}, renewal=${savedRenC.data()?.status}, original=${originalCSaved.data()?.contractStatus}, new=${newLeaseC?.data()?.contractStatus}, sequence=${newLeaseC?.data()?.renewalSequence}`
     );
 
     // D — real concurrent renewal approval.
@@ -407,7 +407,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
     record(4, "D", "Real concurrent renewal approval has one winner",
       dSuccesses === 1 && savedRenD.data()?.status === "APPROVED" &&
       newLeaseD?.data()?.renewalSequence === 2,
-      `successes=${dSuccesses}, renewal=${savedRenD.data()?.status}, sequence=${newLeaseD?.data()?.renewalSequence}`
+      `successes=${dSuccesses}, errors=${[d1.error, d2.error].filter(Boolean).join(" | ") || "none"}, renewal=${savedRenD.data()?.status}, sequence=${newLeaseD?.data()?.renewalSequence}`
     );
 
 
