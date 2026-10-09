@@ -598,13 +598,97 @@ export async function runContractProductionWorkflowIntegritySuite() {
       `approve=${approveF.success}, stagedFees=${JSON.stringify(savedLeaseF?.stagedAdminFeesConfig)}, commissionCount=${tenantFees.length}, clientDocExists=${tenantFeeClientDoc.exists()}, contextCount=${tenantFeesInContext.length}, amount=${tenantFee?.totalCommissionAmount}, sequence=${tenantFee?.renewalSequence}`
     );
 
-    // G–I — real renewal workflow carries forward a previously held deposit.
-    await runSecurityDepositRenewalScenario(7, "G", "equal deposit", 10000, 10000);
-    await runSecurityDepositRenewalScenario(8, "H", "higher deposit", 10000, 12000);
-    await runSecurityDepositRenewalScenario(9, "I", "lower deposit with refund journal", 10000, 8000);
+    // J — real renewal approval creates deterministic Owner + Tenant admin-fee obligations.
+    const originalJ = await createApprovedOriginalLease("J", 100000, 5000);
+    const renewalJ = getApi().createLeaseRenewal({
+      originalLeaseId: originalJ.leaseId,
+      originalLeaseNumber: originalJ.leaseNumber,
+      ownerId, propertyId, unitId: originalJ.unitId, tenantId,
+      currentAnnualRent: 100000, newAnnualRent: 100000, increaseAmount: 0, increasePercentage: 0,
+      originalStartDate: "2026-01-01", originalEndDate: "2026-12-31",
+      newStartDate: "2027-01-01", newEndDate: "2027-12-31",
+      installmentsCount: 1, paymentSchedule: [], securityDeposit: 5000,
+      includeAdminFees: true,
+      ownerFeeEnabled: true, ownerFeeBasis: "PERCENTAGE_OF_RENT", ownerFeeRate: 5, ownerFeeDueDate: "2027-01-01",
+      tenantFeeEnabled: true, tenantFeeBasis: "PERCENTAGE_OF_RENT", tenantFeeRate: 5, tenantFeeDueDate: "2027-01-01",
+    } as any);
+    if (!renewalJ.success || !renewalJ.renewal) throw new Error(`J createLeaseRenewal failed: ${renewalJ.error}`);
+    const renewalJId = renewalJ.renewal.id;
+    createdRenewalIds.push(renewalJId);
+    await waitFor(async () => (await getDocFromServer(doc(db, "lease_renewals", renewalJId))).exists());
+    await waitFor(() => getApi().leaseRenewals.some((r) => r.id === renewalJId && r.status === "PENDING_APPROVAL"));
+    const approveJ = await runWithAct(() => getApi().approveLeaseRenewal(renewalJId, "Real renewal admin fee workflow"));
+    const savedRenewalJ = await getDocFromServer(doc(db, "lease_renewals", renewalJId));
+    const newLeaseJId = savedRenewalJ.data()?.newLeaseId;
+    if (newLeaseJId) createdLeaseIds.push(newLeaseJId);
+    const ownerFeeJId = newLeaseJId ? `com-${newLeaseJId}-OWNER-ADMIN_FEE-2027-2` : "";
+    const tenantFeeJId = newLeaseJId ? `com-${newLeaseJId}-TENANT-ADMIN_FEE-2027-2` : "";
+    const [ownerFeeJ, tenantFeeJ] = await Promise.all([
+      ownerFeeJId ? getDocFromServer(doc(db, "commissions", ownerFeeJId)) : Promise.resolve(null),
+      tenantFeeJId ? getDocFromServer(doc(db, "commissions", tenantFeeJId)) : Promise.resolve(null),
+    ]);
+    if (ownerFeeJ?.exists()) createdCommissionIds.push(ownerFeeJId);
+    if (tenantFeeJ?.exists()) createdCommissionIds.push(tenantFeeJId);
+    record(10, "J", "Real renewal creates Owner + Tenant admin fees",
+      approveJ.success && savedRenewalJ.data()?.status === "APPROVED" &&
+      ownerFeeJ?.exists() === true && tenantFeeJ?.exists() === true &&
+      ownerFeeJ?.data()?.totalCommissionAmount === 5000 &&
+      tenantFeeJ?.data()?.totalCommissionAmount === 5000 &&
+      ownerFeeJ?.data()?.renewalSequence === 2 &&
+      tenantFeeJ?.data()?.renewalSequence === 2,
+      `approve=${approveJ.success}, newLease=${newLeaseJId || "none"}, ownerFee=${ownerFeeJ?.data()?.totalCommissionAmount ?? "missing"}, tenantFee=${tenantFeeJ?.data()?.totalCommissionAmount ?? "missing"}, sequence=${ownerFeeJ?.data()?.renewalSequence ?? "missing"}`
+    );
 
-    console.log(`CONTRACT PRODUCTION WORKFLOW A–I: ${passed}/9 PASSED, ${failed} FAILED`);
-    return { total: 9, passed, failed, results };
+    // K — replaying the same approved renewal must not create another lease or fee set.
+    const replayJ = await runWithAct(() => getApi().approveLeaseRenewal(renewalJId, "Replay protection check"));
+    const renewalJAfterReplay = await getDocFromServer(doc(db, "lease_renewals", renewalJId));
+    const [ownerFeeJAfterReplay, tenantFeeJAfterReplay] = await Promise.all([
+      ownerFeeJId ? getDocFromServer(doc(db, "commissions", ownerFeeJId)) : Promise.resolve(null),
+      tenantFeeJId ? getDocFromServer(doc(db, "commissions", tenantFeeJId)) : Promise.resolve(null),
+    ]);
+    const newLeaseJCount = getApi().leases.filter((lease) => lease.id === newLeaseJId).length;
+    record(11, "K", "Real renewal replay is rejected without duplicate records",
+      !replayJ.success && renewalJAfterReplay.data()?.newLeaseId === newLeaseJId &&
+      newLeaseJCount === 1 && ownerFeeJAfterReplay?.exists() === true &&
+      tenantFeeJAfterReplay?.exists() === true,
+      `replaySuccess=${replayJ.success}, status=${renewalJAfterReplay.data()?.status}, newLeaseCount=${newLeaseJCount}, ownerFeeExists=${ownerFeeJAfterReplay?.exists()}, tenantFeeExists=${tenantFeeJAfterReplay?.exists()}`
+    );
+
+    // L — the next renewal must derive sequence 3 from the actual renewed lease.
+    const renewalL = getApi().createLeaseRenewal({
+      originalLeaseId: newLeaseJId,
+      originalLeaseNumber: String((await getDocFromServer(doc(db, "leases", newLeaseJId))).data()?.leaseNumber || "TEST-J-RENEWED"),
+      ownerId, propertyId, unitId: originalJ.unitId, tenantId,
+      currentAnnualRent: 100000, newAnnualRent: 105000, increaseAmount: 5000, increasePercentage: 5,
+      originalStartDate: "2027-01-01", originalEndDate: "2027-12-31",
+      newStartDate: "2028-01-01", newEndDate: "2028-12-31",
+      installmentsCount: 1, paymentSchedule: [], securityDeposit: 5000,
+      includeAdminFees: false,
+    } as any);
+    if (!renewalL.success || !renewalL.renewal) throw new Error(`L createLeaseRenewal failed: ${renewalL.error}`);
+    const renewalLId = renewalL.renewal.id;
+    createdRenewalIds.push(renewalLId);
+    await waitFor(async () => (await getDocFromServer(doc(db, "lease_renewals", renewalLId))).exists());
+    await waitFor(() => getApi().leaseRenewals.some((r) => r.id === renewalLId && r.status === "PENDING_APPROVAL"));
+    const approveL = await runWithAct(() => getApi().approveLeaseRenewal(renewalLId, "Third sequence workflow"));
+    const savedRenewalL = await getDocFromServer(doc(db, "lease_renewals", renewalLId));
+    const newLeaseLId = savedRenewalL.data()?.newLeaseId;
+    if (newLeaseLId) createdLeaseIds.push(newLeaseLId);
+    const newLeaseL = newLeaseLId ? await getDocFromServer(doc(db, "leases", newLeaseLId)) : null;
+    record(12, "L", "Real consecutive renewal derives sequence 3",
+      approveL.success && savedRenewalL.data()?.status === "APPROVED" &&
+      newLeaseL?.data()?.contractStatus === "ACTIVE" &&
+      newLeaseL?.data()?.renewalSequence === 3,
+      `approve=${approveL.success}, error=${approveL.error || "none"}, status=${newLeaseL?.data()?.contractStatus}, sequence=${newLeaseL?.data()?.renewalSequence}`
+    );
+
+    // M–O — real security-deposit carry-forward/refund workflows.
+    await runSecurityDepositRenewalScenario(13, "M", "equal deposit", 10000, 10000);
+    await runSecurityDepositRenewalScenario(14, "N", "higher deposit", 10000, 12000);
+    await runSecurityDepositRenewalScenario(15, "O", "lower deposit with refund journal", 10000, 8000);
+
+    console.log(`CONTRACT PRODUCTION WORKFLOW A–O: ${passed}/15 PASSED, ${failed} FAILED`);
+    return { total: 15, passed, failed, results };
   } finally {
     renderer?.unmount();
     await deleteDoc(doc(db, "financial_periods", "contract-workflow-open-period")).catch(() => {});
