@@ -314,9 +314,9 @@ export async function runContractProductionWorkflowIntegritySuite() {
         securityDepositHeld: originalDeposit,
         securityDepositStatus: "HELD",
       }, { merge: true });
-      await waitFor(() => getApi().leases.some((l) =>
-        l.id === original.leaseId && l.securityDepositHeld === originalDeposit
-      ));
+      await waitFor(async () =>
+        (await getDocFromServer(doc(db, "leases", original.leaseId))).data()?.securityDepositHeld === originalDeposit
+      );
 
       const renewalResult = await runWithAct(() => getApi().createLeaseRenewal({
         originalLeaseId: original.leaseId,
@@ -585,7 +585,6 @@ export async function runContractProductionWorkflowIntegritySuite() {
     );
 
     // G–I — real renewal workflow carries forward a previously held deposit.
-    await waitFor(() => getApi().chartOfAccounts.length > 0);
     await runSecurityDepositRenewalScenario(7, "G", "equal deposit", 10000, 10000);
     await runSecurityDepositRenewalScenario(8, "H", "higher deposit", 10000, 12000);
     await runSecurityDepositRenewalScenario(9, "I", "lower deposit with refund journal", 10000, 8000);
