@@ -416,6 +416,9 @@ export async function runContractProductionWorkflowIntegritySuite() {
     const approveE = await getApi().approveLease(leaseE.id, "Owner fee production workflow");
     const savedLeaseE = (await getDocFromServer(doc(db, "leases", leaseE.id))).data();
     const ownerFees = await readCommissionDocs(adminDb, leaseE.id);
+    const ownerFeeDocId = "com-" + leaseE.id + "-OWNER-ADMIN_FEE-2027-1";
+    const ownerFeeClientDoc = await getDocFromServer(doc(db, "commissions", ownerFeeDocId));
+    const ownerFeesInContext = getApi().commissions.filter((c: any) => c.leaseId === leaseE.id);
     const ownerFee = ownerFees.find((c: any) => c.partyType === "OWNER" && c.commissionType === "ADMIN_FEE");
     if (ownerFee) createdCommissionIds.push(ownerFee.id);
     record(5, "E", "Real Owner Admin Fee creation during lease approval",
@@ -423,7 +426,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
       ownerFee?.partyType === "OWNER" &&
       ownerFee?.totalCommissionAmount === 5000 &&
       ownerFee?.renewalSequence === 1,
-      `approve=${approveE.success}, stagedFees=${JSON.stringify(savedLeaseE?.stagedAdminFeesConfig)}, commissionCount=${ownerFees.length}, amount=${ownerFee?.totalCommissionAmount}, sequence=${ownerFee?.renewalSequence}`
+      `approve=${approveE.success}, stagedFees=${JSON.stringify(savedLeaseE?.stagedAdminFeesConfig)}, commissionCount=${ownerFees.length}, clientDocExists=${ownerFeeClientDoc.exists()}, contextCount=${ownerFeesInContext.length}, amount=${ownerFee?.totalCommissionAmount}, sequence=${ownerFee?.renewalSequence}`
     );
 
     // F — real tenant admin fee creation during lease approval.
@@ -449,6 +452,9 @@ export async function runContractProductionWorkflowIntegritySuite() {
     const approveF = await getApi().approveLease(leaseF.id, "Tenant fee production workflow");
     const savedLeaseF = (await getDocFromServer(doc(db, "leases", leaseF.id))).data();
     const tenantFees = await readCommissionDocs(adminDb, leaseF.id);
+    const tenantFeeDocId = "com-" + leaseF.id + "-TENANT-ADMIN_FEE-2027-1";
+    const tenantFeeClientDoc = await getDocFromServer(doc(db, "commissions", tenantFeeDocId));
+    const tenantFeesInContext = getApi().commissions.filter((c: any) => c.leaseId === leaseF.id);
     const tenantFee = tenantFees.find((c: any) => c.partyType === "TENANT" && c.commissionType === "ADMIN_FEE");
     if (tenantFee) createdCommissionIds.push(tenantFee.id);
     record(6, "F", "Real Tenant Admin Fee creation during lease approval",
@@ -456,7 +462,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
       tenantFee?.partyType === "TENANT" &&
       tenantFee?.totalCommissionAmount === 5000 &&
       tenantFee?.renewalSequence === 1,
-      `approve=${approveF.success}, stagedFees=${JSON.stringify(savedLeaseF?.stagedAdminFeesConfig)}, commissionCount=${tenantFees.length}, amount=${tenantFee?.totalCommissionAmount}, sequence=${tenantFee?.renewalSequence}`
+      `approve=${approveF.success}, stagedFees=${JSON.stringify(savedLeaseF?.stagedAdminFeesConfig)}, commissionCount=${tenantFees.length}, clientDocExists=${tenantFeeClientDoc.exists()}, contextCount=${tenantFeesInContext.length}, amount=${tenantFee?.totalCommissionAmount}, sequence=${tenantFee?.renewalSequence}`
     );
 
     console.log(`CONTRACT PRODUCTION WORKFLOW A–F: ${passed}/6 PASSED, ${failed} FAILED`);
