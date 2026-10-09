@@ -110,8 +110,14 @@ async function seedLease(lease: Lease) {
 }
 
 async function readCommissionDocs(adminDb: FirebaseFirestore.Firestore, leaseId: string): Promise<Array<any>> {
-  const snap = await adminDb.collection("commissions").get();
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as any)).filter((entry: any) => entry.leaseId === leaseId);
+  const leaseSnap = await adminDb.collection("leases").doc(leaseId).get();
+  const leaseData = leaseSnap.data() as any;
+  const year = new Date(leaseData?.startDate || "2027-01-01").getFullYear().toString();
+  const sequence = Number(leaseData?.renewalSequence) || 1;
+  const parties = ["OWNER", "TENANT"];
+  const refs = parties.map((partyType) => adminDb.collection("commissions").doc("com-" + leaseId + "-" + partyType + "-ADMIN_FEE-" + year + "-" + sequence));
+  const snaps = await Promise.all(refs.map((ref) => ref.get()));
+  return snaps.filter((snap) => snap.exists).map((snap) => ({ id: snap.id, ...snap.data() } as any));
 }
 
 export async function runContractProductionWorkflowIntegritySuite() {
