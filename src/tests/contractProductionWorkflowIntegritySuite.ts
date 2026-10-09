@@ -197,6 +197,19 @@ export async function runContractProductionWorkflowIntegritySuite() {
 
     await signInWithEmailAndPassword(auth, TEST_EMAIL, TEST_PASSWORD);
 
+    // Test fixture: an open current-period is required to exercise the real
+    // security-deposit refund journal path. This exists only in the emulator.
+    const testPeriodId = "contract-workflow-open-period";
+    await setDoc(doc(db, "financial_periods", testPeriodId), {
+      id: testPeriodId,
+      name: "Contract Workflow Test Period",
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+      status: "OPEN",
+      openedAt: new Date().toISOString(),
+      openedBy: "TEST",
+    });
+
     let resolveApi: ((api: DataContextType) => void) | null = null;
     const apiReady = new Promise<DataContextType>((resolve) => { resolveApi = resolve; });
 
@@ -287,6 +300,88 @@ export async function runContractProductionWorkflowIntegritySuite() {
       const approval = await getApi().approveLease(lease.id, `Real ${label} original lease approval`);
       if (!approval.success) throw new Error(`${label} approval failed: ${approval.error}`);
       return { unitId: unit.id, leaseId: lease.id, leaseNumber: lease.leaseNumber };
+    };
+
+    const runSecurityDepositRenewalScenario = async (
+      testNumber: number,
+      letter: string,
+      label: string,
+      originalDeposit: number,
+      newDeposit: number
+    ) => {
+      const original = await createApprovedOriginalLease(`SD-${label}`, 100000, originalDeposit);
+      // Fixture represents a previously collected/held deposit on an existing
+      // lease. The renewal and settlement themselves use production workflows.
+      await setDoc(doc(db, "leases", original.leaseId), {
+        securityDepositHeld: originalDeposit,
+        securityDepositStatus: "HELD",
+      }, { merge: true });
+      await waitFor(() => getApi().leases.some((l) =>
+        l.id === original.leaseId && l.securityDepositHeld === originalDeposit
+      ));
+
+      const renewalResult = await runWithAct(() => getApi().createLeaseRenewal({
+        originalLeaseId: original.leaseId,
+        originalLeaseNumber: original.leaseNumber,
+        ownerId,
+        propertyId,
+        unitId: original.unitId,
+        tenantId,
+        currentAnnualRent: 100000,
+        newAnnualRent: 100000,
+        increaseAmount: 0,
+        increasePercentage: 0,
+        originalStartDate: "2026-01-01",
+        originalEndDate: "2026-12-31",
+        newStartDate: "2027-01-01",
+        newEndDate: "2027-12-31",
+        installmentsCount: 1,
+        paymentSchedule: [],
+        securityDeposit: newDeposit,
+      } as any));
+      if (!renewalResult.success || !renewalResult.renewal) {
+        record(testNumber, letter, `Real security deposit renewal — ${label}`, false,
+          `create renewal failed: ${renewalResult.error || "unknown error"}`);
+        return;
+      }
+      const renewalId = renewalResult.renewal.id;
+      createdRenewalIds.push(renewalId);
+      await waitFor(async () => (await getDocFromServer(doc(db, "lease_renewals", renewalId))).exists());
+      await waitFor(() => getApi().leaseRenewals.some((r) => r.id === renewalId && r.status === "PENDING_APPROVAL"));
+      const approval = await runWithAct(() => getApi().approveLeaseRenewal(renewalId, `Real deposit scenario ${label}`));
+      const renewalSaved = await getDocFromServer(doc(db, "lease_renewals", renewalId));
+      const originalSaved = await getDocFromServer(doc(db, "leases", original.leaseId));
+      const newLeaseId = renewalSaved.data()?.newLeaseId;
+      const newLeaseSaved = newLeaseId ? await getDocFromServer(doc(db, "leases", newLeaseId)) : null;
+      if (newLeaseId) createdLeaseIds.push(newLeaseId);
+
+      const carried = Math.min(originalDeposit, newDeposit);
+      const outstanding = Math.max(0, newDeposit - carried);
+      const refundDue = Math.max(0, originalDeposit - newDeposit);
+      const originalSettlement = originalSaved.data()?.securityDepositSettlement;
+      let refundJournalFound = refundDue === 0;
+      if (refundDue > 0) {
+        const reference = `REF-SD-${original.leaseNumber}`;
+        await waitFor(() => getApi().journalEntries.some((entry: any) =>
+          entry.reference === reference && entry.totalDebit === refundDue && entry.totalCredit === refundDue
+        ), 10000);
+        refundJournalFound = getApi().journalEntries.some((entry: any) =>
+          entry.reference === reference && entry.totalDebit === refundDue && entry.totalCredit === refundDue
+        );
+      }
+
+      const passed = approval.success &&
+        renewalSaved.data()?.status === "APPROVED" &&
+        originalSaved.data()?.contractStatus === "RENEWED" &&
+        originalSaved.data()?.securityDepositStatus === "CARRIED_FORWARD" &&
+        newLeaseSaved?.data()?.securityDeposit === newDeposit &&
+        newLeaseSaved?.data()?.securityDepositHeld === carried &&
+        newLeaseSaved?.data()?.securityDepositOutstanding === outstanding &&
+        (refundDue === 0 || originalSettlement?.netRefundAmount === refundDue) &&
+        refundJournalFound;
+
+      record(testNumber, letter, `Real security deposit renewal — ${label}`, passed,
+        `approve=${approval.success}, originalHeld=${originalDeposit}, newDeposit=${newDeposit}, carried=${newLeaseSaved?.data()?.securityDepositHeld}, outstanding=${newLeaseSaved?.data()?.securityDepositOutstanding}, refundDue=${originalSettlement?.netRefundAmount || 0}, refundJournal=${refundJournalFound}, error=${approval.error || "none"}`);
     };
 
     // A — real new lease lifecycle: add -> submit -> approve.
@@ -491,10 +586,18 @@ export async function runContractProductionWorkflowIntegritySuite() {
       `approve=${approveF.success}, stagedFees=${JSON.stringify(savedLeaseF?.stagedAdminFeesConfig)}, commissionCount=${tenantFees.length}, clientDocExists=${tenantFeeClientDoc.exists()}, contextCount=${tenantFeesInContext.length}, amount=${tenantFee?.totalCommissionAmount}, sequence=${tenantFee?.renewalSequence}`
     );
 
-    console.log(`CONTRACT PRODUCTION WORKFLOW A–F: ${passed}/6 PASSED, ${failed} FAILED`);
-    return { total: 6, passed, failed, results };
+    // G–I — real renewal workflow carries forward a previously held deposit.
+    await waitFor(() => getApi().financialPeriods.some((p: any) => p.id === testPeriodId && p.status === "OPEN"));
+    await waitFor(() => getApi().chartOfAccounts.length > 0);
+    await runSecurityDepositRenewalScenario(7, "G", "equal deposit", 10000, 10000);
+    await runSecurityDepositRenewalScenario(8, "H", "higher deposit", 10000, 12000);
+    await runSecurityDepositRenewalScenario(9, "I", "lower deposit with refund journal", 10000, 8000);
+
+    console.log(`CONTRACT PRODUCTION WORKFLOW A–I: ${passed}/9 PASSED, ${failed} FAILED`);
+    return { total: 9, passed, failed, results };
   } finally {
     renderer?.unmount();
+    await deleteDoc(doc(db, "financial_periods", "contract-workflow-open-period")).catch(() => {});
     for (const id of createdCommissionIds) await deleteDoc(doc(db, "commissions", id)).catch(() => {});
     await signOut(auth).catch(() => {});
     for (const id of createdCommissionIds) await adminDb.collection("commissions").doc(id).delete().catch(() => {});
