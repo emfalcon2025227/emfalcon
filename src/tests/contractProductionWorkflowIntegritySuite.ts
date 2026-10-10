@@ -9,7 +9,7 @@
 import React, { useEffect } from "react";
 import { act, create } from "react-test-renderer";
 import { connectAuthEmulator, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { connectFirestoreEmulator, deleteDoc, doc, getDoc, getDocFromServer, setDoc } from "firebase/firestore";
+import { connectFirestoreEmulator, deleteDoc, doc, getDoc, getDocFromServer, runTransaction, setDoc } from "firebase/firestore";
 import { initializeApp as initializeAdminApp, deleteApp as deleteAdminApp } from "firebase-admin/app";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
@@ -620,6 +620,16 @@ export async function runContractProductionWorkflowIntegritySuite() {
     createdRenewalIds.push(renewalJId);
     await waitFor(async () => (await getDocFromServer(doc(db, "lease_renewals", renewalJId))).exists());
     await waitFor(() => getApi().leaseRenewals.some((r) => r.id === renewalJId && r.status === "PENDING_APPROVAL"));
+    // Diagnostic preflight: verify that the same client Firestore transaction
+    // used by the production workflow can read this exact renewal record.
+    const renewalJBeforeApproval = await getDocFromServer(doc(db, "lease_renewals", renewalJId));
+    const renewalJVisibleToTransaction = await runTransaction(db, async (transaction) => {
+      const snapshot = await transaction.get(doc(db, "lease_renewals", renewalJId));
+      return snapshot.exists();
+    });
+    console.log(
+      `[DIAGNOSTIC] renewal=${renewalJId}, serverRead=${renewalJBeforeApproval.exists()}, transactionRead=${renewalJVisibleToTransaction}, dataId=${renewalJBeforeApproval.data()?.id || "missing"}, status=${renewalJBeforeApproval.data()?.status || "missing"}`
+    );
     const approveJ = await runWithAct(() => getApi().approveLeaseRenewal(renewalJId, "Real renewal admin fee workflow"));
     const savedRenewalJ = await getDocFromServer(doc(db, "lease_renewals", renewalJId));
     const newLeaseJId = savedRenewalJ.data()?.newLeaseId;
