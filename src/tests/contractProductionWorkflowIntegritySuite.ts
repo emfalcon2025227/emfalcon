@@ -667,34 +667,43 @@ export async function runContractProductionWorkflowIntegritySuite() {
       `replaySuccess=${replayJ.success}, status=${renewalJAfterReplay.data()?.status}, newLeaseCount=${newLeaseJCount}, ownerFeeExists=${ownerFeeJAfterReplay?.exists()}, tenantFeeExists=${tenantFeeJAfterReplay?.exists()}`
     );
 
-    // L — the next renewal must derive sequence 3 from the actual renewed lease.
-    const renewalL = getApi().createLeaseRenewal({
-      originalLeaseId: newLeaseJId,
-      originalLeaseNumber: String((await getDocFromServer(doc(db, "leases", newLeaseJId))).data()?.leaseNumber || "TEST-J-RENEWED"),
-      ownerId, propertyId, unitId: originalJ.unitId, tenantId,
-      currentAnnualRent: 100000, newAnnualRent: 105000, increaseAmount: 5000, increasePercentage: 5,
-      originalStartDate: "2027-01-01", originalEndDate: "2027-12-31",
-      newStartDate: "2028-01-01", newEndDate: "2028-12-31",
-      installmentsCount: 1, paymentSchedule: [], securityDeposit: 5000,
-      includeAdminFees: false,
-    } as any);
-    if (!renewalL.success || !renewalL.renewal) throw new Error(`L createLeaseRenewal failed: ${renewalL.error}`);
-    const renewalLId = renewalL.renewal.id;
-    createdRenewalIds.push(renewalLId);
-    await waitFor(async () => (await getDocFromServer(doc(db, "lease_renewals", renewalLId))).exists());
-    await waitFor(() => getApi().leaseRenewals.some((r) => r.id === renewalLId && r.status === "PENDING_APPROVAL"));
-    const approveL = await runWithAct(() => getApi().approveLeaseRenewal(renewalLId, "Third sequence workflow"));
-    const savedRenewalL = await getDocFromServer(doc(db, "lease_renewals", renewalLId));
-    const newLeaseLId = savedRenewalL.data()?.newLeaseId;
-    if (newLeaseLId) createdLeaseIds.push(newLeaseLId);
-    const newLeaseL = newLeaseLId ? await getDocFromServer(doc(db, "leases", newLeaseLId)) : null;
-    record(9, "I", "Real consecutive renewal derives sequence 3",
-      approveL.success && savedRenewalL.data()?.status === "APPROVED" &&
-      newLeaseL?.data()?.contractStatus === "ACTIVE" &&
-      newLeaseL?.data()?.renewalSequence === 3,
-      `approve=${approveL.success}, error=${approveL.error || "none"}, status=${newLeaseL?.data()?.contractStatus}, sequence=${newLeaseL?.data()?.renewalSequence}`
-    );
-
+    // L depends on G creating a renewed lease. Record a failed prerequisite explicitly
+    // rather than throwing while constructing a Firestore reference from an undefined ID.
+    if (!newLeaseJId) {
+      record(9, "I", "Real consecutive renewal derives sequence 3", false,
+        "BLOCKED: prerequisite G did not create the renewed lease; inspect the G failure above.");
+    } else {
+      // L — the next renewal must derive sequence 3 from the actual renewed lease.
+      const renewalL = getApi().createLeaseRenewal({
+        originalLeaseId: newLeaseJId,
+        originalLeaseNumber: String((await getDocFromServer(doc(db, "leases", newLeaseJId))).data()?.leaseNumber || "TEST-J-RENEWED"),
+        ownerId, propertyId, unitId: originalJ.unitId, tenantId,
+        currentAnnualRent: 100000, newAnnualRent: 105000, increaseAmount: 5000, increasePercentage: 5,
+        originalStartDate: "2027-01-01", originalEndDate: "2027-12-31",
+        newStartDate: "2028-01-01", newEndDate: "2028-12-31",
+        installmentsCount: 1, paymentSchedule: [], securityDeposit: 5000,
+        includeAdminFees: false,
+      } as any);
+      if (!renewalL.success || !renewalL.renewal) throw new Error(`L createLeaseRenewal failed: ${renewalL.error}`);
+      const renewalLId = renewalL.renewal.id;
+      createdRenewalIds.push(renewalLId);
+      await waitFor(async () => (await getDocFromServer(doc(db, "lease_renewals", renewalLId))).exists());
+      await waitFor(() => getApi().leaseRenewals.some((r) => r.id === renewalLId && r.status === "PENDING_APPROVAL"));
+      const approveL = await runWithAct(() => getApi().approveLeaseRenewal(renewalLId, "Third sequence workflow"));
+      const savedRenewalL = await getDocFromServer(doc(db, "lease_renewals", renewalLId));
+      const newLeaseLId = savedRenewalL.data()?.newLeaseId;
+      if (newLeaseLId) createdLeaseIds.push(newLeaseLId);
+      const newLeaseL = newLeaseLId ? await getDocFromServer(doc(db, "leases", newLeaseLId)) : null;
+      record(9, "I", "Real consecutive renewal derives sequence 3",
+        approveL.success && savedRenewalL.data()?.status === "APPROVED" &&
+        newLeaseL?.data()?.contractStatus === "ACTIVE" &&
+        newLeaseL?.data()?.renewalSequence === 3,
+        `approve=${approveL.success}, error=${approveL.error || "none"}, status=${newLeaseL?.data()?.contractStatus}, sequence=${newLeaseL?.data()?.renewalSequence}`
+      );
+  
+  
+    }
+    
     // M–O — real security-deposit carry-forward/refund workflows.
     await runSecurityDepositRenewalScenario(10, "J", "equal deposit", 10000, 10000);
     await runSecurityDepositRenewalScenario(11, "K", "higher deposit", 10000, 12000);
