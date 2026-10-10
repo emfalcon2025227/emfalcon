@@ -180,6 +180,10 @@ if (process.argv.some((arg) => arg.endsWith("portalProvisioningHttpIntegritySuit
   runPortalProvisioningHttpIntegritySuite()
     .then((result) => {
       if (result.failed !== 0 || result.passed !== result.total) process.exit(1);
+      // server.ts imports dependencies that may keep Node's event loop alive.
+      // The suite has completed cleanup in its finally block, so terminate the
+      // isolated test process explicitly to prevent a false CI timeout/cancel.
+      process.exit(0);
     })
     .catch((error) => {
       console.error(error);
