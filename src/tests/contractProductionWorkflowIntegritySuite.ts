@@ -859,6 +859,29 @@ export async function runContractProductionWorkflowIntegritySuite() {
     await waitFor(async () => (await getDocFromServer(doc(db, "leases", leaseV.id))).data()?.contractStatus === "BINDING");
     const submitV = await runWithAct(() => getApi().submitLeaseForApproval(leaseV.id));
     await waitFor(async () => (await getDocFromServer(doc(db, "leases", leaseV.id))).data()?.contractStatus === "PENDING_APPROVAL");
+
+    // Prepare a real pending renewal before closing the period so both approval
+    // entry points are checked against the same closed-period condition.
+    const originalRenewalV = await createApprovedOriginalLease("V-RENEWAL", 60000, 3000);
+    const renewalV = getApi().createLeaseRenewal({
+      originalLeaseId: originalRenewalV.leaseId,
+      originalLeaseNumber: originalRenewalV.leaseNumber,
+      ownerId, propertyId, unitId: originalRenewalV.unitId, tenantId,
+      currentAnnualRent: 60000, newAnnualRent: 60000, increaseAmount: 0, increasePercentage: 0,
+      originalStartDate: "2026-01-01", originalEndDate: "2026-12-31",
+      newStartDate: "2027-01-01", newEndDate: "2027-12-31",
+      installmentsCount: 1, paymentSchedule: [], securityDeposit: 3000,
+      includeAdminFees: false,
+    } as any);
+    if (!renewalV.success || !renewalV.renewal) {
+      throw new Error(`Could not prepare pending renewal for closed-period test: ${renewalV.error || "unknown error"}`);
+    }
+    createdRenewalIds.push(renewalV.renewal.id);
+    await waitFor(async () => (await getDocFromServer(doc(db, "lease_renewals", renewalV.renewal!.id))).exists());
+    await waitFor(() => getApi().leaseRenewals.some((renewal) =>
+      renewal.id === renewalV.renewal!.id && renewal.status === "PENDING_APPROVAL"
+    ));
+
     if (!periodResult.period?.id) throw new Error("Test financial period ID is unavailable.");
     const closePeriodV = await runWithAct(() =>
       getApi().closeFinancialPeriod(periodResult.period!.id, "Isolated closed-period fail-closed integration test")
@@ -869,18 +892,27 @@ export async function runContractProductionWorkflowIntegritySuite() {
     await waitFor(() => getApi().financialPeriods.some((period: any) =>
       period.id === periodResult.period?.id && period.status === "CLOSED"
     ));
+
+    const unitStatusBeforeV = (await getDocFromServer(doc(db, "units", unitV.id))).data()?.status;
     const approveV = await runWithAct(() => getApi().approveLease(leaseV.id, "Closed-period fail-closed test"));
+    const approveRenewalV = await runWithAct(() => getApi().approveLeaseRenewal(renewalV.renewal!.id, "Closed-period renewal fail-closed test"));
     const savedLeaseV = await getDocFromServer(doc(db, "leases", leaseV.id));
     const savedUnitV = await getDocFromServer(doc(db, "units", unitV.id));
+    const savedRenewalV = await getDocFromServer(doc(db, "lease_renewals", renewalV.renewal.id));
+    const savedOriginalV = await getDocFromServer(doc(db, "leases", originalRenewalV.leaseId));
     const feesV = await readCommissionDocs(leaseV.id);
     const journalForV = getApi().journalEntries.some((entry: any) =>
       entry.sourceId === leaseV.id || String(entry.reference || "").includes(leaseV.leaseNumber)
     );
-    record(22, "V", "Closed financial period blocks lease approval atomically",
-      submitV.success && !approveV.success &&
+    record(22, "V", "Closed financial period blocks lease and renewal approvals atomically",
+      submitV.success && !approveV.success && !approveRenewalV.success &&
       savedLeaseV.data()?.contractStatus === "PENDING_APPROVAL" &&
-      savedUnitV.data()?.status === "VACANT" && feesV.length === 0 && !journalForV,
-      `submit=${submitV.success}, approve=${approveV.success}, error=${approveV.error || "none"}, lease=${savedLeaseV.data()?.contractStatus}, unit=${savedUnitV.data()?.status}, fees=${feesV.length}, journalExists=${journalForV}`
+      savedUnitV.data()?.status === unitStatusBeforeV &&
+      savedRenewalV.data()?.status === "PENDING_APPROVAL" &&
+      !savedRenewalV.data()?.newLeaseId &&
+      savedOriginalV.data()?.contractStatus === "ACTIVE" &&
+      feesV.length === 0 && !journalForV,
+      `submit=${submitV.success}, leaseApprove=${approveV.success}, renewalApprove=${approveRenewalV.success}, lease=${savedLeaseV.data()?.contractStatus}, unitBefore=${unitStatusBeforeV}, unitAfter=${savedUnitV.data()?.status}, renewal=${savedRenewalV.data()?.status}, newLease=${savedRenewalV.data()?.newLeaseId || "none"}, original=${savedOriginalV.data()?.contractStatus}, fees=${feesV.length}, journalExists=${journalForV}`
     );
 
     console.log(`CONTRACT PRODUCTION WORKFLOW A–V: ${passed}/22 PASSED, ${failed} FAILED`);
