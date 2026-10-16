@@ -44,6 +44,12 @@ const createdLeaseIds: string[] = [];
 const createdRenewalIds: string[] = [];
 const createdUnitIds: string[] = [];
 const createdCommissionIds: string[] = [];
+const createdCollectionIds: string[] = [];
+const createdJournalIds: string[] = [];
+const createdOwnerIds: string[] = [];
+const createdTenantIds: string[] = [];
+const createdPropertyIds: string[] = [];
+const createdPeriodIds: string[] = [];
 
 function installNodeBrowserShims() {
   const storage = new Map<string, string>();
@@ -264,13 +270,17 @@ export async function runContractProductionWorkflowIntegritySuite() {
       startDate: "2026-01-01",
       endDate: "2026-12-31",
     });
+    if (periodResult.period?.id) createdPeriodIds.push(periodResult.period.id);
     if (!periodResult.success) {
       throw new Error(`Could not prepare isolated test financial period: ${periodResult.error || "unknown error"}`);
     }
     await waitFor(() => getApi().financialPeriods.some((p: any) => p.id === periodResult.period?.id && p.status === "OPEN"));
     const owner = getApi().addOwner({ code: `TEST-OWNER-${Date.now()}`, nameAr: "مالك اختبار", nameEn: "Workflow Test Owner", phone: "0500000000", email: TEST_EMAIL } as any);
+    createdOwnerIds.push(owner.id);
     const tenant = getApi().addTenant({ code: `TEST-TENANT-${Date.now()}`, nameAr: "مستأجر اختبار", nameEn: "Workflow Test Tenant", type: "INDIVIDUAL", nationality: "AE", email: TEST_EMAIL, phone: "0500000001", status: "ACTIVE" });
+    createdTenantIds.push(tenant.id);
     const property = getApi().addProperty({ nameAr: "عقار اختبار", nameEn: "Workflow Test Property", code: `TEST-PROP-${Date.now()}`, ownerId: owner.id, status: "ACTIVE" } as any);
+    createdPropertyIds.push(property.id);
     await waitFor(() => getApi().owners.some((x) => x.id === owner.id));
     await waitFor(() => getApi().tenants.some((x) => x.id === tenant.id));
     await waitFor(() => getApi().properties.some((x) => x.id === property.id));
@@ -322,14 +332,26 @@ export async function runContractProductionWorkflowIntegritySuite() {
       newDeposit: number
     ) => {
       const original = await createApprovedOriginalLease(`SD-${label}`, 100000, originalDeposit);
-      // Fixture represents a previously collected/held deposit on an existing
-      // lease. The renewal and settlement themselves use production workflows.
-      await setDoc(doc(db, "leases", original.leaseId), {
-        securityDepositHeld: originalDeposit,
-        securityDepositStatus: "HELD",
-      }, { merge: true });
+      // Collect the deposit through the real production workflow rather than
+      // mutating the lease document to simulate a previously held deposit.
+      const collectionResult = await runWithAct(() => getApi().collectSecurityDeposit({
+        leaseId: original.leaseId,
+        amount: originalDeposit,
+        paymentMethod: "BANK_TRANSFER",
+        transactionReference: `TEST-SD-COLLECTION-${original.leaseNumber}`,
+        notes: `Isolated emulator fixture collection for ${label}`,
+      }));
+      if (!collectionResult.success || !collectionResult.receipt) {
+        throw new Error(`Real security deposit collection failed for ${label}: ${collectionResult.error || "unknown error"}`);
+      }
+      createdCollectionIds.push(collectionResult.receipt.id);
+      if (collectionResult.journalEntry?.id) createdJournalIds.push(collectionResult.journalEntry.id);
+      await waitFor(async () => {
+        const saved = (await getDocFromServer(doc(db, "leases", original.leaseId))).data();
+        return saved?.securityDepositHeld === originalDeposit && saved?.securityDepositStatus === "HELD";
+      });
       await waitFor(async () =>
-        (await getDocFromServer(doc(db, "leases", original.leaseId))).data()?.securityDepositHeld === originalDeposit
+        (await getDocFromServer(doc(db, "collections", collectionResult.receipt!.id))).exists()
       );
 
       const renewalResult = await runWithAct(() => getApi().createLeaseRenewal({
@@ -779,10 +801,19 @@ export async function runContractProductionWorkflowIntegritySuite() {
     return { total: 18, passed, failed, results };
   } finally {
     renderer?.unmount();
-    await deleteDoc(doc(db, "financial_periods", "contract-workflow-open-period")).catch(() => {});
+    for (const id of createdPeriodIds) await adminDb.collection("financial_periods").doc(id).delete().catch(() => {});
     for (const id of createdCommissionIds) await deleteDoc(doc(db, "commissions", id)).catch(() => {});
     await signOut(auth).catch(() => {});
     for (const id of createdCommissionIds) await adminDb.collection("commissions").doc(id).delete().catch(() => {});
+    for (const id of createdCollectionIds) {
+      const allocations = await adminDb.collection("payment_allocations").where("collectionId", "==", id).get().catch(() => null);
+      if (allocations) await Promise.all(allocations.docs.map((allocation) => allocation.ref.delete().catch(() => {})));
+      await adminDb.collection("collections").doc(id).delete().catch(() => {});
+    }
+    for (const id of createdJournalIds) await adminDb.collection("journal_entries").doc(id).delete().catch(() => {});
+    for (const id of createdOwnerIds) await adminDb.collection("owners").doc(id).delete().catch(() => {});
+    for (const id of createdTenantIds) await adminDb.collection("tenants").doc(id).delete().catch(() => {});
+    for (const id of createdPropertyIds) await adminDb.collection("properties").doc(id).delete().catch(() => {});
     for (const id of createdRenewalIds) await adminDb.collection("lease_renewals").doc(id).delete().catch(() => {});
     for (const id of createdLeaseIds) await adminDb.collection("leases").doc(id).delete().catch(() => {});
     for (const id of createdUnitIds) await adminDb.collection("units").doc(id).delete().catch(() => {});
