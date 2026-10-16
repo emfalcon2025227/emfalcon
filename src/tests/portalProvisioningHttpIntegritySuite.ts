@@ -96,9 +96,18 @@ export async function runPortalProvisioningHttpIntegritySuite() {
     const ownerEmail = "portal-http-owner-" + stamp + "@falcon-test.ae";
     const tenantEmail = "portal-http-tenant-" + stamp + "@falcon-test.ae";
 
-    await adminDb.collection("owners").doc(ownerId).set({ id: ownerId, nameEn: "HTTP Test Owner", nameAr: "مالك اختبار HTTP", isActive: true });
-    await adminDb.collection("tenants").doc(tenantId).set({ id: tenantId, nameEn: "HTTP Test Tenant", nameAr: "مستأجر اختبار HTTP", isActive: true });
-    createdTargetDocs.push({ collection: "owners", id: ownerId }, { collection: "tenants", id: tenantId });
+    const ownerId2 = "portal-http-owner-concurrent-" + stamp;
+    const tenantId2 = "portal-http-tenant-concurrent-" + stamp;
+    await Promise.all([
+      adminDb.collection("owners").doc(ownerId).set({ id: ownerId, nameEn: "HTTP Test Owner", nameAr: "مالك اختبار HTTP", isActive: true }),
+      adminDb.collection("tenants").doc(tenantId).set({ id: tenantId, nameEn: "HTTP Test Tenant", nameAr: "مستأجر اختبار HTTP", isActive: true }),
+      adminDb.collection("owners").doc(ownerId2).set({ id: ownerId2, nameEn: "Concurrent HTTP Test Owner", nameAr: "مالك اختبار متزامن", isActive: true }),
+      adminDb.collection("tenants").doc(tenantId2).set({ id: tenantId2, nameEn: "Concurrent HTTP Test Tenant", nameAr: "مستأجر اختبار متزامن", isActive: true }),
+    ]);
+    createdTargetDocs.push(
+      { collection: "owners", id: ownerId }, { collection: "tenants", id: tenantId },
+      { collection: "owners", id: ownerId2 }, { collection: "tenants", id: tenantId2 },
+    );
 
     // Initialize the production Express application only after the isolated Admin app exists.
     const { app } = await import("../../server");
@@ -156,8 +165,44 @@ export async function runPortalProvisioningHttpIntegritySuite() {
       tenantProfile?.data()?.tenantId === tenantId && tenantProfile?.data()?.role === "TENANT",
       "ownerBinding=" + (ownerProfile?.data()?.ownerId || "missing") + ", tenantBinding=" + (tenantProfile?.data()?.tenantId || "missing"));
 
-    console.log("PORTAL PROVISIONING HTTP INTEGRITY: " + passed + "/8 PASSED, " + failed + " FAILED");
-    return { total: 8, passed, failed, results };
+    // 9. Concurrent real HTTP requests for the same Owner target must serialize.
+    const ownerConcurrentEmail = "portal-http-concurrent-owner-" + stamp + "@falcon-test.ae";
+    const [ownerConcurrentA, ownerConcurrentB] = await Promise.all([
+      post(endpoint, { portalRole: "OWNER", targetId: ownerId2, email: ownerConcurrentEmail }, ownerToken),
+      post(endpoint, { portalRole: "OWNER", targetId: ownerId2, email: ownerConcurrentEmail }, ownerToken),
+    ]);
+    for (const response of [ownerConcurrentA, ownerConcurrentB]) {
+      if (response.body?.user?.id) createdPortalUids.push(response.body.user.id);
+    }
+    const ownerConcurrentStatuses = [ownerConcurrentA.status, ownerConcurrentB.status].sort((a, b) => a - b);
+    const ownerConcurrentProfiles = await adminDb.collection("users").where("ownerId", "==", ownerId2).get();
+    let ownerConcurrentAuthExists = false;
+    try { await adminAuth.getUserByEmail(ownerConcurrentEmail); ownerConcurrentAuthExists = true; } catch {}
+    report(9, "Concurrent Owner provisioning over real HTTP creates exactly one identity",
+      ownerConcurrentStatuses[0] === 200 && ownerConcurrentStatuses[1] === 409 &&
+      ownerConcurrentProfiles.size === 1 && ownerConcurrentAuthExists,
+      "statuses=" + ownerConcurrentStatuses.join(",") + ", profiles=" + ownerConcurrentProfiles.size + ", authExists=" + ownerConcurrentAuthExists);
+
+    // 10. Same concurrency invariant for Tenant portal provisioning.
+    const tenantConcurrentEmail = "portal-http-concurrent-tenant-" + stamp + "@falcon-test.ae";
+    const [tenantConcurrentA, tenantConcurrentB] = await Promise.all([
+      post(endpoint, { portalRole: "TENANT", targetId: tenantId2, email: tenantConcurrentEmail }, ownerToken),
+      post(endpoint, { portalRole: "TENANT", targetId: tenantId2, email: tenantConcurrentEmail }, ownerToken),
+    ]);
+    for (const response of [tenantConcurrentA, tenantConcurrentB]) {
+      if (response.body?.user?.id) createdPortalUids.push(response.body.user.id);
+    }
+    const tenantConcurrentStatuses = [tenantConcurrentA.status, tenantConcurrentB.status].sort((a, b) => a - b);
+    const tenantConcurrentProfiles = await adminDb.collection("users").where("tenantId", "==", tenantId2).get();
+    let tenantConcurrentAuthExists = false;
+    try { await adminAuth.getUserByEmail(tenantConcurrentEmail); tenantConcurrentAuthExists = true; } catch {}
+    report(10, "Concurrent Tenant provisioning over real HTTP creates exactly one identity",
+      tenantConcurrentStatuses[0] === 200 && tenantConcurrentStatuses[1] === 409 &&
+      tenantConcurrentProfiles.size === 1 && tenantConcurrentAuthExists,
+      "statuses=" + tenantConcurrentStatuses.join(",") + ", profiles=" + tenantConcurrentProfiles.size + ", authExists=" + tenantConcurrentAuthExists);
+
+    console.log("PORTAL PROVISIONING HTTP INTEGRITY: " + passed + "/10 PASSED, " + failed + " FAILED");
+    return { total: 10, passed, failed, results };
   } finally {
     if (httpServer) await new Promise<void>((resolve) => httpServer!.close(() => resolve()));
     await signOut(clientAuth).catch(() => {});
