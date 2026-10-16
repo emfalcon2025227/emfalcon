@@ -860,7 +860,12 @@ export async function runContractProductionWorkflowIntegritySuite() {
     const submitV = await runWithAct(() => getApi().submitLeaseForApproval(leaseV.id));
     await waitFor(async () => (await getDocFromServer(doc(db, "leases", leaseV.id))).data()?.contractStatus === "PENDING_APPROVAL");
     if (!periodResult.period?.id) throw new Error("Test financial period ID is unavailable.");
-    await setDoc(doc(db, "financial_periods", periodResult.period.id), { status: "CLOSED" }, { merge: true });
+    const closePeriodV = await runWithAct(() =>
+      getApi().closeFinancialPeriod(periodResult.period!.id, "Isolated closed-period fail-closed integration test")
+    );
+    if (!closePeriodV.success) {
+      throw new Error(`Could not close test financial period through production workflow: ${closePeriodV.error || "unknown error"}`);
+    }
     await waitFor(() => getApi().financialPeriods.some((period: any) =>
       period.id === periodResult.period?.id && period.status === "CLOSED"
     ));
