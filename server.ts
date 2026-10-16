@@ -582,6 +582,50 @@ export async function handleProvisionPortalUserInternal(
       throw claimErr;
     }
 
+    // A same-email claim may belong to another request that is still creating
+    // the Auth identity/profile. Do not race ahead and misclassify that partial
+    // state as an unrelated existing account; only continue when the claimed
+    // identity is already fully bound to this exact target.
+    if (!isNewClaim) {
+      let claimedAuthUser: any = null;
+      try {
+        claimedAuthUser = await authAdmin.getUserByEmail(cleanEmail);
+      } catch (claimUserErr: any) {
+        if (claimUserErr?.code !== "auth/user-not-found") throw claimUserErr;
+      }
+
+      if (!claimedAuthUser) {
+        return res.status(409).json({
+          success: false,
+          error: "PORTAL_PROVISIONING_IN_PROGRESS",
+          message: "A portal account for this target is currently being provisioned. Please retry shortly."
+        });
+      }
+
+      const claimedProfileSnap = await dbAdmin.collection("users").doc(claimedAuthUser.uid).get();
+      const claimedProfile = claimedProfileSnap.exists ? claimedProfileSnap.data() as UserProfile : null;
+      const claimMatchesRole = claimedProfile?.role === portalRole;
+      const claimMatchesTarget = portalRole === "OWNER"
+        ? claimedProfile?.ownerId === cleanTargetId
+        : claimedProfile?.tenantId === cleanTargetId;
+
+      if (!claimedProfileSnap.exists) {
+        return res.status(409).json({
+          success: false,
+          error: "PORTAL_PROVISIONING_IN_PROGRESS",
+          message: "A portal account for this target is currently being provisioned. Please retry shortly."
+        });
+      }
+
+      if (!claimMatchesRole || !claimMatchesTarget) {
+        return res.status(409).json({
+          success: false,
+          error: "PORTAL_CLAIM_CONFLICT",
+          message: "The existing portal claim is not bound to the requested target identity."
+        });
+      }
+    }
+
     // Wrap ALL subsequent steps in a dedicated try/catch to guarantee claim & auth cleanup on failure
     try {
       // 3. Existing Auth User Check
