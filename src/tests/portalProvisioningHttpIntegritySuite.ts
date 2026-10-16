@@ -100,6 +100,7 @@ export async function runPortalProvisioningHttpIntegritySuite() {
     const tenantId2 = "portal-http-tenant-concurrent-" + stamp;
     const ownerId3 = "portal-http-owner-rebind-" + stamp;
     const tenantId3 = "portal-http-tenant-rebind-" + stamp;
+    const ownerId4 = "portal-http-owner-in-progress-" + stamp;
     await Promise.all([
       adminDb.collection("owners").doc(ownerId).set({ id: ownerId, nameEn: "HTTP Test Owner", nameAr: "مالك اختبار HTTP", isActive: true }),
       adminDb.collection("tenants").doc(tenantId).set({ id: tenantId, nameEn: "HTTP Test Tenant", nameAr: "مستأجر اختبار HTTP", isActive: true }),
@@ -107,11 +108,13 @@ export async function runPortalProvisioningHttpIntegritySuite() {
       adminDb.collection("tenants").doc(tenantId2).set({ id: tenantId2, nameEn: "Concurrent HTTP Test Tenant", nameAr: "مستأجر اختبار متزامن", isActive: true }),
       adminDb.collection("owners").doc(ownerId3).set({ id: ownerId3, nameEn: "Rebind HTTP Test Owner", nameAr: "مالك اختبار إعادة ربط", isActive: true }),
       adminDb.collection("tenants").doc(tenantId3).set({ id: tenantId3, nameEn: "Rebind HTTP Test Tenant", nameAr: "مستأجر اختبار إعادة ربط", isActive: true }),
+      adminDb.collection("owners").doc(ownerId4).set({ id: ownerId4, nameEn: "In-Progress HTTP Test Owner", nameAr: "مالك اختبار جارٍ", isActive: true }),
     ]);
     createdTargetDocs.push(
       { collection: "owners", id: ownerId }, { collection: "tenants", id: tenantId },
       { collection: "owners", id: ownerId2 }, { collection: "tenants", id: tenantId2 },
       { collection: "owners", id: ownerId3 }, { collection: "tenants", id: tenantId3 },
+      { collection: "owners", id: ownerId4 },
     );
 
     // Initialize the production Express application only after the isolated Admin app exists.
@@ -236,8 +239,26 @@ export async function runPortalProvisioningHttpIntegritySuite() {
       "status=" + tenantRebindAttempt.status + ", error=" + tenantRebindAttempt.body?.error +
       ", conflictingClaimReleased=" + !tenantRebindClaim.exists + ", originalProfiles=" + tenantProfilesAfterRebind.size);
 
-    console.log("PORTAL PROVISIONING HTTP INTEGRITY: " + passed + "/12 PASSED, " + failed + " FAILED");
-    return { total: 12, passed, failed, results };
+    // 13. A same-email claim with no completed Auth/profile binding is treated as in progress.
+    const inProgressEmail = "portal-http-in-progress-" + stamp + "@falcon-test.ae";
+    await adminDb.collection("portal_claims").doc("OWNER_" + ownerId4).set({
+      targetId: ownerId4, portalRole: "OWNER", email: inProgressEmail, createdAt: new Date().toISOString(),
+    });
+    const inProgressAttempt = await post(endpoint, {
+      portalRole: "OWNER", targetId: ownerId4, email: inProgressEmail,
+    }, ownerToken);
+    const inProgressClaim = await adminDb.collection("portal_claims").doc("OWNER_" + ownerId4).get();
+    let inProgressAuthExists = false;
+    try { await adminAuth.getUserByEmail(inProgressEmail); inProgressAuthExists = true; } catch {}
+    const inProgressProfiles = await adminDb.collection("users").where("ownerId", "==", ownerId4).get();
+    report(13, "Incomplete same-email claim is reported as in progress without creating an orphan",
+      inProgressAttempt.status === 409 && inProgressAttempt.body?.error === "PORTAL_PROVISIONING_IN_PROGRESS" &&
+      inProgressClaim.exists && !inProgressAuthExists && inProgressProfiles.empty,
+      "status=" + inProgressAttempt.status + ", error=" + inProgressAttempt.body?.error +
+      ", claimPreserved=" + inProgressClaim.exists + ", authExists=" + inProgressAuthExists + ", profiles=" + inProgressProfiles.size);
+
+    console.log("PORTAL PROVISIONING HTTP INTEGRITY: " + passed + "/13 PASSED, " + failed + " FAILED");
+    return { total: 13, passed, failed, results };
   } finally {
     if (httpServer) await new Promise<void>((resolve) => httpServer!.close(() => resolve()));
     await signOut(clientAuth).catch(() => {});
