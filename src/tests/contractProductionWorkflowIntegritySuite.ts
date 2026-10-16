@@ -78,7 +78,7 @@ function installNodeBrowserShims() {
     documentElement: { dir: "", lang: "" },
   };
   win.crypto = win.crypto || (globalThis as any).crypto;
-  (globalThis as any).navigator = (globalThis as any).navigator || { onLine: true };
+  Object.defineProperty(globalThis, "navigator", { configurable: true, value: { onLine: true } });
   // The lease workflow also attempts an external notification endpoint. Keep
   // that unrelated HTTP side effect inside the test boundary; all Firestore
   // writes and assertions still use the real production DataContext workflow.
