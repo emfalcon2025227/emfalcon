@@ -51,6 +51,7 @@ const createdOwnerIds: string[] = [];
 const createdTenantIds: string[] = [];
 const createdPropertyIds: string[] = [];
 const createdPeriodIds: string[] = [];
+const collectionWorkflowResults: Array<{ label: string; leaseId: string; amount: number; receiptId: string; journalEntry?: any }> = [];
 
 function installNodeBrowserShims() {
   const storage = new Map<string, string>();
@@ -352,6 +353,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
       }
       createdCollectionIds.push(collectionResult.receipt.id);
       if (collectionResult.journalEntry?.id) createdJournalIds.push(collectionResult.journalEntry.id);
+      collectionWorkflowResults.push({ label, leaseId: original.leaseId, amount: originalDeposit, receiptId: collectionResult.receipt.id, journalEntry: collectionResult.journalEntry });
       await waitFor(async () => {
         const saved = (await getDocFromServer(doc(db, "leases", original.leaseId))).data();
         return saved?.securityDepositHeld === originalDeposit && saved?.securityDepositStatus === "HELD";
@@ -737,6 +739,35 @@ export async function runContractProductionWorkflowIntegritySuite() {
     await runSecurityDepositRenewalScenario(11, "K", "higher deposit", 10000, 12000);
     const depositRefundCase = await runSecurityDepositRenewalScenario(12, "L", "lower deposit with refund journal", 10000, 8000);
 
+    // S–U — verify the real deposit collection itself produced the correct receipt,
+    // allocation and balanced liability journal, not only a changed lease status.
+    for (let index = 0; index < collectionWorkflowResults.length; index++) {
+      const item = collectionWorkflowResults[index];
+      const receiptSnapshot = await adminDb.collection("collections").doc(item.receiptId).get();
+      const receipt = receiptSnapshot.data();
+      const allocations = await adminDb.collection("payment_allocations")
+        .where("collectionId", "==", item.receiptId).get();
+      const journal = item.journalEntry;
+      const liabilityLine = journal?.lines?.find((line: any) => line.accountCode === "2020");
+      const assetLine = journal?.lines?.find((line: any) => line.accountCode === "1010" || line.accountCode === "1020");
+      const totalDebit = Number(journal?.totalDebit || 0);
+      const totalCredit = Number(journal?.totalCredit || 0);
+      const passed = receiptSnapshot.exists &&
+        receipt?.isSecurityDepositReceipt === true &&
+        receipt?.leaseId === item.leaseId &&
+        receipt?.amountEntered === item.amount &&
+        allocations.size === 1 &&
+        allocations.docs[0].data().targetType === "SECURITY_DEPOSIT" &&
+        allocations.docs[0].data().targetId === item.leaseId &&
+        allocations.docs[0].data().allocatedAmount === item.amount &&
+        !!liabilityLine && liabilityLine.credit === item.amount && liabilityLine.debit === 0 &&
+        !!assetLine && assetLine.debit === item.amount && assetLine.credit === 0 &&
+        totalDebit === item.amount && totalCredit === item.amount &&
+        !journal.lines.some((line: any) => String(line.accountCode || "").startsWith("4"));
+      record(19 + index, ["S", "T", "U"][index], `Real security deposit collection — ${item.label}`, passed,
+        `receiptExists=${receiptSnapshot.exists}, amount=${receipt?.amountEntered}, allocations=${allocations.size}, allocationAmount=${allocations.docs[0]?.data().allocatedAmount}, liability=2020:${liabilityLine?.debit}/${liabilityLine?.credit}, asset=${assetLine?.accountCode}:${assetLine?.debit}/${assetLine?.credit}, debit=${totalDebit}, credit=${totalCredit}, revenueLine=${journal?.lines?.some((line: any) => String(line.accountCode || "").startsWith("4"))}`);
+    }
+
     // M — VAT-inclusive Owner admin fee values from the actual production obligation.
     record(13, "M", "Owner admin fee VAT/net split is exact",
       ownerFee?.totalCommissionAmount === 5000 &&
@@ -803,8 +834,8 @@ export async function runContractProductionWorkflowIntegritySuite() {
       `replaySuccess=${replayRefund.success}, journalCount=${refundJournalCountAfterReplay}`
     );
 
-    console.log(`CONTRACT PRODUCTION WORKFLOW A–R: ${passed}/18 PASSED, ${failed} FAILED`);
-    return { total: 18, passed, failed, results };
+    console.log(`CONTRACT PRODUCTION WORKFLOW A–U: ${passed}/21 PASSED, ${failed} FAILED`);
+    return { total: 21, passed, failed, results };
   } finally {
     renderer?.unmount();
     for (const id of createdPeriodIds) await adminDb.collection("financial_periods").doc(id).delete().catch(() => {});
