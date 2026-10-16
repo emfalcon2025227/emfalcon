@@ -9,7 +9,7 @@
 import React, { useEffect } from "react";
 import { act, create } from "react-test-renderer";
 import { connectAuthEmulator, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { connectFirestoreEmulator, deleteDoc, doc, getDoc, getDocFromServer, runTransaction, setDoc } from "firebase/firestore";
+import { collection, connectFirestoreEmulator, deleteDoc, doc, getDoc, getDocFromServer, getDocsFromServer, query, runTransaction, setDoc, where } from "firebase/firestore";
 import { initializeApp as initializeAdminApp, deleteApp as deleteAdminApp } from "firebase-admin/app";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
@@ -743,16 +743,17 @@ export async function runContractProductionWorkflowIntegritySuite() {
     // allocation and balanced liability journal, not only a changed lease status.
     for (let index = 0; index < collectionWorkflowResults.length; index++) {
       const item = collectionWorkflowResults[index];
-      const receiptSnapshot = await adminDb.collection("collections").doc(item.receiptId).get();
+      const receiptSnapshot = await getDocFromServer(doc(db, "collections", item.receiptId));
       const receipt = receiptSnapshot.data();
-      const allocations = await adminDb.collection("payment_allocations")
-        .where("collectionId", "==", item.receiptId).get();
+      const allocations = await getDocsFromServer(query(
+        collection(db, "payment_allocations"), where("collectionId", "==", item.receiptId)
+      ));
       const journal = item.journalEntry;
       const liabilityLine = journal?.lines?.find((line: any) => line.accountCode === "2020");
       const assetLine = journal?.lines?.find((line: any) => line.accountCode === "1010" || line.accountCode === "1020");
       const totalDebit = Number(journal?.totalDebit || 0);
       const totalCredit = Number(journal?.totalCredit || 0);
-      const passed = receiptSnapshot.exists &&
+      const passed = receiptSnapshot.exists() &&
         receipt?.isSecurityDepositReceipt === true &&
         receipt?.leaseId === item.leaseId &&
         receipt?.amountEntered === item.amount &&
@@ -765,7 +766,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
         totalDebit === item.amount && totalCredit === item.amount &&
         !journal.lines.some((line: any) => String(line.accountCode || "").startsWith("4"));
       record(19 + index, ["S", "T", "U"][index], `Real security deposit collection — ${item.label}`, passed,
-        `receiptExists=${receiptSnapshot.exists}, amount=${receipt?.amountEntered}, allocations=${allocations.size}, allocationAmount=${allocations.docs[0]?.data().allocatedAmount}, liability=2020:${liabilityLine?.debit}/${liabilityLine?.credit}, asset=${assetLine?.accountCode}:${assetLine?.debit}/${assetLine?.credit}, debit=${totalDebit}, credit=${totalCredit}, revenueLine=${journal?.lines?.some((line: any) => String(line.accountCode || "").startsWith("4"))}`);
+        `receiptExists=${receiptSnapshot.exists()}, amount=${receipt?.amountEntered}, allocations=${allocations.size}, allocationAmount=${allocations.docs[0]?.data().allocatedAmount}, liability=2020:${liabilityLine?.debit}/${liabilityLine?.credit}, asset=${assetLine?.accountCode}:${assetLine?.debit}/${assetLine?.credit}, debit=${totalDebit}, credit=${totalCredit}, revenueLine=${journal?.lines?.some((line: any) => String(line.accountCode || "").startsWith("4"))}`);
     }
 
     // M — VAT-inclusive Owner admin fee values from the actual production obligation.
@@ -838,22 +839,23 @@ export async function runContractProductionWorkflowIntegritySuite() {
     return { total: 21, passed, failed, results };
   } finally {
     renderer?.unmount();
-    for (const id of createdPeriodIds) await adminDb.collection("financial_periods").doc(id).delete().catch(() => {});
+    for (const id of createdPeriodIds) await deleteDoc(doc(db, "financial_periods", id)).catch(() => {});
     for (const id of createdCommissionIds) await deleteDoc(doc(db, "commissions", id)).catch(() => {});
-    await signOut(auth).catch(() => {});
-    for (const id of createdCommissionIds) await adminDb.collection("commissions").doc(id).delete().catch(() => {});
     for (const id of createdCollectionIds) {
-      const allocations = await adminDb.collection("payment_allocations").where("collectionId", "==", id).get().catch(() => null);
-      if (allocations) await Promise.all(allocations.docs.map((allocation) => allocation.ref.delete().catch(() => {})));
-      await adminDb.collection("collections").doc(id).delete().catch(() => {});
+      const allocations = await getDocsFromServer(query(
+        collection(db, "payment_allocations"), where("collectionId", "==", id)
+      )).catch(() => null);
+      if (allocations) await Promise.all(allocations.docs.map((allocation) => deleteDoc(doc(db, "payment_allocations", allocation.id)).catch(() => {})));
+      await deleteDoc(doc(db, "collections", id)).catch(() => {});
     }
-    for (const id of createdJournalIds) await adminDb.collection("journal_entries").doc(id).delete().catch(() => {});
-    for (const id of createdOwnerIds) await adminDb.collection("owners").doc(id).delete().catch(() => {});
-    for (const id of createdTenantIds) await adminDb.collection("tenants").doc(id).delete().catch(() => {});
-    for (const id of createdPropertyIds) await adminDb.collection("properties").doc(id).delete().catch(() => {});
-    for (const id of createdRenewalIds) await adminDb.collection("lease_renewals").doc(id).delete().catch(() => {});
-    for (const id of createdLeaseIds) await adminDb.collection("leases").doc(id).delete().catch(() => {});
-    for (const id of createdUnitIds) await adminDb.collection("units").doc(id).delete().catch(() => {});
+    for (const id of createdJournalIds) await deleteDoc(doc(db, "journal_entries", id)).catch(() => {});
+    for (const id of createdOwnerIds) await deleteDoc(doc(db, "owners", id)).catch(() => {});
+    for (const id of createdTenantIds) await deleteDoc(doc(db, "tenants", id)).catch(() => {});
+    for (const id of createdPropertyIds) await deleteDoc(doc(db, "properties", id)).catch(() => {});
+    for (const id of createdRenewalIds) await deleteDoc(doc(db, "lease_renewals", id)).catch(() => {});
+    for (const id of createdLeaseIds) await deleteDoc(doc(db, "leases", id)).catch(() => {});
+    for (const id of createdUnitIds) await deleteDoc(doc(db, "units", id)).catch(() => {});
+    await signOut(auth).catch(() => {});
     await adminDb.collection("users").doc(ADMIN_UID).delete().catch(() => {});
     await adminAuth.deleteUser(ADMIN_UID).catch(() => {});
     await deleteAdminApp(adminApp).catch(() => {});
