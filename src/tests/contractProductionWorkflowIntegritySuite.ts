@@ -303,6 +303,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
         annualRent,
         status: "VACANT",
       } as any);
+      createdUnitIds.push(unit.id);
       await waitFor(() => getApi().units.some((u) => u.id === unit.id));
       await waitFor(async () => (await getDocFromServer(doc(db, "units", unit.id))).exists());
       const lease = getApi().addLease({
@@ -431,6 +432,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
 
     // A — real new lease lifecycle: add -> submit -> approve.
     const unitA = getApi().addUnit({ unitNumber: `TEST-A-UNIT-${Date.now()}`, propertyId, type: "1BR", annualRent: 80000, status: "VACANT" } as any);
+    createdUnitIds.push(unitA.id);
     await waitFor(() => getApi().units.some((u) => u.id === unitA.id));
     await waitFor(async () => (await getDocFromServer(doc(db, "units", unitA.id))).exists());
     const leaseAId = uniqueId("lease-a");
@@ -471,6 +473,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
 
     // B — real concurrent approval of the same production workflow.
     const unitB = getApi().addUnit({ unitNumber: `TEST-B-UNIT-${Date.now()}`, propertyId, type: "1BR", annualRent: 90000, status: "VACANT" } as any);
+    createdUnitIds.push(unitB.id);
     await waitFor(() => getApi().units.some((u) => u.id === unitB.id));
     await waitFor(async () => (await getDocFromServer(doc(db, "units", unitB.id))).exists());
     const leaseB = getApi().addLease({
@@ -559,6 +562,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
 
     // E — real owner admin fee creation during lease approval.
     const unitE = getApi().addUnit({ unitNumber: `TEST-E-UNIT-${Date.now()}`, propertyId, type: "1BR", annualRent: 100000, status: "VACANT" } as any);
+    createdUnitIds.push(unitE.id);
     await waitFor(() => getApi().units.some((u) => u.id === unitE.id));
     await waitFor(async () => (await getDocFromServer(doc(db, "units", unitE.id))).exists());
     const leaseE = getApi().addLease({
@@ -596,6 +600,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
 
     // F — real tenant admin fee creation during lease approval.
     const unitF = getApi().addUnit({ unitNumber: `TEST-F-UNIT-${Date.now()}`, propertyId, type: "1BR", annualRent: 100000, status: "VACANT" } as any);
+    createdUnitIds.push(unitF.id);
     await waitFor(() => getApi().units.some((u) => u.id === unitF.id));
     await waitFor(async () => (await getDocFromServer(doc(db, "units", unitF.id))).exists());
     const leaseF = getApi().addLease({
@@ -835,8 +840,46 @@ export async function runContractProductionWorkflowIntegritySuite() {
       `replaySuccess=${replayRefund.success}, journalCount=${refundJournalCountAfterReplay}`
     );
 
-    console.log(`CONTRACT PRODUCTION WORKFLOW A–U: ${passed}/21 PASSED, ${failed} FAILED`);
-    return { total: 21, passed, failed, results };
+    // V — a real approval attempt must fail closed when the active financial
+    // period is CLOSED, without activating the lease or occupying the unit.
+    const unitV = getApi().addUnit({
+      unitNumber: `TEST-V-UNIT-${Date.now()}`, propertyId, type: "1BR",
+      annualRent: 70000, status: "VACANT",
+    } as any);
+    createdUnitIds.push(unitV.id);
+    await waitFor(() => getApi().units.some((u) => u.id === unitV.id));
+    await waitFor(async () => (await getDocFromServer(doc(db, "units", unitV.id))).exists());
+    const leaseV = getApi().addLease({
+      leaseNumber: `TEST-V-${Date.now()}`, ownerId, propertyId, unitId: unitV.id, tenantId,
+      startDate: "2026-01-01", endDate: "2026-12-31", annualRent: 70000,
+      installmentsCount: 1, installments: [], securityDeposit: 3500, contractStatus: "DRAFT",
+    } as any);
+    createdLeaseIds.push(leaseV.id);
+    await waitFor(() => getApi().leases.some((lease) => lease.id === leaseV.id));
+    await waitFor(async () => (await getDocFromServer(doc(db, "leases", leaseV.id))).data()?.contractStatus === "BINDING");
+    const submitV = await runWithAct(() => getApi().submitLeaseForApproval(leaseV.id));
+    await waitFor(async () => (await getDocFromServer(doc(db, "leases", leaseV.id))).data()?.contractStatus === "PENDING_APPROVAL");
+    if (!periodResult.period?.id) throw new Error("Test financial period ID is unavailable.");
+    await setDoc(doc(db, "financial_periods", periodResult.period.id), { status: "CLOSED" }, { merge: true });
+    await waitFor(() => getApi().financialPeriods.some((period: any) =>
+      period.id === periodResult.period?.id && period.status === "CLOSED"
+    ));
+    const approveV = await runWithAct(() => getApi().approveLease(leaseV.id, "Closed-period fail-closed test"));
+    const savedLeaseV = await getDocFromServer(doc(db, "leases", leaseV.id));
+    const savedUnitV = await getDocFromServer(doc(db, "units", unitV.id));
+    const feesV = await readCommissionDocs(leaseV.id);
+    const journalForV = getApi().journalEntries.some((entry: any) =>
+      entry.sourceId === leaseV.id || String(entry.reference || "").includes(leaseV.leaseNumber)
+    );
+    record(22, "V", "Closed financial period blocks lease approval atomically",
+      submitV.success && !approveV.success &&
+      savedLeaseV.data()?.contractStatus === "PENDING_APPROVAL" &&
+      savedUnitV.data()?.status === "VACANT" && feesV.length === 0 && !journalForV,
+      `submit=${submitV.success}, approve=${approveV.success}, error=${approveV.error || "none"}, lease=${savedLeaseV.data()?.contractStatus}, unit=${savedUnitV.data()?.status}, fees=${feesV.length}, journalExists=${journalForV}`
+    );
+
+    console.log(`CONTRACT PRODUCTION WORKFLOW A–V: ${passed}/22 PASSED, ${failed} FAILED`);
+    return { total: 22, passed, failed, results };
   } finally {
     renderer?.unmount();
     for (const id of createdPeriodIds) await deleteDoc(doc(db, "financial_periods", id)).catch(() => {});
