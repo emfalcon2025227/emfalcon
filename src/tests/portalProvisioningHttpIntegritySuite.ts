@@ -98,15 +98,20 @@ export async function runPortalProvisioningHttpIntegritySuite() {
 
     const ownerId2 = "portal-http-owner-concurrent-" + stamp;
     const tenantId2 = "portal-http-tenant-concurrent-" + stamp;
+    const ownerId3 = "portal-http-owner-rebind-" + stamp;
+    const tenantId3 = "portal-http-tenant-rebind-" + stamp;
     await Promise.all([
       adminDb.collection("owners").doc(ownerId).set({ id: ownerId, nameEn: "HTTP Test Owner", nameAr: "مالك اختبار HTTP", isActive: true }),
       adminDb.collection("tenants").doc(tenantId).set({ id: tenantId, nameEn: "HTTP Test Tenant", nameAr: "مستأجر اختبار HTTP", isActive: true }),
       adminDb.collection("owners").doc(ownerId2).set({ id: ownerId2, nameEn: "Concurrent HTTP Test Owner", nameAr: "مالك اختبار متزامن", isActive: true }),
       adminDb.collection("tenants").doc(tenantId2).set({ id: tenantId2, nameEn: "Concurrent HTTP Test Tenant", nameAr: "مستأجر اختبار متزامن", isActive: true }),
+      adminDb.collection("owners").doc(ownerId3).set({ id: ownerId3, nameEn: "Rebind HTTP Test Owner", nameAr: "مالك اختبار إعادة ربط", isActive: true }),
+      adminDb.collection("tenants").doc(tenantId3).set({ id: tenantId3, nameEn: "Rebind HTTP Test Tenant", nameAr: "مستأجر اختبار إعادة ربط", isActive: true }),
     ]);
     createdTargetDocs.push(
       { collection: "owners", id: ownerId }, { collection: "tenants", id: tenantId },
       { collection: "owners", id: ownerId2 }, { collection: "tenants", id: tenantId2 },
+      { collection: "owners", id: ownerId3 }, { collection: "tenants", id: tenantId3 },
     );
 
     // Initialize the production Express application only after the isolated Admin app exists.
@@ -207,8 +212,32 @@ export async function runPortalProvisioningHttpIntegritySuite() {
       tenantConcurrentProfiles.size === 1 && tenantConcurrentAuthExists,
       "statuses=" + tenantConcurrentStatuses.join(",") + ", returnedUids=" + tenantConcurrentReturnedUids.length + ", profiles=" + tenantConcurrentProfiles.size + ", authExists=" + tenantConcurrentAuthExists);
 
-    console.log("PORTAL PROVISIONING HTTP INTEGRITY: " + passed + "/10 PASSED, " + failed + " FAILED");
-    return { total: 10, passed, failed, results };
+    // 11. An existing Owner identity must not be rebound to a different Owner record.
+    const ownerRebindAttempt = await post(endpoint, {
+      portalRole: "OWNER", targetId: ownerId3, email: ownerEmail,
+    }, ownerToken);
+    const ownerRebindClaim = await adminDb.collection("portal_claims").doc("OWNER_" + ownerId3).get();
+    const ownerProfilesAfterRebind = await adminDb.collection("users").where("ownerId", "==", ownerId).get();
+    report(11, "Existing Owner portal identity cannot be rebound to another Owner",
+      ownerRebindAttempt.status === 400 && ownerRebindAttempt.body?.error === "EMAIL_ALREADY_IN_USE" &&
+      !ownerRebindClaim.exists && ownerProfilesAfterRebind.size === 1,
+      "status=" + ownerRebindAttempt.status + ", error=" + ownerRebindAttempt.body?.error +
+      ", conflictingClaimReleased=" + !ownerRebindClaim.exists + ", originalProfiles=" + ownerProfilesAfterRebind.size);
+
+    // 12. Same anti-rebinding invariant for Tenant portal identities.
+    const tenantRebindAttempt = await post(endpoint, {
+      portalRole: "TENANT", targetId: tenantId3, email: tenantEmail,
+    }, ownerToken);
+    const tenantRebindClaim = await adminDb.collection("portal_claims").doc("TENANT_" + tenantId3).get();
+    const tenantProfilesAfterRebind = await adminDb.collection("users").where("tenantId", "==", tenantId).get();
+    report(12, "Existing Tenant portal identity cannot be rebound to another Tenant",
+      tenantRebindAttempt.status === 400 && tenantRebindAttempt.body?.error === "EMAIL_ALREADY_IN_USE" &&
+      !tenantRebindClaim.exists && tenantProfilesAfterRebind.size === 1,
+      "status=" + tenantRebindAttempt.status + ", error=" + tenantRebindAttempt.body?.error +
+      ", conflictingClaimReleased=" + !tenantRebindClaim.exists + ", originalProfiles=" + tenantProfilesAfterRebind.size);
+
+    console.log("PORTAL PROVISIONING HTTP INTEGRITY: " + passed + "/12 PASSED, " + failed + " FAILED");
+    return { total: 12, passed, failed, results };
   } finally {
     if (httpServer) await new Promise<void>((resolve) => httpServer!.close(() => resolve()));
     await signOut(clientAuth).catch(() => {});
