@@ -3326,6 +3326,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
 
+    const periodCheck = validateTransactionPeriod(new Date().toISOString(), financialPeriods);
+    if (!periodCheck.allowed) {
+      return {
+        success: false,
+        error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn,
+      };
+    }
+
     const nowIso = new Date().toISOString();
     const userId = currentUser?.id || "sys-01";
     const userName = currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
@@ -3924,6 +3932,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : `Cannot approve lease. Lease status must be exactly PENDING_APPROVAL, but current status is: ${leaseInMemory.contractStatus}`,
       };
     }
+    const periodCheck = validateTransactionPeriod(new Date().toISOString(), financialPeriods);
+    if (!periodCheck.allowed) {
+      return {
+        success: false,
+        error: language === "ar" ? periodCheck.errorAr : periodCheck.errorEn,
+      };
+    }
+
     const nowIso = new Date().toISOString();
     const userId = currentUser?.id || "sys-01";
     const userName = currentUser?.nameAr || currentUser?.nameEn || "مدير النظام";
