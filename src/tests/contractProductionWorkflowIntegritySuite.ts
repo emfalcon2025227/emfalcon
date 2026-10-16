@@ -16,6 +16,7 @@ import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
 import { DataProvider, useData, DataContextType } from "../context/DataContext";
 import { LanguageProvider } from "../context/LanguageContext";
 import { AuthProvider } from "../context/AuthContext";
+import { checkConnection } from "../context/CloudConnectivityContext";
 import { auth, db } from "../lib/firebase";
 import firebaseConfig from "../../firebase-applet-config.json";
 import type { Lease } from "../types";
@@ -77,6 +78,7 @@ function installNodeBrowserShims() {
     documentElement: { dir: "", lang: "" },
   };
   win.crypto = win.crypto || (globalThis as any).crypto;
+  (globalThis as any).navigator = (globalThis as any).navigator || { onLine: true };
   // The lease workflow also attempts an external notification endpoint. Keep
   // that unrelated HTTP side effect inside the test boundary; all Firestore
   // writes and assertions still use the real production DataContext workflow.
@@ -147,6 +149,10 @@ async function readCommissionDocs(leaseId: string): Promise<Array<any>> {
 
 export async function runContractProductionWorkflowIntegritySuite() {
   installNodeBrowserShims();
+  // Node has no browser navigator by default, so the production connectivity
+  // guard initializes as OFFLINE at module load. The emulators are the active
+  // cloud target for this test process; synchronize the guard with that fact.
+  checkConnection();
 
   const emulatorAuthUrl = `http://${AUTH_EMULATOR_HOST}`;
   const [firestoreHost, firestorePortRaw] = FIRESTORE_EMULATOR_HOST.split(":");
