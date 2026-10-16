@@ -910,7 +910,7 @@ export async function runContractProductionWorkflowIntegritySuite() {
       savedUnitV.data()?.status === unitStatusBeforeV &&
       savedRenewalV.data()?.status === "PENDING_APPROVAL" &&
       !savedRenewalV.data()?.newLeaseId &&
-      savedOriginalV.data()?.contractStatus === "ACTIVE" &&
+      savedOriginalV.data()?.contractStatus === "UNDER_RENEWAL" &&
       feesV.length === 0 && !journalForV,
       `submit=${submitV.success}, leaseApprove=${approveV.success}, renewalApprove=${approveRenewalV.success}, lease=${savedLeaseV.data()?.contractStatus}, unitBefore=${unitStatusBeforeV}, unitAfter=${savedUnitV.data()?.status}, renewal=${savedRenewalV.data()?.status}, newLease=${savedRenewalV.data()?.newLeaseId || "none"}, original=${savedOriginalV.data()?.contractStatus}, fees=${feesV.length}, journalExists=${journalForV}`
     );
